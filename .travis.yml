@@ -1,10 +1,10 @@
 language: scala
 
 scala:
-  - 2.11.12
+  - 3.2.1
 
 jdk:
-  - oraclejdk8
+  - graalvm17
 
 branches:
   only:

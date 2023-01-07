@@ -1,5 +1,5 @@
 # Signals 3
-![Scala CI](https://github.com/wireapp/wire-signals/workflows/Scala%20CI/badge.svg)
+![Scala CI](https://github.com/makingthematrix/signals3/workflows/Scala%20CI/badge.svg)
 
 
 
