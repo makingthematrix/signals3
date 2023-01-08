@@ -5,7 +5,7 @@ import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, CyclicBarrie
 import testutils.*
 
 import scala.annotation.nowarn
-import scala.collection.JavaConverters.*
+import scala.jdk.CollectionConverters.*
 import scala.concurrent.*
 import scala.concurrent.duration.*
 

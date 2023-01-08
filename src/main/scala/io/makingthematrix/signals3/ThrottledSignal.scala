@@ -49,7 +49,7 @@ class ThrottledSignal[V](val source: Signal[V], val delay: FiniteDuration) exten
     else if (!fromThrottle) ignoredEvent = true
     else {
       super.notifySubscribers(Some(context))
-      throttle.foreach(t => if (!t.isCompleted) t.cancel())
+      throttle.foreach(t => if (!t.future.isCompleted) t.cancel())
       throttle = if (ignoredEvent) {
         ignoredEvent = false
         Some(newThrottle) // if we ignored an event, let's notify subscribers again, just to be sure the signal is up to date.

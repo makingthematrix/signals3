@@ -1,9 +1,12 @@
 package io.makingthematrix.signals3
 
+import io.makingthematrix.signals3
+
 import java.util.{Timer, TimerTask}
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent._
+import scala.concurrent.*
 import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.language.implicitConversions
 import scala.ref.WeakReference
 import scala.util.control.NoStackTrace
 import scala.util.{Failure, Success, Try}
@@ -16,11 +19,12 @@ import scala.util.chaining.scalaUtilChainingOps
   * @see https://github.com/wireapp/wire-signals/wiki/Overview
   */
 object CancellableFuture {
-  import language.implicitConversions
-  implicit def toFuture[T](f: CancellableFuture[T]): Future[T] = f.future
-
-  implicit class RichFuture[T](val future: Future[T]) extends AnyVal {
-    def lift: CancellableFuture[T] = CancellableFuture.lift(future)
+  extension [T](future: Future[T]) {
+    def lift: CancellableFuture[T] = CancellableFuture.lift(future)(Threading.defaultContext)
+  }
+  
+  object Implicits {
+    implicit def toFuture[T](cf: CancellableFuture[T]): Future[T] = cf.future
   }
 
   /** When the cancellable future is cancelled, `CancelException` is provided as the reason

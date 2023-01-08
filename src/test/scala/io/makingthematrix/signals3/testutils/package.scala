@@ -7,6 +7,7 @@ import scala.concurrent.duration.{FiniteDuration, _}
 import scala.annotation.tailrec
 import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
 import scala.util.{Failure, Success, Try}
+import CancellableFuture.Implicits.toFuture
 
 package object testutils {
   private val localRandom = new ThreadLocal[Random] {
