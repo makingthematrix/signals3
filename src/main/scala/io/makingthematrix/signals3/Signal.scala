@@ -6,6 +6,7 @@ import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.ref.WeakReference
 import scala.util.Try
+import scala.util.chaining.scalaUtilChainingOps
 
 object Signal {
   private[signals3] trait SignalSubscriber {
@@ -218,7 +219,7 @@ object Signal {
     * @return A new signal which will hold the value produced by the future.
     */
   def from[V](future: Future[V], executionContext: ExecutionContext): Signal[V] =
-    returning(new Signal[V]) { signal =>
+    new Signal[V]().tap { signal =>
       future.foreach {
         res => signal.set(Option(res), Some(executionContext))
       }(executionContext)
@@ -649,7 +650,7 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
     * @return A [[Subscription]] representing the created connection between the signal and the body function
     */
   override def on(ec: ExecutionContext)(body: V => Unit)(implicit eventContext: EventContext = EventContext.Global): Subscription =
-    returning(new SignalSubscription[V](this, body, Some(ec))(WeakReference(eventContext)))(_.enable())
+    new SignalSubscription[V](this, body, Some(ec))(WeakReference(eventContext)).tap(_.enable())
 
   /** Registers a subscriber which will always be called in the same execution context in which the value of the signal was changed.
     * An optional event context can be provided by the user for managing the subscription instead of doing it manually.
@@ -661,7 +662,7 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
     * @return A [[Subscription]] representing the created connection between the signal and the body function
     */
   override def onCurrent(body: V => Unit)(implicit eventContext: EventContext = EventContext.Global): Subscription =
-    returning(new SignalSubscription[V](this, body, None)(WeakReference(eventContext)))(_.enable())
+    new SignalSubscription[V](this, body, None)(WeakReference(eventContext)).tap(_.enable())
 
   /** Sets the value of the signal to the given value. Notifies the subscribers if the value actually changes.
     *

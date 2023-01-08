@@ -32,8 +32,14 @@ class EventStreamSpec extends munit.FunSuite {
 
     var flatMapCalledCount = 0
     var lastReceivedElement: Option[String] = None
-    val subscription = a.flatMap { _ => returning(if (flatMapCalledCount == 0) b else c) { _ => flatMapCalledCount += 1 } }
-                        .onCurrent { elem => lastReceivedElement = Some(elem) }
+    val subscription = a.flatMap { _ =>
+      val count = if (flatMapCalledCount == 0) b else c
+      flatMapCalledCount += 1
+      count
+    }.onCurrent {
+      elem => lastReceivedElement = Some(elem)
+    }
+
     a ! "a"
 
     assert(b.hasSubscribers, "mapped event stream 'b' should have subscriber after first element emitting from source event stream")

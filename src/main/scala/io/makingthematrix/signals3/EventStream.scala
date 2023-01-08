@@ -6,6 +6,7 @@ import Signal.SignalSubscriber
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.ref.WeakReference
 import scala.util.{Failure, Success, Try}
+import scala.util.chaining.scalaUtilChainingOps
 
 object EventStream {
   private[signals3] trait EventSubscriber[E] {
@@ -67,7 +68,7 @@ object EventStream {
     * @return A new event stream.
     */
   def from[E](future: Future[E], executionContext: ExecutionContext): EventStream[E] =
-    returning(new EventStream[E]) { stream =>
+    new EventStream[E]().tap { stream =>
       future.foreach { stream.dispatch(_, Some(executionContext)) }(executionContext)
     }
 
@@ -135,7 +136,7 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
   override def on(ec: ExecutionContext)
                  (body: E => Unit)
                  (implicit eventContext: EventContext = EventContext.Global): Subscription =
-    returning(new EventStreamSubscription[E](this, body, Some(ec))(WeakReference(eventContext)))(_.enable())
+    new EventStreamSubscription[E](this, body, Some(ec))(WeakReference(eventContext)).tap(_.enable())
 
   /** Registers a subscriber which will always be called in the same execution context in which the event was published.
     * An optional event context can be provided by the user for managing the subscription instead of doing it manually.
@@ -147,7 +148,7 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
     */
   override def onCurrent(body: E => Unit)
                         (implicit eventContext: EventContext = EventContext.Global): Subscription =
-    returning(new EventStreamSubscription[E](this, body, None)(WeakReference(eventContext)))(_.enable())
+    new EventStreamSubscription[E](this, body, None)(WeakReference(eventContext)).tap(_.enable())
 
   /** Creates a new `EventStream[V]` by mapping events of the type `E` emitted by the original one.
     *
@@ -348,7 +349,7 @@ final private[signals3] class FlatMapEventStream[E, V](source: EventStream[E], f
 
   override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit = {
     mapped.foreach(_.unsubscribe(subscriber))
-    mapped = Some(returning(f(event))(_.subscribe(subscriber)))
+    mapped = Some(f(event).tap(_.subscribe(subscriber)))
   }
 
   override protected def onWire(): Unit = source.subscribe(this)

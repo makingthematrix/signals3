@@ -7,6 +7,7 @@ import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.ref.WeakReference
 import scala.util.control.NoStackTrace
 import scala.util.{Failure, Success, Try}
+import scala.util.chaining.scalaUtilChainingOps
 
 /** `CancellableFuture` is an object that for all practical uses works like a future but enables the user to cancel the operation.
   * A cancelled future fails with `CancellableFuture.CancelException` so the subscriber can differentiate between thisand other
@@ -40,8 +41,11 @@ object CancellableFuture {
     * @tparam T The result type of the given function
     * @return A cancellable future executing the function
     */
-  final def apply[T](body: => T)(implicit ec: ExecutionContext = Threading.defaultContext): CancellableFuture[T] =
-    new Cancellable(returning(new PromiseCompletingRunnable(body))(ec.execute).promise)
+  final def apply[T](body: => T)(implicit ec: ExecutionContext = Threading.defaultContext): CancellableFuture[T] = {
+    val pcr = new PromiseCompletingRunnable(body)
+    ec.execute(pcr)
+    new Cancellable(pcr.promise)
+  }
 
   /** Turns a regular `Future[T]` into an **uncancellable** `CancellableFuture[T]`.
     *
@@ -112,9 +116,9 @@ object CancellableFuture {
   private lazy val timer: Timer = new Timer()
 
   private def schedule(f: () => Any, delay: Long): TimerTask =
-    returning(new TimerTask {
+    new TimerTask {
       override def run(): Unit = f()
-    }) {
+    }.tap {
       timer.schedule(_, delay)
     }
 
@@ -600,14 +604,14 @@ abstract class CancellableFuture[+T](implicit ec: ExecutionContext = Threading.d
     *         You can use it to cancel the future manually, even if the event context hasn't stopped yet.
     */
   final def withAutoCanceling(implicit eventContext: EventContext = EventContext.Global): Subscription =
-    returning(new BaseSubscription(WeakReference(eventContext)) {
+    new BaseSubscription(WeakReference(eventContext)) {
       override def onUnsubscribe(): Unit = {
         cancel()
         eventContext.unregister(this)
       }
 
       override def onSubscribe(): Unit = {}
-    })(eventContext.register)
+    }.tap(eventContext.register)
 }
 
 /** A subclass of `CancellableFuture` which represents a subset of cancellable futures which are actually cancellable.
