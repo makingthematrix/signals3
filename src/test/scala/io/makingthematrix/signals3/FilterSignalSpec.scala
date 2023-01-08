@@ -45,7 +45,7 @@ class FilterSignalSpec extends munit.FunSuite {
     assertEquals(fan.received, Vector(2))
     chain.unsubscribeAll()
 
-    (3 to 7) foreach source.!
+    (3 to 7) foreach(n => source ! n)
 
     assertEquals(chain.currentValue, None)
     fan.subscribed

@@ -1,5 +1,6 @@
 package io.makingthematrix.signals3
 
+import scala.annotation.targetName
 import scala.concurrent.ExecutionContext
 
 object SourceSignal {
@@ -60,7 +61,8 @@ class SourceSignal[V](protected val v: Option[V]) extends Signal[V](v) {
   override def publish(value: V): Unit = super.publish(value)
 
   /** An alias for the `publish` method. */
-  @inline final def !(value: V): Unit = publish(value)
+  @targetName("bang")
+  inline final def !(value: V): Unit = publish(value)
 
   /** A version of the `publish` method which takes the implicit execution context for dispatching.
     *
@@ -69,7 +71,8 @@ class SourceSignal[V](protected val v: Option[V]) extends Signal[V](v) {
     * wrapped in a future and executed asychronously. If we use `!!` then for subscribers working in the same
     * execution context the call will be synchronous. This may be desirable in some cases, but please use with caution.
     */
-  @inline final def !!(value: V)(implicit ec: ExecutionContext): Unit = publish(value, ec)
+  @targetName("twobang")
+  inline final def !!(value: V)(implicit ec: ExecutionContext): Unit = publish(value, ec)
 
   /** Changes the value of the signal by applying the given function to the current value.
     * If the signal is empty, it will stay empty.
@@ -78,7 +81,7 @@ class SourceSignal[V](protected val v: Option[V]) extends Signal[V](v) {
     * @return true if the signal's value is actually changed to something different, and so the subscribers will be notified,
     *         false otherwise.
     */
-  @inline final def mutate(f: V => V): Boolean = update(_.map(f))
+  inline final def mutate(f: V => V): Boolean = update(_.map(f))
 
   /** Changes the value of the signal by applying the given function to the current value.
     * If the signal is empty, it will stay empty.
@@ -90,7 +93,7 @@ class SourceSignal[V](protected val v: Option[V]) extends Signal[V](v) {
     * @return true if the signal's value is actually changed to something different, and so the subscribers will be notified,
     *         false otherwise.
     */
-  @inline final def mutate(f: V => V, ec: ExecutionContext): Boolean = update(_.map(f), Some(ec))
+  inline final def mutate(f: V => V, ec: ExecutionContext): Boolean = update(_.map(f), Some(ec))
 
   /** Changes the value of the signal by applying the given function to the current value.
     * If the signal is empty, it will be set to the given default value instead.
@@ -100,5 +103,5 @@ class SourceSignal[V](protected val v: Option[V]) extends Signal[V](v) {
     * @return true if the signal's value is actually changed to something different, and so the subscribers will be notified,
     *         false otherwise.
     */
-  @inline final def mutateOrDefault(f: V => V, default: V): Boolean = update(_.map(f).orElse(Some(default)))
+  inline final def mutateOrDefault(f: V => V, default: V): Boolean = update(_.map(f).orElse(Some(default)))
 }

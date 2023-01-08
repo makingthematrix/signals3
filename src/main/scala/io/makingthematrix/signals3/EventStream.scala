@@ -36,7 +36,7 @@ object EventStream {
     * @tparam E The event type.
     * @return A new event stream of events of the type `E`.
     */
-  @inline def apply[E]() = new SourceStream[E]
+  inline def apply[E]() = new SourceStream[E]
 
   /** Creates a new event stream by joining together the original streams of the same type of events, `E`.
     * The resulting stream will emit all events published to any of the original streams.
@@ -45,7 +45,7 @@ object EventStream {
     * @tparam E The event type.
     * @return A new event stream of events of type `E`.
     */
-  @inline def zip[E](streams: EventStream[E]*): EventStream[E] = new ZipEventStream(streams: _*)
+  inline def zip[E](streams: EventStream[E]*): EventStream[E] = new ZipEventStream(streams: _*)
 
   /** Creates a new event source from a signal of the same type of events.
     * The event source will publish a new event every time the value of the signal changes or its set of subscribers changes.
@@ -57,7 +57,7 @@ object EventStream {
     * @tparam E The type of events.
     * @return A new event stream, emitting an event corresponding to the value of the original signal.
     */
-  @inline def from[E](signal: Signal[E]): EventStream[E] = signal.onChanged
+  inline def from[E](signal: Signal[E]): EventStream[E] = signal.onChanged
 
   /** Creates an event stream from a future. The event stream will emit one event if the future finishes with success, zero otherwise.
     *
@@ -66,7 +66,7 @@ object EventStream {
     * @tparam E The type of the event.
     * @return A new event stream.
     */
-  @inline def from[E](future: Future[E], executionContext: ExecutionContext): EventStream[E] =
+  def from[E](future: Future[E], executionContext: ExecutionContext): EventStream[E] =
     returning(new EventStream[E]) { stream =>
       future.foreach { stream.dispatch(_, Some(executionContext)) }(executionContext)
     }
@@ -79,15 +79,15 @@ object EventStream {
     * @tparam E The type of the event.
     * @return A new event stream.
     */
-  @inline def from[E](future: Future[E]): EventStream[E] = from(future, Threading.defaultContext)
+  inline def from[E](future: Future[E]): EventStream[E] = from(future, Threading.defaultContext)
 
   /** A shorthand for creating an event stream from a cancellable future. */
-  @inline def from[E](future: CancellableFuture[E], executionContext: ExecutionContext): EventStream[E] =
+  inline def from[E](future: CancellableFuture[E], executionContext: ExecutionContext): EventStream[E] =
     from(future.future, executionContext)
 
 
   /** A shorthand for creating an event stream from a cancellable future in the default execution context. */
-  @inline def from[E](future: CancellableFuture[E]): EventStream[E] = from(future.future)
+  inline def from[E](future: CancellableFuture[E]): EventStream[E] = from(future.future)
 }
 
 /** An event stream of type `E` dispatches events (of type `E`) to all functions of type `(E) => Unit` which were registered in
@@ -155,7 +155,7 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
     * @tparam V The type of the resulting event.
     * @return A new event stream of type `V`.
     */
-  final def map[V](f: E => V): EventStream[V] = new MapEventStream[E, V](this, f)
+  inline final def map[V](f: E => V): EventStream[V] = new MapEventStream[E, V](this, f)
 
   /** Creates a new `EventStream[V]` by mapping each event of the original `EventStream[E]` to a new event stream and
     * switching to it. The usual use case is that the event from the original stream serves to make a decision which
@@ -166,7 +166,7 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
     * @tparam V The type of the resulting event stream.
     * @return A new or already existing event stream to which we switch as the result of receiving the original event.
     */
-  final def flatMap[V](f: E => EventStream[V]): EventStream[V] = new FlatMapEventStream[E, V](this, f)
+  inline final def flatMap[V](f: E => EventStream[V]): EventStream[V] = new FlatMapEventStream[E, V](this, f)
 
   /** Creates a new `EventStream[V]` by mapping events of the type `E` emitted by the original one.
     *
@@ -185,10 +185,10 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
     *          for which `f(event)` returns true will be emitted in the resulting stream.
     * @return A new event stream emitting only filtered events.
     */
-  final def filter(f: E => Boolean): EventStream[E] = new FilterEventStream[E](this, f)
+  inline final def filter(f: E => Boolean): EventStream[E] = new FilterEventStream[E](this, f)
 
   /** An alias for `filter` used in the for/yield notation.  */
-  @inline final def withFilter(f: E => Boolean): EventStream[E] = filter(f)
+  inline final def withFilter(f: E => Boolean): EventStream[E] = filter(f)
 
   /** Creates a new event stream of events of type `V` by applying a partial function which maps the original event of type `E`
     * to an event of type `V`. If the partial function doesn't work for the emitted event, nothing will be emitted in the
@@ -198,7 +198,7 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
     * @tparam V The type of the resulting event.
     * @return A new event stream of type `V`.
     */
-  final def collect[V](pf: PartialFunction[E, V]): EventStream[V] = new CollectEventStream[E, V](this, pf)
+  inline final def collect[V](pf: PartialFunction[E, V]): EventStream[V] = new CollectEventStream[E, V](this, pf)
 
   /** Creates a new event stream of events of type `V` where each event is a result of applying a function which combines
     * the previous result of type `V` with the original event of type `E` that triggers the emission of the new one.
@@ -208,7 +208,7 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
     * @tparam V The type of the resulting event.
     * @return A new event stream of type `V`.
     */
-  final def scan[V](zero: V)(f: (V, E) => V): EventStream[V] = new ScanEventStream[E, V](this, zero, f)
+  inline final def scan[V](zero: V)(f: (V, E) => V): EventStream[V] = new ScanEventStream[E, V](this, zero, f)
 
   /** Creates a new event stream by merging the original stream with another one of the same type. The resulting stream
     * will emit events coming from both sources.
@@ -216,7 +216,7 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
     * @param stream The other event stream of the same type of events.
     * @return A new event stream, emitting events from both original streams.
     */
-  final def zip(stream: EventStream[E]): EventStream[E] = new ZipEventStream[E](this, stream)
+  inline final def zip(stream: EventStream[E]): EventStream[E] = new ZipEventStream[E](this, stream)
 
   /** A shorthand for registering a subscriber function in this event stream which only purpose is to publish events emitted
     * by this stream in a given [[SourceStream]]. The subscriber function will be called in the execution context of the
@@ -228,10 +228,12 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
     * @param ec An [[EventContext]] which can be used to manage the subscription (optional).
     * @return A new [[Subscription]] to this event stream.
     */
-  final def pipeTo(sourceStream: SourceStream[E])(implicit ec: EventContext = EventContext.Global): Subscription = onCurrent(sourceStream ! _)
+  inline final def pipeTo(sourceStream: SourceStream[E])(implicit ec: EventContext = EventContext.Global): Subscription = 
+    onCurrent(sourceStream ! _)
 
   /** An alias for `pipeTo`. */
-  @inline final def |(sourceStream: SourceStream[E])(implicit ec: EventContext = EventContext.Global): Subscription = pipeTo(sourceStream)
+  inline final def |(sourceStream: SourceStream[E])(implicit ec: EventContext = EventContext.Global): Subscription = 
+    pipeTo(sourceStream)
 
   /** Produces a [[CancellableFuture]] which will finish when the next event is emitted in the parent event stream.
     *
@@ -248,25 +250,25 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
   }
 
   /** A shorthand for `next` which additionally unwraps the cancellable future */
-  @inline final def future(implicit context: EventContext = EventContext.Global, executionContext: ExecutionContext = Threading.defaultContext): Future[E] =
+  inline final def future(implicit context: EventContext = EventContext.Global, executionContext: ExecutionContext = Threading.defaultContext): Future[E] =
     next.future
 
   /** An alias to the `future` method. */
-  @inline final def head: Future[E] = future
+  inline final def head: Future[E] = future
 
   /** Assuming that the event emitted by the stream can be interpreted as a boolean, this method creates a new event stream
     * of type `Unit` which emits unit events for each original event which is interpreted as true.
     *
     * @return A new event stream of units.
     */
-  final def ifTrue(implicit ev: E =:= Boolean): EventStream[Unit] = collect { case true => () }
+  inline final def ifTrue(implicit ev: E =:= Boolean): EventStream[Unit] = collect { case true => () }
 
   /** Assuming that the event emitted by the stream can be interpreted as a boolean, this method creates a new event stream
     * of type `Unit` which emits unit events for each original event which is interpreted as false.
     *
     * @return A new event stream of units.
     */
-  final def ifFalse(implicit ev: E =:= Boolean): EventStream[Unit] = collect { case false => () }
+  inline final def ifFalse(implicit ev: E =:= Boolean): EventStream[Unit] = collect { case false => () }
 
   /** By default, an event stream does not have the internal state so there's nothing to do in `onWire` and `onUnwire`*/
   override protected def onWire(): Unit = {}

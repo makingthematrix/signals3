@@ -47,9 +47,9 @@ abstract class EventSource[E, S] {
   def onCurrent(body: E => Unit)(implicit eventContext: EventContext = EventContext.Global): Subscription
 
   /** An alias for the `on` method with the default [[ExecutionContext]]. */
-  @inline final def foreach(body: E => Unit)
-                           (implicit executionContext: ExecutionContext = Threading.defaultContext,
-                            eventContext: EventContext = EventContext.Global): Subscription =
+  inline final def foreach(body: E => Unit)
+                          (implicit executionContext: ExecutionContext = Threading.defaultContext,
+                           eventContext: EventContext = EventContext.Global): Subscription =
     on(executionContext)(body)(eventContext)
 
   /** Adds a new subscriber instance. The implementing class should handle notifying this subscriber
@@ -85,7 +85,7 @@ abstract class EventSource[E, S] {
     *
     * @return true if any subscribers are registered, false otherwise
     */
-  @inline final def hasSubscribers: Boolean = subscribers.nonEmpty
+  inline final def hasSubscribers: Boolean = subscribers.nonEmpty
 
   /** Empties the set of subscribers and calls `unWire` if `disableAutowiring` wasn't called before.
     */
@@ -110,6 +110,6 @@ abstract class EventSource[E, S] {
     this
   }
 
-  @inline final def wired: Boolean = hasSubscribers || !autowiring
+  inline final def wired: Boolean = hasSubscribers || !autowiring
 }
 

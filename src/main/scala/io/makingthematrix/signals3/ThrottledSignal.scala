@@ -43,7 +43,7 @@ class ThrottledSignal[V](val source: Signal[V], val delay: FiniteDuration) exten
     syncNotifySubscribers(fromThrottle = false)(ec.getOrElse(Threading.defaultContext))
 
   private def syncNotifySubscribers(fromThrottle: Boolean)(implicit context: ExecutionContext): Unit = synchronized {
-    @inline def newThrottle = delayed(delay)(syncNotifySubscribers(fromThrottle = true))
+    inline def newThrottle = delayed(delay)(syncNotifySubscribers(fromThrottle = true))
 
     if (throttle.isEmpty) throttle = Some(newThrottle)
     else if (!fromThrottle) ignoredEvent = true

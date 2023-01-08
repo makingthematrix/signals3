@@ -132,7 +132,7 @@ object DispatchQueue {
 final class UnlimitedDispatchQueue private[signals3] (executor: ExecutionContext, private val _name: Option[String] = None)
   extends DispatchQueue {
   override val name: String = _name.getOrElse(s"unlimited_${nextInt()}")
-  @inline override def execute(runnable: Runnable): Unit = executor.execute(runnable)
+  inline override def execute(runnable: Runnable): Unit = executor.execute(runnable)
 }
 
 object UnlimitedDispatchQueue {

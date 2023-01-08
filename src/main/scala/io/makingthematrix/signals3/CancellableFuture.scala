@@ -40,7 +40,7 @@ object CancellableFuture {
     * @tparam T The result type of the given function
     * @return A cancellable future executing the function
     */
-  @inline def apply[T](body: => T)(implicit ec: ExecutionContext = Threading.defaultContext): CancellableFuture[T] =
+  final def apply[T](body: => T)(implicit ec: ExecutionContext = Threading.defaultContext): CancellableFuture[T] =
     new Cancellable(returning(new PromiseCompletingRunnable(body))(ec.execute).promise)
 
   /** Turns a regular `Future[T]` into an **uncancellable** `CancellableFuture[T]`.
@@ -50,7 +50,7 @@ object CancellableFuture {
     * @tparam T The future's result type
     * @return A new **uncancellable** future wrapped over the original future
     */
-  @inline def lift[T](future: Future[T])(implicit ec: ExecutionContext = Threading.defaultContext): CancellableFuture[T] =
+  inline final def lift[T](future: Future[T])(implicit ec: ExecutionContext = Threading.defaultContext): CancellableFuture[T] =
     new Uncancellable(future)
 
   /** Turns a `Promise[T]` into a **cancellable** `CancellableFuture[T]`.
@@ -60,7 +60,7 @@ object CancellableFuture {
     * @tparam T The promise's result type
     * @return A new **cancellable** future wrapped over the original promise
     */
-  @inline def from[T](promise: Promise[T])(implicit ec: ExecutionContext = Threading.defaultContext): CancellableFuture[T] =
+  inline final def from[T](promise: Promise[T])(implicit ec: ExecutionContext = Threading.defaultContext): CancellableFuture[T] =
     new Cancellable(promise)
 
   /** Creates an empty cancellable future that will finish its execution with success after the given time.
@@ -272,7 +272,7 @@ object CancellableFuture {
     * @tparam T The type of the result of the original cancellable futures
     * @return A collection of copies of cancellable futures which are **un**cancellable
     */
-  @inline def toUncancellable[T](futures: CancellableFuture[T]*): Iterable[CancellableFuture[T]] = futures.map(_.toUncancellable)
+  def toUncancellable[T](futures: CancellableFuture[T]*): Iterable[CancellableFuture[T]] = futures.map(_.toUncancellable)
 }
 
 /** `CancellableFuture` is an object that for all practical uses works like a future but enables the user to cancel the operation.
@@ -350,7 +350,7 @@ abstract class CancellableFuture[+T](implicit ec: ExecutionContext = Threading.d
     *                 of this future
     * @tparam U The result type of `f`
     */
-  @inline final def onComplete[U](f: Try[T] => U)(implicit executor: ExecutionContext = ec): Unit = future.onComplete(f)(executor)
+  inline final def onComplete[U](f: Try[T] => U)(implicit executor: ExecutionContext = ec): Unit = future.onComplete(f)(executor)
 
   /** Same as `Future.foreach`.
     * @see `Future`
@@ -360,7 +360,7 @@ abstract class CancellableFuture[+T](implicit ec: ExecutionContext = Threading.d
     *                 of this future
     * @tparam U The result type of `pf`
     */
-  @inline final def foreach[U](pf: T => U)(implicit executor: ExecutionContext = ec): Unit = future.foreach(pf)(executor)
+  inline final def foreach[U](pf: T => U)(implicit executor: ExecutionContext = ec): Unit = future.foreach(pf)(executor)
 
   /** Creates a new cancellable future by applying the `f` function to the successful result
     * of this one. If this future is completed with an exception then the new future will
@@ -493,7 +493,7 @@ abstract class CancellableFuture[+T](implicit ec: ExecutionContext = Threading.d
     *           for the `Throwable` returned by the original future
     * @return A new cancellable future that will finish with success only if the partial function is applied
     */
-  @inline final def recover[U >: T](pf: PartialFunction[Throwable, U])(implicit executor: ExecutionContext = ec): CancellableFuture[U] =
+  inline final def recover[U >: T](pf: PartialFunction[Throwable, U])(implicit executor: ExecutionContext = ec): CancellableFuture[U] =
     recoverWith(pf.andThen(res => CancellableFuture.successful(res)))(executor)
 
   /** Creates a new cancellable future that will handle any matching throwable that the current one might contain by
@@ -556,7 +556,7 @@ abstract class CancellableFuture[+T](implicit ec: ExecutionContext = Threading.d
     * @tparam U The result type of the nested future and the result type of the resulting future
     * @return A new cancellable future made from flattening the original one
     */
-  @inline final def flatten[U](implicit evidence: T <:< CancellableFuture[U], executor: ExecutionContext = ec): CancellableFuture[U] =
+  inline final def flatten[U](implicit evidence: T <:< CancellableFuture[U], executor: ExecutionContext = ec): CancellableFuture[U] =
     flatMap(x => x)(executor)
 
   /** Creates a new CancellableFuture from the current one and the provided one. The new future completes with success
@@ -571,7 +571,7 @@ abstract class CancellableFuture[+T](implicit ec: ExecutionContext = Threading.d
     * @tparam U the result type of the other future
     * @return A new cancellable future with the result type being a tuple `(T, U)` where `T` is the result type of this future
     */
-  @inline final def zip[U](other: CancellableFuture[U])(implicit executor: ExecutionContext = ec): CancellableFuture[(T, U)] =
+  inline final def zip[U](other: CancellableFuture[U])(implicit executor: ExecutionContext = ec): CancellableFuture[(T, U)] =
     CancellableFuture.zip(self, other)(executor)
 
   /** Same as `Future.ready`.

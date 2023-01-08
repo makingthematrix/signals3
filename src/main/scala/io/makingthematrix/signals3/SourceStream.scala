@@ -1,5 +1,6 @@
 package io.makingthematrix.signals3
 
+import scala.annotation.targetName
 import scala.concurrent.ExecutionContext
 
 /** The usual entry point for publishing events.
@@ -24,7 +25,8 @@ class SourceStream[E] extends EventStream[E] {
   override def publish(event: E): Unit = dispatch(event, None)
 
   /** An alias for the `publish` method with no explicit execution context. */
-  @inline final def !(event: E): Unit = publish(event)
+  @targetName("bang")
+  inline final def !(event: E): Unit = publish(event)
 
   /** Publishes the event to all subscriber, using the given execution context.
     *
@@ -44,5 +46,6 @@ class SourceStream[E] extends EventStream[E] {
     * wrapped in a future and executed asychronously. If we use `!!` then for subscribers working in the same
     * execution context the call will be synchronous. This may be desirable in some cases, but please use with caution.
     */
-  @inline final def !!(event: E)(implicit ec: ExecutionContext): Unit = publish(event, ec)
+  @targetName("twobang")
+  inline final def !!(event: E)(implicit ec: ExecutionContext): Unit = publish(event, ec)
 }
