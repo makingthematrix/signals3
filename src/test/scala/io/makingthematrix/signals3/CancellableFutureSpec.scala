@@ -1,7 +1,8 @@
 package io.makingthematrix.signals3
 
 import CancellableFuture.CancelException
-import CancellableFuture.Implicits.toFuture
+import CancellableFuture.toFuture
+import scala.language.implicitConversions
 
 import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration._

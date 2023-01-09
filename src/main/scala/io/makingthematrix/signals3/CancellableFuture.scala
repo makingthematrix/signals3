@@ -22,11 +22,11 @@ object CancellableFuture {
   extension [T](future: Future[T]) {
     def lift: CancellableFuture[T] = CancellableFuture.lift(future)(Threading.defaultContext)
   }
-  
-  object Implicits {
-    implicit def toFuture[T](cf: CancellableFuture[T]): Future[T] = cf.future
-  }
 
+  given toFuture[T]: Conversion[CancellableFuture[T], Future[T]] with {
+    def apply(cf: CancellableFuture[T]): Future[T] = cf.future
+  }
+  
   /** When the cancellable future is cancelled, `CancelException` is provided as the reason
     * of failure of the underlying future.
     */
