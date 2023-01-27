@@ -10,7 +10,7 @@ object EventStreamWithAuxSignal {
   def apply[A, B](source: EventStream[A], aux: Signal[B]): EventStreamWithAuxSignal[A, B] = new EventStreamWithAuxSignal(source, aux)
 
   final class DoNothingSignalSubscriber extends SignalSubscriber {
-    override def changed(currentContext: Option[ExecutionContext]): Unit = ()
+    override def changed(currentContext: Option[ExecutionContext]): Unit = {}
   }
 }
 

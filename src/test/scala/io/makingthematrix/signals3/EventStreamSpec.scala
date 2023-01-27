@@ -63,7 +63,7 @@ class EventStreamSpec extends munit.FunSuite {
   }
 
   test("emit an event when a future is successfully completed") {
-    implicit val dq: DispatchQueue = SerialDispatchQueue()
+    given dq: DispatchQueue = SerialDispatchQueue()
     val promise = Promise[Int]()
     val resPromise = Promise[Int]()
 
@@ -85,7 +85,7 @@ class EventStreamSpec extends munit.FunSuite {
 
     promise.failure(new IllegalArgumentException)
 
-    assert(testutils.tryResult(resPromise.future)(1 seconds).isFailure)
+    assert(testutils.tryResult(resPromise.future)(using 1 seconds).isFailure)
   }
 
   test("emit an event after delay by wrapping a cancellable future") {
@@ -236,7 +236,7 @@ class EventStreamSpec extends munit.FunSuite {
   }
 
   test("create an event stream from a future on a separate execution context") {
-    implicit val dq: DispatchQueue = SerialDispatchQueue()
+    given dq: DispatchQueue = SerialDispatchQueue()
     val promise = Promise[Int]()
     val stream = EventStream.from(promise.future, dq)
 
@@ -250,7 +250,7 @@ class EventStreamSpec extends munit.FunSuite {
   }
 
   test("ensure mapSync maintains the order of mapped events") {
-    implicit val dq: DispatchQueue = UnlimitedDispatchQueue()
+    given dq: DispatchQueue = UnlimitedDispatchQueue()
 
     val source = EventStream[Int]()
 
@@ -278,7 +278,7 @@ class EventStreamSpec extends munit.FunSuite {
   }
 
   test("filter numbers to even and odd") {
-    implicit val dq: DispatchQueue = SerialDispatchQueue()
+    given dq: DispatchQueue = SerialDispatchQueue()
 
     val numbers = Seq(1, 2, 3, 4, 5, 6, 7, 8, 9)
 
@@ -307,7 +307,7 @@ class EventStreamSpec extends munit.FunSuite {
   }
 
   test("collect only odd numbers and add 100 to them") {
-    implicit val dq: DispatchQueue = SerialDispatchQueue()
+    given dq: DispatchQueue = SerialDispatchQueue()
 
     val numbers = Seq(1, 2, 3, 4, 5, 6, 7, 8, 9)
 
@@ -330,7 +330,7 @@ class EventStreamSpec extends munit.FunSuite {
   }
 
   test("scan the numbers to create their multiplication") {
-    implicit val dq: DispatchQueue = SerialDispatchQueue()
+    given dq: DispatchQueue = SerialDispatchQueue()
 
     val numbers = Seq(1, 2, 3, 4, 5, 6, 7, 8, 9)
 
@@ -353,7 +353,7 @@ class EventStreamSpec extends munit.FunSuite {
   }
 
   test("Take the next event in the event stream as a cancellable future") {
-    implicit val dq: DispatchQueue = SerialDispatchQueue()
+    given dq: DispatchQueue = SerialDispatchQueue()
 
     val source = EventStream[Int]()
     var results = List[Int]()
@@ -379,7 +379,7 @@ class EventStreamSpec extends munit.FunSuite {
   }
 
   test("Turn an event stream of booleans to an event stream of units") {
-    implicit val dq: DispatchQueue = SerialDispatchQueue()
+    given dq: DispatchQueue = SerialDispatchQueue()
 
     val booleans = List(true, false, true, false, true)
 

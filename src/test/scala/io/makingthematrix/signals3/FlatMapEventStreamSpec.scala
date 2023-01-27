@@ -4,7 +4,7 @@ import testutils.{awaitAllTasks, waitForResult}
 
 class FlatMapEventStreamSpec extends munit.FunSuite {
   test("Normal flatmapping") {
-    implicit val dispatchQueue: DispatchQueue = SerialDispatchQueue()
+    given dispatchQueue: DispatchQueue = SerialDispatchQueue()
     val received = Signal(Seq.empty[Int])
     val capture: Int => Unit = { value => received.mutate(_ :+ value) }
 
@@ -54,7 +54,7 @@ class FlatMapEventStreamSpec extends munit.FunSuite {
   }
 
   test("Chained flatmapping") {
-    implicit val dispatchQueue: DispatchQueue = SerialDispatchQueue()
+    given dispatchQueue: DispatchQueue = SerialDispatchQueue()
     val received = Signal(Seq.empty[Int])
     val capture: Int => Unit = { value => received.mutate(_ :+ value) }
 

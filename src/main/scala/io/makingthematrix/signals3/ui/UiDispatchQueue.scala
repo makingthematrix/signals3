@@ -61,7 +61,7 @@ object UiDispatchQueue {
       *
       * @return the Ui dispatch queue
       */
-    implicit def Ui: DispatchQueue = _ui
+    given Ui: DispatchQueue = _ui
   }
 
   /** The current Ui dispatch queue. This is a method, not a value, because in theory it's possible to replace an UI dispatch queue
@@ -104,8 +104,7 @@ object UiDispatchQueue {
     * @return A new `Subscription` to the signal.
     */
   extension [E](stream: EventStream[E]) {
-    def onUi(subscriber: E => Unit)(implicit context: EventContext): Subscription =
-      stream.on(_ui)(subscriber)(context)
+    def onUi(subscriber: E => Unit)(using context: EventContext): Subscription = stream.on(_ui)(subscriber)
   }
 
   /** An extension method to the `Signal` class. You can use `signal.onUi { value => ... }` instead of
@@ -117,7 +116,6 @@ object UiDispatchQueue {
     * @return A new `Subscription` to the signal.
     */
   extension [V](signal: Signal[V]) {
-    def onUi(subscriber: V => Unit)(implicit context: EventContext): Subscription =
-      signal.on(_ui)(subscriber)(context)
+    def onUi(subscriber: V => Unit)(using context: EventContext): Subscription = signal.on(_ui)(subscriber)
   }
 }

@@ -16,7 +16,7 @@ import scala.collection.immutable.Map
   *       [[EventStream.mapSync]], so we may think or removing this class from the library (move to extensions, maybe?).
   */
 object Serialized {
-  private implicit lazy val dispatcher: DispatchQueue = SerialDispatchQueue("Serialized")
+  private given dispatcher: DispatchQueue = SerialDispatchQueue("Serialized")
 
   private var locks = Map[String, Future[_]]()
 

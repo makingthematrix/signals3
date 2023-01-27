@@ -20,14 +20,14 @@ object RefreshingSignal {
     * @tparam V The value type of the signal and the result of the `loader` cancellable future.
     * @return A new refreshing signal with the value of the type `V`.
     */
-  def apply[V](loader: () => CancellableFuture[V], refreshStream: EventStream[_])(implicit ec: ExecutionContext = Threading.defaultContext): RefreshingSignal[V] =
-    new RefreshingSignal(loader, refreshStream)(ec)
+  def apply[V](loader: () => CancellableFuture[V], refreshStream: EventStream[_])(using ec: ExecutionContext = Threading.defaultContext): RefreshingSignal[V] =
+    new RefreshingSignal(loader, refreshStream)
 
   /** A version of the `apply` method where the loader is a regular Scala future. It will be wrapped in a cancellable future
     * on the first execution.
     */
-  def from[V](loader: => Future[V], refreshStream: EventStream[_])(implicit ec: ExecutionContext = Threading.defaultContext): RefreshingSignal[V] =
-    new RefreshingSignal(() => CancellableFuture.lift(loader), refreshStream)(ec)
+  def from[V](loader: => Future[V], refreshStream: EventStream[_])(using ec: ExecutionContext = Threading.defaultContext): RefreshingSignal[V] =
+    new RefreshingSignal(() => CancellableFuture.lift(loader), refreshStream)
 }
 
 /** A signal which initializes its value by executing the `loader` cancellable future and then updates the value the same way
@@ -52,7 +52,7 @@ object RefreshingSignal {
   * @tparam V The value type of the signal and the result of the `loader` cancellable future.
   */
 class RefreshingSignal[V](loader: () => CancellableFuture[V], refreshStream: EventStream[_])
-                         (implicit ec: ExecutionContext = Threading.defaultContext)
+                         (using ec: ExecutionContext = Threading.defaultContext)
   extends Signal[V] {
   @volatile private var loadFuture = CancellableFuture.cancelled[Unit]()
   @volatile private var subscription = Option.empty[Subscription]
@@ -68,13 +68,13 @@ class RefreshingSignal[V](loader: () => CancellableFuture[V], refreshStream: Eve
       case Failure(ex) if loadFuture == thisReload =>
         p.failure(ex)
       case _ =>
-    }(ec)
+    }
   }
 
   override protected def onWire(): Unit = {
     super.onWire()
     Future {
-      subscription = Some(refreshStream.on(ec)(_ => reload())(EventContext.Global))
+      subscription = Some(refreshStream.on(ec)(_ => reload())(using EventContext.Global))
       reload()
     }(ec)
   }

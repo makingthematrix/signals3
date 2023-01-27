@@ -47,5 +47,5 @@ class SourceStream[E] extends EventStream[E] {
     * execution context the call will be synchronous. This may be desirable in some cases, but please use with caution.
     */
   @targetName("twobang")
-  inline final def !!(event: E)(implicit ec: ExecutionContext): Unit = publish(event, ec)
+  inline final def !!(event: E)(using ec: ExecutionContext): Unit = publish(event, ec)
 }

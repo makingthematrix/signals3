@@ -25,7 +25,7 @@ object AggregatingSignal {
     * @return A new aggregating signal with the value type `V`.
     */
   def apply[E, V](loader: () => Future[V], sourceStream: EventStream[E], updater: (V, E) => V)
-                 (implicit ec: ExecutionContext = Threading.defaultContext): AggregatingSignal[E, V]
+                 (using ec: ExecutionContext = Threading.defaultContext): AggregatingSignal[E, V]
     = new AggregatingSignal(loader, sourceStream, updater)
 }
 
@@ -58,7 +58,7 @@ object AggregatingSignal {
   * @tparam V The type of the value held in the signal and the result of the `loader` execution.
   */
 class AggregatingSignal[E, V](loader: () => Future[V], sourceStream: EventStream[E], updater: (V, E) => V)
-                             (implicit ec: ExecutionContext = Threading.defaultContext)
+                             (using ec: ExecutionContext = Threading.defaultContext)
   extends Signal[V] with EventSubscriber[E] { self =>
   private object valueMonitor
 

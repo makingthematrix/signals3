@@ -17,7 +17,7 @@ package object testutils {
 
   def random: Random = localRandom.get
 
-  implicit class EnrichedInt(val a: Int) extends AnyVal {
+  extension (a: Int) {
     def times(f: => Unit): Unit = (1 to a).foreach(_ => f)
   }
 
@@ -29,16 +29,16 @@ package object testutils {
     else compareAndSet(ref)(updater)
   }
 
-  def withDelay[T](body: => T, delay: FiniteDuration = 300.millis)(implicit ec: ExecutionContext): CancellableFuture[T] =
+  def withDelay[T](body: => T, delay: FiniteDuration = 300.millis)(using ec: ExecutionContext): CancellableFuture[T] =
     CancellableFuture.delayed(delay)(body)
 
   val DefaultTimeout: FiniteDuration = 5.seconds
 
-  def result[A](future: Future[A])(implicit duration: FiniteDuration = DefaultTimeout): A = Await.result(future, duration)
+  def result[A](future: Future[A])(using duration: FiniteDuration = DefaultTimeout): A = Await.result(future, duration)
 
-  inline def await[A](future: Future[A])(implicit duration: FiniteDuration = DefaultTimeout): Unit = tryResult(future)
+  inline def await[A](future: Future[A])(using duration: FiniteDuration = DefaultTimeout): Unit = tryResult(future)
 
-  def tryResult[A](future: Future[A])(implicit duration: FiniteDuration = DefaultTimeout): Try[A] =
+  def tryResult[A](future: Future[A])(using duration: FiniteDuration = DefaultTimeout): Try[A] =
     try {
       Try(result(future))
     } catch {
@@ -48,7 +48,7 @@ package object testutils {
   def waitForResult[V](signal: Signal[V], expected: V, timeout: FiniteDuration): Boolean = {
     val offset = System.currentTimeMillis()
     while (System.currentTimeMillis() - offset < timeout.toMillis) {
-      Try(result(signal.head)(timeout)) match {
+      Try(result(signal.head)(using timeout)) match {
         case Success(obtained) if obtained == expected => return true
         case Failure(_: TimeoutException) => return false
         case Failure(ex) =>
@@ -65,7 +65,7 @@ package object testutils {
   def waitForResult[E](stream: EventStream[E], expected: E, timeout: FiniteDuration): Boolean = {
     val offset = System.currentTimeMillis()
     while (System.currentTimeMillis() - offset < timeout.toMillis) {
-      Try(result(stream.next)(timeout)) match {
+      Try(result(stream.next)(using timeout)) match {
         case Success(obtained) if obtained == expected => return true
         case Failure(_: TimeoutException) => return false
         case Failure(ex) =>
@@ -83,14 +83,14 @@ package object testutils {
     * Very useful for checking that something DOESN'T happen (e.g., ensure that a signal doesn't get updated after
     * performing a series of actions)
     */
-  def awaitAllTasks(implicit timeout: FiniteDuration = DefaultTimeout, dq: DispatchQueue): Unit = {
+  def awaitAllTasks(using timeout: FiniteDuration = DefaultTimeout, dq: DispatchQueue): Unit = {
     if (!tasksCompletedAfterWait)
       throw new TimeoutException(s"Background tasks didn't complete in ${timeout.toSeconds} seconds")
   }
 
-  def tasksRemaining(implicit dq: DispatchQueue): Boolean = dq.hasRemainingTasks
+  def tasksRemaining(using dq: DispatchQueue): Boolean = dq.hasRemainingTasks
 
-  private def tasksCompletedAfterWait(implicit timeout: FiniteDuration = DefaultTimeout, dq: DispatchQueue) = {
+  private def tasksCompletedAfterWait(using timeout: FiniteDuration = DefaultTimeout, dq: DispatchQueue) = {
     val start = System.currentTimeMillis()
     val before = start + timeout.toMillis
     while(tasksRemaining && System.currentTimeMillis() < before) Thread.sleep(10)

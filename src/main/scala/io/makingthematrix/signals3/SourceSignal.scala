@@ -72,7 +72,7 @@ class SourceSignal[V](protected val v: Option[V]) extends Signal[V](v) {
     * execution context the call will be synchronous. This may be desirable in some cases, but please use with caution.
     */
   @targetName("twobang")
-  inline final def !!(value: V)(implicit ec: ExecutionContext): Unit = publish(value, ec)
+  inline final def !!(value: V)(using ec: ExecutionContext): Unit = publish(value, ec)
 
   /** Changes the value of the signal by applying the given function to the current value.
     * If the signal is empty, it will stay empty.

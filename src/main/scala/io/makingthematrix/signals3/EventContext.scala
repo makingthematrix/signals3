@@ -10,7 +10,7 @@ object EventContext {
   def apply(): EventContext = new BaseEventContext
 
   object Implicits {
-    implicit val global: EventContext = EventContext.Global
+    given global: EventContext = EventContext.Global
   }
 
   /** A dummy global [[EventContext]] used when no other event context is specified.
@@ -87,13 +87,6 @@ class BaseEventContext extends EventContext {
   private[this] var started = true
   private[this] var destroyed = false
   private[this] var subscriptions = Set.empty[Subscription]
-
-  override protected def finalize(): Unit = {
-    lock.synchronized {
-      if (!destroyed) destroy()
-    }
-    super.finalize()
-  }
 
   override def start(): Unit = lock.synchronized {
     if (!started) {

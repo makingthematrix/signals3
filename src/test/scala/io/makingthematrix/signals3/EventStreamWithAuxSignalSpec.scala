@@ -10,7 +10,7 @@ class EventStreamWithAuxSignalSpec extends munit.FunSuite {
   test("Subscribe, send stuff, unsubscribe, send more stuff") {
     val sub = r.onCurrent { r =>
       events = r :: events
-    }(EventContext.Global)
+    }
 
     assertEquals(events, List.empty)
 

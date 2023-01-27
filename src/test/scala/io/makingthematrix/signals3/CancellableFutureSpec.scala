@@ -61,7 +61,7 @@ class CancellableFutureSpec extends munit.FunSuite {
   }
 
   test(" A cancellable future succeeds just like a standard one") {
-    implicit val ec: DispatchQueue = SerialDispatchQueue()
+    given ec: DispatchQueue = SerialDispatchQueue()
     var res = 0
 
     val p = Promise[Int]()

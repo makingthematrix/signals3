@@ -17,7 +17,7 @@ object Signal {
   final private class SignalSubscription[V](source:           Signal[V],
                                             f:                V => Unit,
                                             executionContext: Option[ExecutionContext] = None
-                                          )(implicit context: WeakReference[EventContext])
+                                          )(using context: WeakReference[EventContext])
     extends BaseSubscription(context) with SignalSubscriber {
 
     override def changed(currentContext: Option[ExecutionContext]): Unit = synchronized {
@@ -377,8 +377,8 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
     * @param ec The execution context on which the check will be done
     * @return a future of boolean: true if the signal contains the given value, false otherwise
     */
-  final def contains(value: V)(implicit ec: ExecutionContext): Future[Boolean] =
-    if (empty) Future.successful(false) else future.map(_ == value)
+  final def contains(value: V)(using ec: ExecutionContext): Future[Boolean] =
+    if (empty) Future.successful(false) else future.map(_ == value)(ec)
 
   /** A shortcut that checks if the current value (or the first value after initialization) fulfills the given condition.
     *
@@ -386,8 +386,8 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
     * @param ec The execution context on which the check will be done
     * @return a future of boolean: true if the signal's value fulfills the given condition, false otherwise
     */
-  final def exists(f: V => Boolean)(implicit ec: ExecutionContext): Future[Boolean] =
-    if (empty) Future.successful(false) else future.map(f)
+  final def exists(f: V => Boolean)(using ec: ExecutionContext): Future[Boolean] =
+    if (empty) Future.successful(false) else future.map(f)(ec)
 
   /** An event stream where each event is a tuple of the old and the new value of the signal.
     * Every time the value of the signal changes - actually changes to another value - the new value will be published in this stream,
@@ -472,7 +472,7 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
     *
     * @return A new future which finishes either immediately or as soon as the value of the original signal is true.
     */
-  inline final def onTrue(implicit ev: V =:= Boolean): Future[Unit] = collect { case true => () }.future
+  inline final def onTrue(using V <:< Boolean): Future[Unit] = collect { case true => () }.future
 
   /** Assuming that the value of the signal can be interpreted as a boolean, this method returns a future
     * of type `Unit` which will finish with success when the value of the original signal is false.
@@ -484,7 +484,7 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
     *
     * @return A new future which finishes either immediately or as soon as the value of the original signal is false.
     */
-  inline final def onFalse(implicit ev: V =:= Boolean): Future[Unit] = collect { case false => () }.future
+  inline final def onFalse(using V <:< Boolean): Future[Unit] = collect { case false => () }.future
 
   /** Creates a new signal of values of the type `Z` by applying a partial function which maps the original value of the type `V`
     * to a value of the type `Z`. If the partial function doesn't work for the current value, the new signal will become empty
@@ -518,7 +518,7 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
     * @tparam Z The type of the value of the nested signal.
     * @return A new signal of the value type the same as the value type of the nested signal.
     */
-  inline final def flatten[Z](implicit evidence: V <:< Signal[Z]): Signal[Z] = flatMap(x => x)
+  inline final def flatten[Z](using evidence: V <:< Signal[Z]): Signal[Z] = flatMap(x => x)
 
   /** Creates a new signal with the value type `Z` where the change in the value is the result of applying a function
     * which combines the previous value of type `Z` with the changed value of the type `V` of the parent signal.
@@ -592,11 +592,11 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
     * @param ec An [[EventContext]] which can be used to manage the subscription (optional).
     * @return A new [[Subscription]] to this signal.
     */
-  inline final def pipeTo(sourceSignal: SourceSignal[V])(implicit ec: EventContext = EventContext.Global): Subscription = 
+  inline final def pipeTo(sourceSignal: SourceSignal[V])(using ec: EventContext = EventContext.Global): Subscription = 
     onCurrent(sourceSignal ! _)
 
   /** An alias for `pipeTo`. */
-  inline final def |(sourceSignal: SourceSignal[V])(implicit ec: EventContext = EventContext.Global): Subscription = 
+  inline final def |(sourceSignal: SourceSignal[V])(using ec: EventContext = EventContext.Global): Subscription = 
     pipeTo(sourceSignal)
 
   /** Creates a new signal of the same value type which changes its value to the changed value of the parent signal only if
@@ -649,8 +649,8 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
     * @param eventContext An [[EventContext]] which will register the [[Subscription]] for further management (optional)
     * @return A [[Subscription]] representing the created connection between the signal and the body function
     */
-  override def on(ec: ExecutionContext)(body: V => Unit)(implicit eventContext: EventContext = EventContext.Global): Subscription =
-    new SignalSubscription[V](this, body, Some(ec))(WeakReference(eventContext)).tap(_.enable())
+  override def on(ec: ExecutionContext)(body: V => Unit)(using eventContext: EventContext = EventContext.Global): Subscription =
+    new SignalSubscription[V](this, body, Some(ec))(using WeakReference(eventContext)).tap(_.enable())
 
   /** Registers a subscriber which will always be called in the same execution context in which the value of the signal was changed.
     * An optional event context can be provided by the user for managing the subscription instead of doing it manually.
@@ -661,8 +661,8 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
     * @param eventContext An [[EventContext]] which will register the [[Subscription]] for further management (optional)
     * @return A [[Subscription]] representing the created connection between the signal and the body function
     */
-  override def onCurrent(body: V => Unit)(implicit eventContext: EventContext = EventContext.Global): Subscription =
-    new SignalSubscription[V](this, body, None)(WeakReference(eventContext)).tap(_.enable())
+  override def onCurrent(body: V => Unit)(using eventContext: EventContext = EventContext.Global): Subscription =
+    new SignalSubscription[V](this, body, None)(using WeakReference(eventContext)).tap(_.enable())
 
   /** Sets the value of the signal to the given value. Notifies the subscribers if the value actually changes.
     *
@@ -794,7 +794,7 @@ final private[signals3] class PartialUpdateSignal[V, Z](source: Signal[V])(selec
 }
 
 final private[signals3] class EventStreamSignal[V](source: EventStream[V], v: Option[V] = None) extends Signal[V](v) {
-  private[this] lazy val subscription = source.onCurrent(publish)(EventContext.Global)
+  private[this] lazy val subscription = source.onCurrent(publish)(using EventContext.Global)
 
   override protected def onWire(): Unit = subscription.enable()
   override protected def onUnwire(): Unit = subscription.disable()

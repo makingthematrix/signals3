@@ -40,9 +40,9 @@ class ThrottledSignal[V](val source: Signal[V], val delay: FiniteDuration) exten
   override protected def computeValue(current: Option[V]): Option[V] = source.value
 
   override protected def notifySubscribers(ec: Option[ExecutionContext]): Unit =
-    syncNotifySubscribers(fromThrottle = false)(ec.getOrElse(Threading.defaultContext))
+    syncNotifySubscribers(fromThrottle = false)(using ec.getOrElse(Threading.defaultContext))
 
-  private def syncNotifySubscribers(fromThrottle: Boolean)(implicit context: ExecutionContext): Unit = synchronized {
+  private def syncNotifySubscribers(fromThrottle: Boolean)(using context: ExecutionContext): Unit = synchronized {
     inline def newThrottle = delayed(delay)(syncNotifySubscribers(fromThrottle = true))
 
     if (throttle.isEmpty) throttle = Some(newThrottle)

@@ -135,7 +135,7 @@ class SignalSpec extends munit.FunSuite {
   }
 
   test("Many concurrent subscriber changes") {
-    implicit val executionContext: ExecutionContext = UnlimitedDispatchQueue()
+    given executionContext: ExecutionContext = UnlimitedDispatchQueue()
     val barrier = new CyclicBarrier(50)
     val num = new AtomicInteger(0)
     val s = Signal(0)
@@ -206,7 +206,7 @@ class SignalSpec extends munit.FunSuite {
   }
 
   private def incrementalUpdates(onUpdate: (Signal[Int], ConcurrentLinkedQueue[Int]) => Unit): Unit = {
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext
+    given defaultContext: DispatchQueue = Threading.defaultContext
     100 times {
       val signal = Signal(0)
       val received = new ConcurrentLinkedQueue[Int]()
@@ -233,52 +233,52 @@ class SignalSpec extends munit.FunSuite {
   }
 
   test("Two concurrent dispatches (global event and background execution contexts)") {
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext
+    given defaultContext: DispatchQueue = Threading.defaultContext
     concurrentDispatches(2, 1000, EventContext.Global, Some(defaultContext), defaultContext)()
   }
 
   test("Several concurrent dispatches (global event and background execution contexts)") {
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext
+    given defaultContext: DispatchQueue = Threading.defaultContext
     concurrentDispatches(10, 200, EventContext.Global, Some(defaultContext), defaultContext)()
   }
 
   test("Many concurrent dispatches (global event and background execution contexts)") {
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext
+    given defaultContext: DispatchQueue = Threading.defaultContext
     concurrentDispatches(100, 200, EventContext.Global, Some(defaultContext), defaultContext)()
   }
 
   test("Two concurrent dispatches (subscriber on UI eventcontext)") {
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext
+    given defaultContext: DispatchQueue = Threading.defaultContext
     concurrentDispatches(2, 1000, eventContext, Some(defaultContext), defaultContext)()
   }
 
   test("Several concurrent dispatches (subscriber on UI event context)") {
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext
+    given defaultContext: DispatchQueue = Threading.defaultContext
     concurrentDispatches(10, 200, eventContext, Some(defaultContext), defaultContext)()
   }
 
   test("Many concurrent dispatches (subscriber on UI event context)") {
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext
+    given defaultContext: DispatchQueue = Threading.defaultContext
     concurrentDispatches(100, 100, eventContext, Some(defaultContext), defaultContext)()
   }
 
   test("Several concurrent dispatches (global event context, no source context)") {
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext
+    given defaultContext: DispatchQueue = Threading.defaultContext
     concurrentDispatches(10, 200, EventContext.Global, None, defaultContext)()
   }
 
   test("Several concurrent dispatches (subscriber on UI context, no source context)") {
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext
+    given defaultContext: DispatchQueue = Threading.defaultContext
     concurrentDispatches(10, 200, eventContext, None, defaultContext)()
   }
 
   test("Several concurrent mutations (subscriber on global event context)") {
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext
+    given defaultContext: DispatchQueue = Threading.defaultContext
     concurrentMutations(10, 200, EventContext.Global, defaultContext)()
   }
 
   test("Several concurrent mutations (subscriber on UI event context)") {
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext
+    given defaultContext: DispatchQueue = Threading.defaultContext
     concurrentMutations(10, 200, eventContext, defaultContext)()
   }
 
@@ -287,14 +287,14 @@ class SignalSpec extends munit.FunSuite {
                                    eventContext: EventContext,
                                    dispatchExecutionContext: Option[ExecutionContext],
                                    actualExecutionContext: ExecutionContext
-                                  )(subscribe: Signal[Int] => (Int => Unit) => Subscription = s => g => s.onCurrent(g)(eventContext)): Unit =
+                                  )(subscribe: Signal[Int] => (Int => Unit) => Subscription = s => g => s.onCurrent(g)(using eventContext)): Unit =
     concurrentUpdates(dispatches, several, (s, n) => s.set(Some(n), dispatchExecutionContext), actualExecutionContext, subscribe)
 
   private def concurrentMutations(dispatches: Int,
                                   several: Int,
                                   eventContext: EventContext,
                                   actualExecutionContext: ExecutionContext
-                                 )(subscribe: Signal[Int] => (Int => Unit) => Subscription = s => g => s.onCurrent(g)(eventContext)): Unit =
+                                 )(subscribe: Signal[Int] => (Int => Unit) => Subscription = s => g => s.onCurrent(g)(using eventContext)): Unit =
     concurrentUpdates(dispatches, several, (s, n) => s.mutate(_ + n), actualExecutionContext, subscribe, _.currentValue.get == 55)
 
   private def concurrentUpdates(dispatches: Int,
@@ -324,26 +324,26 @@ class SignalSpec extends munit.FunSuite {
     }
 
   test("An uninitialized signal should not contain any value") {
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext
+    given defaultContext: DispatchQueue = Threading.defaultContext
     val s = Signal.empty[Int]
     assert(!result(s.contains(1)))
   }
 
   test("An initialized signal should contain the value it's initialized with") {
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext
+    given defaultContext: DispatchQueue = Threading.defaultContext
     val s = Signal.const(2)
     assert(!result(s.contains(1)))
     assert(result(s.contains(2)))
   }
 
   test("The 'exists' check for an uninitialized signal should always return false") {
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext
+    given defaultContext: DispatchQueue = Threading.defaultContext
     val s = Signal.empty[FiniteDuration]
     assert(!result(s.exists(d => d.toMillis == 5)))
   }
 
   test("The 'exists' check for an initialized signal should work accordingly") { //
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext// I know, stupid name
+    given defaultContext: DispatchQueue = Threading.defaultContext// I know, stupid name
     val s = Signal.const(5.millis)
     assert(!result(s.exists(d => d.toMillis == 2)))
     assert(result(s.exists(d => d.toMillis == 5)))
@@ -361,7 +361,7 @@ class SignalSpec extends munit.FunSuite {
   }
 
   test("After the value is changed, onUpdated should return the new value, and the old value") {
-    implicit val ec: ExecutionContext = SerialDispatchQueue()
+    given ec: ExecutionContext = SerialDispatchQueue()
     val s = Signal[Int](0)
     var p = Promise[(Option[Int], Int)]()
 
@@ -389,7 +389,7 @@ class SignalSpec extends munit.FunSuite {
   }
 
   test("After the value is changed, onChanged should return only the new value") {
-    implicit val ec: ExecutionContext = SerialDispatchQueue()
+    given ec: ExecutionContext = SerialDispatchQueue()
     val s = Signal[Int](0)
     var p = Promise[Int]()
 
@@ -458,7 +458,7 @@ class SignalSpec extends munit.FunSuite {
   }
 
   test("filter numbers to even and odd") {
-    implicit val dq: DispatchQueue = SerialDispatchQueue()
+    given dq: DispatchQueue = SerialDispatchQueue()
 
     val numbers = Seq(1, 2, 3, 4, 5, 6, 7, 8, 9)
 
@@ -487,7 +487,7 @@ class SignalSpec extends munit.FunSuite {
   }
 
   test("Call onTrue when a boolean signal becomes true for the first time") {
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext
+    given defaultContext: DispatchQueue = Threading.defaultContext
 
     val s = Signal[Boolean]()
     var res = false
@@ -507,7 +507,7 @@ class SignalSpec extends munit.FunSuite {
   }
 
   test("Don't call onTrue again when a boolean signal becomes true") {
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext
+    given defaultContext: DispatchQueue = Threading.defaultContext
 
     val s = Signal[Boolean]()
     var res = 0
@@ -537,7 +537,7 @@ class SignalSpec extends munit.FunSuite {
   }
 
   test("Call onFalse when a boolean signal becomes false for the first time") {
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext
+    given defaultContext: DispatchQueue = Threading.defaultContext
 
     val s = Signal[Boolean]()
     var res = true
@@ -557,7 +557,7 @@ class SignalSpec extends munit.FunSuite {
   }
 
   test("Don't call onFalse again when a boolean signal becomes false") {
-    implicit val defaultContext: DispatchQueue = Threading.defaultContext
+    given defaultContext: DispatchQueue = Threading.defaultContext
 
     val s = Signal[Boolean]()
     var res = 0

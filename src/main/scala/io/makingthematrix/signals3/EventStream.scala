@@ -17,7 +17,7 @@ object EventStream {
   final private class EventStreamSubscription[E](source:            EventStream[E],
                                                  f:                 E => Unit,
                                                  executionContext:  Option[ExecutionContext] = None
-                                                )(implicit context: WeakReference[EventContext])
+                                                )(using context: WeakReference[EventContext])
     extends BaseSubscription(context) with EventSubscriber[E] {
 
     override def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
@@ -135,8 +135,8 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
     */
   override def on(ec: ExecutionContext)
                  (body: E => Unit)
-                 (implicit eventContext: EventContext = EventContext.Global): Subscription =
-    new EventStreamSubscription[E](this, body, Some(ec))(WeakReference(eventContext)).tap(_.enable())
+                 (using eventContext: EventContext = EventContext.Global): Subscription =
+    new EventStreamSubscription[E](this, body, Some(ec))(using WeakReference(eventContext)).tap(_.enable())
 
   /** Registers a subscriber which will always be called in the same execution context in which the event was published.
     * An optional event context can be provided by the user for managing the subscription instead of doing it manually.
@@ -147,8 +147,8 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
     * @return A [[Subscription]] representing the created connection between the event stream and the body function
     */
   override def onCurrent(body: E => Unit)
-                        (implicit eventContext: EventContext = EventContext.Global): Subscription =
-    new EventStreamSubscription[E](this, body, None)(WeakReference(eventContext)).tap(_.enable())
+                        (using eventContext: EventContext = EventContext.Global): Subscription =
+    new EventStreamSubscription[E](this, body, None)(using WeakReference(eventContext)).tap(_.enable())
 
   /** Creates a new `EventStream[V]` by mapping events of the type `E` emitted by the original one.
     *
@@ -229,11 +229,11 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
     * @param ec An [[EventContext]] which can be used to manage the subscription (optional).
     * @return A new [[Subscription]] to this event stream.
     */
-  inline final def pipeTo(sourceStream: SourceStream[E])(implicit ec: EventContext = EventContext.Global): Subscription = 
+  inline final def pipeTo(sourceStream: SourceStream[E])(using ec: EventContext = EventContext.Global): Subscription = 
     onCurrent(sourceStream ! _)
 
   /** An alias for `pipeTo`. */
-  inline final def |(sourceStream: SourceStream[E])(implicit ec: EventContext = EventContext.Global): Subscription = 
+  inline final def |(sourceStream: SourceStream[E])(using ec: EventContext = EventContext.Global): Subscription = 
     pipeTo(sourceStream)
 
   /** Produces a [[CancellableFuture]] which will finish when the next event is emitted in the parent event stream.
@@ -243,7 +243,7 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
     *                future is finished or cancelled.
     * @return A cancellable future which will finish with the next event emitted by the event stream.
     */
-  final def next(implicit context: EventContext = EventContext.Global, executionContext: ExecutionContext = Threading.defaultContext): CancellableFuture[E] = {
+  final def next(using context: EventContext = EventContext.Global, executionContext: ExecutionContext = Threading.defaultContext): CancellableFuture[E] = {
     val p = Promise[E]()
     val o = onCurrent { p.trySuccess }
     p.future.onComplete(_ => o.destroy())
@@ -251,7 +251,7 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
   }
 
   /** A shorthand for `next` which additionally unwraps the cancellable future */
-  inline final def future(implicit context: EventContext = EventContext.Global, executionContext: ExecutionContext = Threading.defaultContext): Future[E] =
+  inline final def future(using context: EventContext = EventContext.Global, executionContext: ExecutionContext = Threading.defaultContext): Future[E] =
     next.future
 
   /** An alias to the `future` method. */
@@ -262,14 +262,14 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
     *
     * @return A new event stream of units.
     */
-  inline final def ifTrue(implicit ev: E =:= Boolean): EventStream[Unit] = collect { case true => () }
+  inline final def ifTrue(using ev: E <:< Boolean): EventStream[Unit] = collect { case true => () }
 
   /** Assuming that the event emitted by the stream can be interpreted as a boolean, this method creates a new event stream
     * of type `Unit` which emits unit events for each original event which is interpreted as false.
     *
     * @return A new event stream of units.
     */
-  inline final def ifFalse(implicit ev: E =:= Boolean): EventStream[Unit] = collect { case false => () }
+  inline final def ifFalse(using ev: E <:< Boolean): EventStream[Unit] = collect { case false => () }
 
   /** By default, an event stream does not have the internal state so there's nothing to do in `onWire` and `onUnwire`*/
   override protected def onWire(): Unit = {}

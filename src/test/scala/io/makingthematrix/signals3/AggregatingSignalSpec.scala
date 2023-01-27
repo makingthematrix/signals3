@@ -6,6 +6,7 @@ import testutils._
 import scala.concurrent.Promise
 
 class AggregatingSignalSpec extends munit.FunSuite {
+  import Threading.defaultContext
 
   test("new aggregator, no subscribers") {
     val promise = Promise[Seq[Int]]()

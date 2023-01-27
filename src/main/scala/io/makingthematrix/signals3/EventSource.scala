@@ -31,8 +31,7 @@ abstract class EventSource[E, S] {
     * @param eventContext An [[EventContext]] which will register the [[Subscription]] for further management (optional)
     * @return A [[Subscription]] representing the created connection between the event source and the body function.
     */
-  def on(ec: ExecutionContext)(body: E => Unit)(implicit eventContext: EventContext = EventContext.Global): Subscription
-
+  def on(ec: ExecutionContext)(body: E => Unit)(using eventContext: EventContext = EventContext.Global): Subscription
 
   /** Creates a [[Subscription]] to a function which will consume events in the same `ExecutionContext` as
     * the one in which the events are being emitted.
@@ -44,13 +43,13 @@ abstract class EventSource[E, S] {
     * @param eventContext an [[EventContext]] which will register the [[Subscription]] for further management (optional)
     * @return a [[Subscription]] representing the created connection between the [[EventSource]] and the body function
     */
-  def onCurrent(body: E => Unit)(implicit eventContext: EventContext = EventContext.Global): Subscription
+  def onCurrent(body: E => Unit)(using eventContext: EventContext = EventContext.Global): Subscription
 
   /** An alias for the `on` method with the default [[ExecutionContext]]. */
   inline final def foreach(body: E => Unit)
-                          (implicit executionContext: ExecutionContext = Threading.defaultContext,
+                          (using executionContext: ExecutionContext = Threading.defaultContext,
                            eventContext: EventContext = EventContext.Global): Subscription =
-    on(executionContext)(body)(eventContext)
+    on(executionContext)(body)
 
   /** Adds a new subscriber instance. The implementing class should handle notifying this subscriber
     * when a new event arrives. If this is the first subscriber, and `disableAutowiring` wasn't called previous,

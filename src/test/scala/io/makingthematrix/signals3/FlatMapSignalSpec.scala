@@ -112,7 +112,7 @@ class FlatMapSignalSpec extends munit.FunSuite {
 
 
   test("No subscribers will be left behind") {
-    implicit val dq: DispatchQueue = SerialDispatchQueue()
+    given dq: DispatchQueue = SerialDispatchQueue()
 
     val s = Signal(0)
     val s1 = Signal(1)

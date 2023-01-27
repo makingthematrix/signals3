@@ -9,7 +9,7 @@ class EventContextSpec extends munit.FunSuite {
   }
 
   test("Pausing, resuming and destroying the global event context") {
-    implicit val ec: EventContext = EventContext.Global
+    given ec: EventContext = EventContext.Global
     val s = Signal(1)
     s.onCurrent(capture)
 
@@ -35,7 +35,7 @@ class EventContextSpec extends munit.FunSuite {
   }
 
   test("Pausing, resuming and destroying a normal event context") {
-    implicit val ec: EventContext = EventContext()
+    given ec: EventContext = EventContext()
 
     val s = Signal(0)
     s.onCurrent(capture)

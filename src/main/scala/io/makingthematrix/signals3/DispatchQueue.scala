@@ -30,7 +30,7 @@ trait DispatchQueue extends ExecutionContext {
     * @tparam A the type of the task result
     * @return a cancellable future which will finish with the result of the task
     */
-  def apply[A](task: => A): CancellableFuture[A] = CancellableFuture(task)(this)
+  def apply[A](task: => A): CancellableFuture[A] = CancellableFuture(task)(using this)
 
   /** @todo Currently not used. Left here as a reminder that in the future we may provide logging functionality.
     *
