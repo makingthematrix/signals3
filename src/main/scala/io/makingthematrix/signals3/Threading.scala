@@ -7,7 +7,7 @@ import scala.concurrent.ExecutionContext
   * dispatch queues and to run cancellable futures, event streams, and signals, if no other execution context
   * is provided.
   */
-object Threading {
+object Threading:
   /** An implicit reference to the default execution context. It is lazy, giving you a chance to replace the default
     * context with one of your own choosing before it is used for the first time.
     */
@@ -35,13 +35,11 @@ object Threading {
     * @param queue - a custom dispatch queue that will serve as the default execution context in cases where no other execution
     *              context is provided and as the parent for all new dispatch queues when their parents are not provided.
     */
-  def setAsDefault(queue: DispatchQueue): Unit = {
+  def setAsDefault(queue: DispatchQueue): Unit =
     instance = Some(queue)
-  }
 
   /**
     * @return the default dispatch queue, either the one provided by the user or an unlimited dispatch queue over ExecutionContext.global,
     *         created at the moment of first use.
     */
   def apply(): DispatchQueue = instance.getOrElse(defaultQueue)
-}

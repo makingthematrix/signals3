@@ -1,12 +1,11 @@
 package io.makingthematrix.signals3
 
-class EventContextSpec extends munit.FunSuite {
+class EventContextSpec extends munit.FunSuite:
   private var received = Seq[Int]()
   private val capture = (value: Int) => received = received :+ value
 
-  override def beforeEach(context: BeforeEach): Unit = {
+  override def beforeEach(context: BeforeEach): Unit =
     received = Seq.empty
-  }
 
   test("Pausing, resuming and destroying the global event context") {
     given ec: EventContext = EventContext.Global
@@ -61,4 +60,3 @@ class EventContextSpec extends munit.FunSuite {
 
     assertEquals(received, Seq(0, 1, 2, 3, 5, 6, 7))
   }
-}

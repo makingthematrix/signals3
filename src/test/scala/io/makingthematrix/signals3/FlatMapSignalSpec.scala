@@ -2,14 +2,13 @@ package io.makingthematrix.signals3
 
 import testutils.{awaitAllTasks, result}
 
-class FlatMapSignalSpec extends munit.FunSuite {
+class FlatMapSignalSpec extends munit.FunSuite:
 
   private var received = Vector.empty[Int]
   private val capture = (value: Int) => received :+= value
 
-  override def beforeEach(context: BeforeEach): Unit = {
+  override def beforeEach(context: BeforeEach): Unit =
     received = Vector.empty[Int]
-  }
 
   test("Normal flatmapping") {
     val s = Signal(0)
@@ -88,7 +87,7 @@ class FlatMapSignalSpec extends munit.FunSuite {
     val signal = Signal(0)
     val signalA = Signal[String]()
     val signalB = Signal[String]()
-    val chain = signal.flatMap(n => if (n % 2 == 0) signalA else signalB)
+    val chain = signal.flatMap(n => if n % 2 == 0 then signalA else signalB)
     val fan = Follower(chain).subscribed
     assert(chain.empty)
     assertEquals(fan.received, Vector.empty)
@@ -163,7 +162,7 @@ class FlatMapSignalSpec extends munit.FunSuite {
     val s = Signal[Boolean](true)
     val sstr = Signal[String]()
     val s1 = sstr.map(_.length)
-    val s2 = sstr.map(str => if (str.contains("a")) 1 else 0)
+    val s2 = sstr.map(str => if str.contains("a") then 1 else 0)
 
     val fm = s.flatMap {
       case true  => s1
@@ -205,7 +204,7 @@ class FlatMapSignalSpec extends munit.FunSuite {
 
   test("possibly stale value after re-wiring") {
     val source = Signal(1)
-    val chain = source.flatMap(n => if (n % 2 == 0) Signal(n) else Signal[Int]()).map(identity)
+    val chain = source.flatMap(n => if n % 2 == 0 then Signal(n) else Signal[Int]()).map(identity)
     val fan = Follower(chain).subscribed
     source ! 2
     assertEquals(fan.received, Vector(2))
@@ -219,4 +218,3 @@ class FlatMapSignalSpec extends munit.FunSuite {
     source ! 8
     assertEquals(fan.received, Vector(2, 8))
   }
-}

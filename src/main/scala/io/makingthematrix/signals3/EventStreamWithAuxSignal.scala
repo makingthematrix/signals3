@@ -6,13 +6,11 @@ import Signal.SignalSubscriber
 
 import scala.concurrent.ExecutionContext
 
-object EventStreamWithAuxSignal {
+object EventStreamWithAuxSignal:
   def apply[A, B](source: EventStream[A], aux: Signal[B]): EventStreamWithAuxSignal[A, B] = new EventStreamWithAuxSignal(source, aux)
 
-  final class DoNothingSignalSubscriber extends SignalSubscriber {
+  final class DoNothingSignalSubscriber extends SignalSubscriber:
     override def changed(currentContext: Option[ExecutionContext]): Unit = {}
-  }
-}
 
 /** An event stream coupled with an auxiliary signal.
   * You can use it if you want to repeat some computations based on the current value of the signal every time when an event
@@ -37,22 +35,17 @@ object EventStreamWithAuxSignal {
   * @tparam A The type of events in the source stream.
   * @tparam B The type of values in the auxiliary signal.
   */
-class EventStreamWithAuxSignal[A, B](source: EventStream[A], aux: Signal[B]) extends EventStream[(A, Option[B])] {
-  protected[this] val subscriber: EventSubscriber[A] = new EventSubscriber[A] {
-    override protected[signals3] def onEvent(event: A, sourceContext: Option[ExecutionContext]): Unit = {
+class EventStreamWithAuxSignal[A, B](source: EventStream[A], aux: Signal[B]) extends EventStream[(A, Option[B])]:
+  protected[this] val subscriber: EventSubscriber[A] = new EventSubscriber[A]:
+    override protected[signals3] def onEvent(event: A, sourceContext: Option[ExecutionContext]): Unit =
       dispatch((event, aux.currentValue), sourceContext)
-    }
-  }
 
   protected[this] lazy val auxSubscriber: SignalSubscriber = new DoNothingSignalSubscriber()
 
-  override protected def onWire(): Unit = {
+  override protected def onWire(): Unit =
     source.subscribe(subscriber)
     aux.subscribe(auxSubscriber)
-  }
 
-  override protected[signals3] def onUnwire(): Unit = {
+  override protected[signals3] def onUnwire(): Unit =
     source.unsubscribe(subscriber)
     aux.unsubscribe(auxSubscriber)
-  }
-}

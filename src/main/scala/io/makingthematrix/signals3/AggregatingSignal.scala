@@ -6,7 +6,7 @@ import EventStream.EventSubscriber
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
-object AggregatingSignal {
+object AggregatingSignal:
   /** Creates a new aggregating signal from the `loader` which will be used to compute the initial value of the signal,
     * a stream of events, and the `updater` function which will use those events to update the value of the signal.
     * The `loader` - which is a future - will be executed in the provided execution context or the default execution
@@ -27,7 +27,6 @@ object AggregatingSignal {
   def apply[E, V](loader: () => Future[V], sourceStream: EventStream[E], updater: (V, E) => V)
                  (using ec: ExecutionContext = Threading.defaultContext): AggregatingSignal[E, V]
     = new AggregatingSignal(loader, sourceStream, updater)
-}
 
 /** A signal which initializes its value by executing the `loader` future and then updates the value by composition of
   * the previous value and an event published in the associated `source` stream.
@@ -66,7 +65,7 @@ class AggregatingSignal[E, V](loader: () => Future[V], sourceStream: EventStream
   @volatile private var stash = Vector.empty[E]
 
   override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit = valueMonitor.synchronized {
-    if (loadId.intValue() == 0)
+    if loadId.intValue() == 0 then
       value.foreach(v => self.set(Some(updater(v, event)), currentContext))
     else
       stash :+= event
@@ -82,14 +81,12 @@ class AggregatingSignal[E, V](loader: () => Future[V], sourceStream: EventStream
     case _ => // delegate is no longer the current one, discarding loaded value
   }(ec)
 
-  override def onWire(): Unit = {
+  override def onWire(): Unit =
     stash = Vector.empty
     sourceStream.subscribe(this) // important to subscribe before starting to load
     startLoading(loadId.incrementAndGet())
-  }
 
-  override def onUnwire(): Unit = {
+  override def onUnwire(): Unit =
     loadId.set(0)
     sourceStream.unsubscribe(this)
-  }
 }

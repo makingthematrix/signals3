@@ -19,10 +19,7 @@ val standardOptions = Seq(
 )
 
 val scala3Options = Seq(
-  "-source:3.2-migration",
-  "-explain",
-  "-no-indent",
-  "-old-syntax"
+  "-explain"
 )
 
 publishMavenStyle := true

@@ -2,7 +2,7 @@ package io.makingthematrix.signals3
 
 import testutils.{awaitAllTasks, waitForResult}
 
-class FlatMapEventStreamSpec extends munit.FunSuite {
+class FlatMapEventStreamSpec extends munit.FunSuite:
   test("Normal flatmapping") {
     given dispatchQueue: DispatchQueue = SerialDispatchQueue()
     val received = Signal(Seq.empty[Int])
@@ -64,11 +64,11 @@ class FlatMapEventStreamSpec extends munit.FunSuite {
     val source1 = EventStream[Int]()
     val source2 = EventStream[Int]()
 
-    val result = for {
+    val result = for
       b1  <- switch
-      b2  <- if (b1) switch1 else switch2
-      res <- if (b2) source1 else source2
-    } yield res
+      b2  <- if b1 then switch1 else switch2
+      res <- if b2 then source1 else source2
+    yield res
 
     result.foreach(capture)
 
@@ -165,4 +165,3 @@ class FlatMapEventStreamSpec extends munit.FunSuite {
     assert(!es1.wired)
     assert(!es2.wired)
   }
-}

@@ -15,7 +15,7 @@ import scala.collection.immutable.Map
   * @todo `Serialized` is currently used in only one place in wire-signals, `FutureEventStream`, which in turn is used only for
   *       [[EventStream.mapSync]], so we may think or removing this class from the library (move to extensions, maybe?).
   */
-object Serialized {
+object Serialized:
   private given dispatcher: DispatchQueue = SerialDispatchQueue("Serialized")
 
   private var locks = Map[String, Future[_]]()
@@ -37,7 +37,7 @@ object Serialized {
     }
     val lock = future.future
     locks += ((key, lock))
-    future.onComplete { _ => if (locks.get(key).contains(lock)) locks -= key }
+    future.onComplete { _ => if locks.get(key).contains(lock) then locks -= key }
     future
   }.flatten
 
@@ -51,12 +51,10 @@ object Serialized {
     * @return A new future representing the whole chain of operations which ends with the one which was just added.
     *         The user should refer to this one from now on instead of the original one.
     */
-  def future[T](key: String)(body: => Future[T]): Future[T] = {
+  def future[T](key: String)(body: => Future[T]): Future[T] =
     val future = locks.get(key).fold(body) { lock =>
       lock.recover { case _ => }.flatMap(_ => body)
     }
     locks += ((key, future))
-    future.onComplete { _ => if (locks.get(key).contains(future)) locks -= key }
+    future.onComplete { _ => if locks.get(key).contains(future) then locks -= key }
     future
-  }
-}

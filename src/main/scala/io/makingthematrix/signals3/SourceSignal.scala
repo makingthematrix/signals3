@@ -3,7 +3,7 @@ package io.makingthematrix.signals3
 import scala.annotation.targetName
 import scala.concurrent.ExecutionContext
 
-object SourceSignal {
+object SourceSignal:
   /** Creates a source signal initially holding the given value.
     *
     * @see also `Signal.apply`
@@ -22,7 +22,6 @@ object SourceSignal {
     * @return A new source signal
     */
   def apply[V](): SourceSignal[V] = new SourceSignal[V](None)
-}
 
 /** The usual entry point for publishing values in signals.
   *
@@ -32,7 +31,7 @@ object SourceSignal {
   *
   * @tparam V the type of the value held by the signal.
   */
-class SourceSignal[V](protected val v: Option[V]) extends Signal[V](v) {
+class SourceSignal[V](protected val v: Option[V]) extends Signal[V](v):
   /** Changes the value of the signal.
     *
     * The original `publish` method of the [[Signal]] class is `protected` to ensure that intermediate signals - those created
@@ -104,4 +103,3 @@ class SourceSignal[V](protected val v: Option[V]) extends Signal[V](v) {
     *         false otherwise.
     */
   inline final def mutateOrDefault(f: V => V, default: V): Boolean = update(_.map(f).orElse(Some(default)))
-}

@@ -14,7 +14,7 @@ import scala.concurrent.ExecutionContext
   *
   * @see `ExecutionContext`
   */
-trait DispatchQueue extends ExecutionContext {
+trait DispatchQueue extends ExecutionContext:
   val name: String = s"queue_${nextInt()}"
 
   /** Executes a task on this queue.
@@ -43,9 +43,8 @@ trait DispatchQueue extends ExecutionContext {
     * @return true if there is a task waiting in the queue to be executed after one of the current one finishes, false otherwise.
     */
   def hasRemainingTasks: Boolean = false
-}
 
-object DispatchQueue {
+object DispatchQueue:
   /** Used in place on the `concurrentTasks` parameter in one of the `DispatchQueue.apply` method,
     * `UNLIMITED` indicates that the queue should be an unlimited one. But take a look on `UnlimitedDispatchQueue.apply`
     * before you decide to use it.
@@ -66,11 +65,10 @@ object DispatchQueue {
   private[signals3] def nextInt(): Int = AtomInt.incrementAndGet()
 
   private def createDispatchQueue(concurrentTasks: Int, executor: ExecutionContext, name: Option[String]): DispatchQueue =
-    concurrentTasks match {
+    concurrentTasks match
       case Unlimited => new UnlimitedDispatchQueue(executor, name)
       case Serial    => new SerialDispatchQueue(executor, name)
       case _         => new LimitedDispatchQueue(concurrentTasks, executor, name)
-    }
 
   /** Creates a dispatch queue with a generated name.
     *
@@ -125,17 +123,15 @@ object DispatchQueue {
     */
   def apply(concurrentTasks: Int, service: ExecutorService, name: String): DispatchQueue =
     createDispatchQueue(concurrentTasks, service, Some(name))
-}
 
 /** A dispatch queue that simply passes all its tasks to its execution context.
   */
 final class UnlimitedDispatchQueue private[signals3] (executor: ExecutionContext, private val _name: Option[String] = None)
-  extends DispatchQueue {
+  extends DispatchQueue:
   override val name: String = _name.getOrElse(s"unlimited_${nextInt()}")
   inline override def execute(runnable: Runnable): Unit = executor.execute(runnable)
-}
 
-object UnlimitedDispatchQueue {
+object UnlimitedDispatchQueue:
   /** Creates an unlimited dispatch queue with a generated name that uses the default execution context.
     * Don't use it to create a dispatch queue which you would later want to set as the default one, as this will
     * initialize the default one first (if it's not already initialized), so basically you could just do nothing
@@ -158,7 +154,6 @@ object UnlimitedDispatchQueue {
     * @return a new unlimited dispatch queue
     */
   def apply(name: String): DispatchQueue = new UnlimitedDispatchQueue(Threading.defaultContext, Some(name))
-}
 
 /** A dispatch queue limiting number of concurrently executing tasks.
   * All tasks are executed on parent execution context, but only up to the `concurrencyLimit`.
@@ -166,7 +161,7 @@ object UnlimitedDispatchQueue {
   * Create with one of `DispatchQueue.apply` methods.
   */
 class LimitedDispatchQueue private[signals3] (concurrencyLimit: Int, parent: ExecutionContext, private val _name: Option[String])
-  extends DispatchQueue {
+  extends DispatchQueue:
   override val name: String = _name.getOrElse(s"limited_${nextInt()}")
 
   /** Schedules a new runnable task to be executed. The task will be added to the queue and then a dispatch executor will run
@@ -180,62 +175,54 @@ class LimitedDispatchQueue private[signals3] (concurrencyLimit: Int, parent: Exe
 
   override def reportFailure(cause: Throwable): Unit = parent.reportFailure(cause)
 
-  private object Executor extends Runnable {
+  private object Executor extends Runnable:
     val queue = new ConcurrentLinkedQueue[Runnable]
     val runningCount = new AtomicInteger(0)
 
-    def dispatch(runnable: Runnable): Unit = {
+    def dispatch(runnable: Runnable): Unit =
       queue.add(runnable)
       dispatchExecutor()
-    }
 
     // TODO: Is it ok to call this method in a loop without any delay? Shouldn't it sleep for a moment between calls?
     @tailrec
     def dispatchExecutor(): Unit =
-      if (runningCount.getAndIncrement() < concurrencyLimit)
+      if runningCount.getAndIncrement() < concurrencyLimit then
         parent.execute(this)
-      else if (runningCount.decrementAndGet() < concurrencyLimit && !queue.isEmpty)
+      else if runningCount.decrementAndGet() < concurrencyLimit && !queue.isEmpty then
         dispatchExecutor() // to prevent race condition when executor has just finished
 
-    override def run(): Unit = {
+    override def run(): Unit =
       @tailrec
-      def executeBatch(counter: Int = 0): Unit = Option(queue.poll()) match {
+      def executeBatch(counter: Int = 0): Unit = Option(queue.poll()) match
         case None => // done
         case Some(runnable) =>
-          try {
+          try
             runnable.run()
-          } catch {
+          catch
             case cause: Throwable => reportFailure(cause)
-          }
-          if (counter < LimitedDispatchQueue.MaxBatchSize) executeBatch(counter + 1)
-      }
+          if counter < LimitedDispatchQueue.MaxBatchSize then executeBatch(counter + 1)
 
       executeBatch()
 
-      if (runningCount.decrementAndGet() < concurrencyLimit && !queue.isEmpty) dispatchExecutor()
-    }
-  }
+      if runningCount.decrementAndGet() < concurrencyLimit && !queue.isEmpty then dispatchExecutor()
 
   override def hasRemainingTasks: Boolean = !Executor.queue.isEmpty || Executor.runningCount.get() > 0
-}
 
-object LimitedDispatchQueue {
+object LimitedDispatchQueue:
   /** The maximum number of tasks to execute in a single batch. Used to prevent starving of other contexts using the common parent.
     * If more than `MaxBatchSize` tasks await execution, after this number of tasks are run the execution will stop, other parents
     * will be given an opportunity to run their tasks, and then it will come back here the rest of these tasks will be executed.
     */
   val MaxBatchSize = 100
-}
 
 /** A special case of a limited dispatch queue which allows for only one task to be executed at once.
   * Use when you want to enforce the tasks to be executed in the order they were scheduled.
   */
 final class SerialDispatchQueue private[signals3] (executor: ExecutionContext, private val _name: Option[String])
-  extends LimitedDispatchQueue(Serial, executor, _name) {
+  extends LimitedDispatchQueue(Serial, executor, _name):
   override val name: String = s"serial_${nextInt()}"
-}
 
-object SerialDispatchQueue {
+object SerialDispatchQueue:
 
   /** Creates a serial dispatch queue with a generated name that uses the default execution context.
     *
@@ -253,4 +240,3 @@ object SerialDispatchQueue {
     * @return a new serial dispatch queue
     */
   def apply(name: String): DispatchQueue = new SerialDispatchQueue(Threading.defaultContext, Some(name))
-}

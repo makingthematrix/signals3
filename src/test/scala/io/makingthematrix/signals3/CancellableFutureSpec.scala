@@ -8,27 +8,24 @@ import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration._
 import testutils._
 
-class CancellableFutureSpec extends munit.FunSuite {
+class CancellableFutureSpec extends munit.FunSuite:
   test("Transform between a future and a cancellable future") {
     import CancellableFuture._
     val f1: Future[Unit] = Future.successful(())
     val cf1 = f1.lift
-    cf1 match {
+    cf1 match
       case _: CancellableFuture[Unit] =>
       case null => fail("Future[Unit] should be transformed into CancellableFuture[Unit]")
-    }
 
     val f2 = cf1.future
-    f2 match {
+    f2 match
       case _: Future[Unit] =>
       case null => fail("CancellableFuture[Unit] should wrap over Future[Unit]")
-    }
 
     val cf2 = CancellableFuture.lift(f2)
-    cf2 match {
+    cf2 match
       case _: CancellableFuture[Unit] =>
       case null => fail("Future[Unit] should be lifted into CancellableFuture[Unit]")
-    }
   }
 
   test("Create a cancellable future from the body") {
@@ -184,7 +181,7 @@ class CancellableFutureSpec extends munit.FunSuite {
     var theFlag = false // this should stay false if the future was cancelled (but it won't)
     var semaphore = false
     val f1: Future[Unit] = Future {
-      while (!semaphore) Thread.sleep(100L)
+      while !semaphore do Thread.sleep(100L)
       theFlag = true
     }
 
@@ -528,4 +525,3 @@ class CancellableFutureSpec extends munit.FunSuite {
 
     assertEquals(result(cf2), "bar")
   }
-}

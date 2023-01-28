@@ -17,7 +17,7 @@ import scala.ref.WeakReference
   * reacts to the aforementioned events. For an example of how to do it on a small scale, please
   * @see [[CancellableFuture.withAutoCanceling]]
   */
-trait Subscription {
+trait Subscription:
   /** You can think of `enable()`/`disable()` as of `subscribe()`/`unsubscribe()` on a higher level.
     * In the default implementation, `enable()` is called automatically when the subscription is created,
     * and it calls `subscribe()`. Later, the subscriber can `unsubscribe()` but the subscription will stay enabled,
@@ -59,7 +59,6 @@ trait Subscription {
 
   /** Use to stop receiving events but still maintain the possibility to re-subscribe. */
   def unsubscribe(): Unit
-}
 
 /** Provides the default implementation of the [[Subscription]] trait.
   * Exposes two new abstract methods: `onSubscribe` and `onUnsubscribe`. A typical way to implement them is
@@ -72,7 +71,7 @@ trait Subscription {
   * @see [[EventStream]]
   * @param context A weak reference to the event context within which the subscription lives.
   */
-abstract class BaseSubscription(context: WeakReference[EventContext]) extends Subscription {
+abstract class BaseSubscription(context: WeakReference[EventContext]) extends Subscription:
   @volatile protected[signals3] var subscribed = false
   private var enabled = false
   private var pauseWithContext = true
@@ -83,34 +82,28 @@ abstract class BaseSubscription(context: WeakReference[EventContext]) extends Su
 
   protected[signals3] def onUnsubscribe(): Unit
 
-  def subscribe(): Unit = if (enabled && !subscribed) {
+  def subscribe(): Unit = if enabled && !subscribed then
     subscribed = true
     onSubscribe()
-  }
 
-  def unsubscribe(): Unit = if (subscribed && (pauseWithContext || !enabled)) {
+  def unsubscribe(): Unit = if subscribed && (pauseWithContext || !enabled) then
     subscribed = false
     onUnsubscribe()
-  }
 
   def enable(): Unit = context.get.foreach { context =>
     enabled = true
-    if (context.isContextStarted) subscribe()
+    if context.isContextStarted then subscribe()
   }
 
-  def disable(): Unit = {
+  def disable(): Unit =
     enabled = false
-    if (subscribed) unsubscribe()
-  }
+    if subscribed then unsubscribe()
 
-  def destroy(): Unit = {
+  def destroy(): Unit =
     disable()
     context.get.foreach(_.unregister(this))
-  }
 
-  def disablePauseWithContext(): Unit = {
+  def disablePauseWithContext(): Unit =
     pauseWithContext = false
     subscribe()
-  }
-}
 

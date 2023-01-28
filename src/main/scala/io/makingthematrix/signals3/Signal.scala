@@ -8,35 +8,31 @@ import scala.ref.WeakReference
 import scala.util.Try
 import scala.util.chaining.scalaUtilChainingOps
 
-object Signal {
-  private[signals3] trait SignalSubscriber {
+object Signal:
+  private[signals3] trait SignalSubscriber:
     // 'currentContext' is the context this method IS run in, NOT the context any subsequent methods SHOULD run in
     protected[signals3] def changed(currentContext: Option[ExecutionContext]): Unit
-  }
 
   final private class SignalSubscription[V](source:           Signal[V],
                                             f:                V => Unit,
                                             executionContext: Option[ExecutionContext] = None
                                           )(using context: WeakReference[EventContext])
-    extends BaseSubscription(context) with SignalSubscriber {
+    extends BaseSubscription(context) with SignalSubscriber:
 
     override def changed(currentContext: Option[ExecutionContext]): Unit = synchronized {
       source.value.foreach { event =>
-        if (subscribed)
-          executionContext match {
-            case Some(ec) if !currentContext.contains(ec) => Future(if (subscribed) Try(f(event)))(ec)
+        if subscribed then
+          executionContext match
+            case Some(ec) if !currentContext.contains(ec) => Future(if subscribed then Try(f(event)))(ec)
             case _ => f(event)
-          }
       }
     }
 
-    override protected[signals3] def onSubscribe(): Unit = {
+    override protected[signals3] def onSubscribe(): Unit =
       source.subscribe(this)
       changed(None) // refresh the subscriber with current value
-    }
 
     override protected[signals3] def onUnsubscribe(): Unit = source.unsubscribe(this)
-  }
 
   final private val Empty = new ConstSignal[Any](None)
 
@@ -194,12 +190,10 @@ object Signal {
     * @tparam V The type of the values in the parent signals.
     * @return A new signal with its value being a sequence of current values of the parent signals.
     */
-  def sequence[V](sources: Signal[V]*): Signal[Seq[V]] = new ProxySignal[Seq[V]](sources: _*) {
-    override protected def computeValue(current: Option[Seq[V]]): Option[Seq[V]] = {
+  def sequence[V](sources: Signal[V]*): Signal[Seq[V]] = new ProxySignal[Seq[V]](sources: _*):
+    override protected def computeValue(current: Option[Seq[V]]): Option[Seq[V]] =
       val res = sources.map(_.value)
-      if (res.exists(_.isEmpty)) None else Some(res.flatten)
-    }
-  }
+      if res.exists(_.isEmpty) then None else Some(res.flatten)
 
   /** Creates a new signal from a future.
     * The signal will start uninitialized and initialize to its only, never again changing value if the future finishes with success.
@@ -254,7 +248,6 @@ object Signal {
     * @return A new signal with the value of the type `V`.
     */
   inline def from[V](source: EventStream[V]): Signal[V] = new EventStreamSignal[V](source)
-}
 
 /** A signal is an event stream with a cache.
   *
@@ -310,11 +303,11 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
     *         false if the new value is the same as the old one.
     */
   protected[signals3] def set(v: Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
-    if (value != v) {
+    if value != v then
       value = v
       notifySubscribers(currentContext)
       true
-    } else false
+    else false
 
   /** Notifies the subscribers that the value of the signal has changed.
     *
@@ -333,10 +326,9 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
     *
     * @return The current value of the signal.
     */
-  final def currentValue: Option[V] = {
-    if (!wired) disableAutowiring()
+  final def currentValue: Option[V] =
+    if !wired then disableAutowiring()
     value
-  }
 
   /** Checks if the signal is currently empty.
     * A signal is usually empty just after creation, if it was not initialized with a value, and it still waits
@@ -355,18 +347,16 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
 
     * @return The current value of the signal or the value it will be set to in the next update.
     */
-  final def future: Future[V] = currentValue match {
+  final def future: Future[V] = currentValue match
     case Some(v) => Future.successful(v)
     case None =>
       val p = Promise[V]()
-      val subscriber = new SignalSubscriber {
+      val subscriber = new SignalSubscriber:
         override def changed(ec: Option[ExecutionContext]): Unit = value.foreach(p.trySuccess)
-      }
       subscribe(subscriber)
       p.future.onComplete(_ => unsubscribe(subscriber))(Threading.defaultContext)
       value.foreach(p.trySuccess)
       p.future
-  }
 
   /** An alias to the `future` method. */
   inline final def head: Future[V] = future
@@ -378,7 +368,7 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
     * @return a future of boolean: true if the signal contains the given value, false otherwise
     */
   final def contains(value: V)(using ec: ExecutionContext): Future[Boolean] =
-    if (empty) Future.successful(false) else future.map(_ == value)(ec)
+    if empty then Future.successful(false) else future.map(_ == value)(ec)
 
   /** A shortcut that checks if the current value (or the first value after initialization) fulfills the given condition.
     *
@@ -387,7 +377,7 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
     * @return a future of boolean: true if the signal's value fulfills the given condition, false otherwise
     */
   final def exists(f: V => Boolean)(using ec: ExecutionContext): Future[Boolean] =
-    if (empty) Future.successful(false) else future.map(f)(ec)
+    if empty then Future.successful(false) else future.map(f)(ec)
 
   /** An event stream where each event is a tuple of the old and the new value of the signal.
     * Every time the value of the signal changes - actually changes to another value - the new value will be published in this stream,
@@ -400,10 +390,9 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
 
     override def changed(ec: Option[ExecutionContext]): Unit = stream.synchronized {
       self.value.foreach { current =>
-        if (!prev.contains(current)) {
+        if !prev.contains(current) then
           dispatch((prev, current), ec)
           prev = Some(current)
-        }
       }
     }
 
@@ -495,11 +484,10 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
     * @return A new signal with values of the type `Z`, holding the value produced from the original signal's value by
     *         the partial function, or empty if that's not possible.
     */
-  final def collect[Z](pf: PartialFunction[V, Z]): Signal[Z] = new ProxySignal[Z](this) {
+  final def collect[Z](pf: PartialFunction[V, Z]): Signal[Z] = new ProxySignal[Z](this):
     override protected def computeValue(current: Option[Z]): Option[Z] = self.value.flatMap { v =>
       pf.andThen(Option(_)).applyOrElse(v, { (_: V) => Option.empty[Z] })
     }
-  }
 
   /** Creates a new `Signal[Z]` by mapping each event of the original `Signal[V]` to a new signal and switching to it.
     * The usual use case is to create a new complex signal not as one big entity with the value being the result of
@@ -542,9 +530,8 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
     * @tparam Y The value type of the new signal.
     * @return A new signal with the value of the type `Y`.
     */
-  final def combine[Z, Y](other: Signal[Z])(f: (V, Z) => Y): Signal[Y] = new ProxySignal[Y](this, other) {
-    override protected def computeValue(current: Option[Y]): Option[Y] = for (v <- self.value; z <- other.value) yield f(v, z)
-  }
+  final def combine[Z, Y](other: Signal[Z])(f: (V, Z) => Y): Signal[Y] = new ProxySignal[Y](this, other):
+    override protected def computeValue(current: Option[Y]): Option[Y] = for v <- self.value; z <- other.value yield f(v, z)
 
   /** Creates a throttled version of this signal which updates no more often than once during the given time interval.
     * If changes to the value of the parent signal happen more often, some of them will be ignored.
@@ -563,9 +550,8 @@ class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = 
     * @param fallback Another signal of the same value type.
     * @return A new signal of the same value type.
     */
-  final def orElse(fallback: Signal[V]): Signal[V] = new ProxySignal[V](self, fallback) {
+  final def orElse(fallback: Signal[V]): Signal[V] = new ProxySignal[V](self, fallback):
     override protected def computeValue(current: Option[V]): Option[V] = self.value.orElse(fallback.value)
-  }
 
   /** A generalization of the `orElse` method where the fallback signal can have another value type.
     * If the value of this signal is `V` and the value of the fallback signal is `Z`, the new signal will return
@@ -690,108 +676,94 @@ trait NoAutowiring[V] { self: Signal[V] =>
   disableAutowiring()
 }
 
-abstract class ProxySignal[V](sources: Signal[_]*) extends Signal[V] with SignalSubscriber {
-  override def onWire(): Unit = {
+abstract class ProxySignal[V](sources: Signal[_]*) extends Signal[V] with SignalSubscriber:
+  override def onWire(): Unit =
     sources.foreach(_.subscribe(this))
     value = computeValue(value)
-  }
 
   override def onUnwire(): Unit = sources.foreach(_.unsubscribe(this))
 
   override def changed(ec: Option[ExecutionContext]): Unit = update(computeValue, ec)
 
   protected def computeValue(current: Option[V]): Option[V]
-}
 
-final private[signals3] class ScanSignal[V, Z](source: Signal[V], zero: Z, f: (Z, V) => Z) extends ProxySignal[Z](source) {
+final private[signals3] class ScanSignal[V, Z](source: Signal[V], zero: Z, f: (Z, V) => Z) extends ProxySignal[Z](source):
   // @todo shouldn't this be in an overridden `onWire`?
   value = Some(zero)
 
   override protected def computeValue(current: Option[Z]): Option[Z] =
     source.value.map { v => f(current.getOrElse(zero), v) }.orElse(current)
-}
 
-final private[signals3] class FilterSignal[V](source: Signal[V], f: V => Boolean) extends ProxySignal[V](source) {
+final private[signals3] class FilterSignal[V](source: Signal[V], f: V => Boolean) extends ProxySignal[V](source):
   override protected def computeValue(current: Option[V]): Option[V] = source.value.filter(f)
-}
 
-final private[signals3] class MapSignal[V, Z](source: Signal[V], f: V => Z) extends ProxySignal[Z](source) {
+final private[signals3] class MapSignal[V, Z](source: Signal[V], f: V => Z) extends ProxySignal[Z](source):
   override protected def computeValue(current: Option[Z]): Option[Z] = source.value.map(f)
-}
 
-final private[signals3] class Zip2Signal[A, B](s1: Signal[A], s2: Signal[B]) extends ProxySignal[(A, B)](s1, s2) {
+final private[signals3] class Zip2Signal[A, B](s1: Signal[A], s2: Signal[B]) extends ProxySignal[(A, B)](s1, s2):
   override protected def computeValue(current: Option[(A, B)]): Option[(A, B)] =
-    for (a <- s1.value; b <- s2.value) yield (a, b)
-}
+    for a <- s1.value; b <- s2.value yield (a, b)
 
 final private[signals3] class Zip3Signal[A, B, C](s1: Signal[A], s2: Signal[B], s3: Signal[C])
-  extends ProxySignal[(A, B, C)](s1, s2, s3) {
+  extends ProxySignal[(A, B, C)](s1, s2, s3):
   override protected def computeValue(current: Option[(A, B, C)]): Option[(A, B, C)] =
-    for {
+    for
       a <- s1.value
       b <- s2.value
       c <- s3.value
-    } yield (a, b, c)
-}
+    yield (a, b, c)
 
 final private[signals3] class Zip4Signal[A, B, C, D](s1: Signal[A], s2: Signal[B], s3: Signal[C], s4: Signal[D])
-  extends ProxySignal[(A, B, C, D)](s1, s2, s3, s4) {
+  extends ProxySignal[(A, B, C, D)](s1, s2, s3, s4):
   override protected def computeValue(current: Option[(A, B, C, D)]): Option[(A, B, C, D)] =
-    for {
+    for
       a <- s1.value
       b <- s2.value
       c <- s3.value
       d <- s4.value
-    } yield (a, b, c, d)
-}
+    yield (a, b, c, d)
 
 final private[signals3] class Zip5Signal[A, B, C, D, E](s1: Signal[A], s2: Signal[B], s3: Signal[C], s4: Signal[D], s5: Signal[E])
-  extends ProxySignal[(A, B, C, D, E)](s1, s2, s3, s4, s5) {
+  extends ProxySignal[(A, B, C, D, E)](s1, s2, s3, s4, s5):
   override protected def computeValue(current: Option[(A, B, C, D, E)]): Option[(A, B, C, D, E)] =
-    for {
+    for
       a <- s1.value
       b <- s2.value
       c <- s3.value
       d <- s4.value
       e <- s5.value
-    } yield (a, b, c, d, e)
-}
+    yield (a, b, c, d, e)
 
 final private[signals3] class Zip6Signal[A, B, C, D, E, F](s1: Signal[A], s2: Signal[B], s3: Signal[C], s4: Signal[D], s5: Signal[E], s6: Signal[F])
-  extends ProxySignal[(A, B, C, D, E, F)](s1, s2, s3, s4, s5, s6) {
-  override protected def computeValue(current: Option[(A, B, C, D, E, F)]): Option[(A, B, C, D, E, F)] = for {
+  extends ProxySignal[(A, B, C, D, E, F)](s1, s2, s3, s4, s5, s6):
+  override protected def computeValue(current: Option[(A, B, C, D, E, F)]): Option[(A, B, C, D, E, F)] = for
     a <- s1.value
     b <- s2.value
     c <- s3.value
     d <- s4.value
     e <- s5.value
     f <- s6.value
-  } yield (a, b, c, d, e, f)
-}
+  yield (a, b, c, d, e, f)
 
-final private[signals3] class FoldLeftSignal[V, Z](sources: Signal[V]*)(v: Z)(f: (Z, V) => Z) extends ProxySignal[Z](sources: _*) {
+final private[signals3] class FoldLeftSignal[V, Z](sources: Signal[V]*)(v: Z)(f: (Z, V) => Z) extends ProxySignal[Z](sources: _*):
   override protected def computeValue(current: Option[Z]): Option[Z] =
-    sources.foldLeft(Option(v))((mv, signal) => for (a <- mv; b <- signal.value) yield f(a, b))
-}
+    sources.foldLeft(Option(v))((mv, signal) => for a <- mv; b <- signal.value yield f(a, b))
 
-final private[signals3] class PartialUpdateSignal[V, Z](source: Signal[V])(select: V => Z) extends ProxySignal[V](source) {
+final private[signals3] class PartialUpdateSignal[V, Z](source: Signal[V])(select: V => Z) extends ProxySignal[V](source):
   private object updateMonitor
 
-  override protected[signals3] def update(f: Option[V] => Option[V], currentContext: Option[ExecutionContext]): Boolean = {
+  override protected[signals3] def update(f: Option[V] => Option[V], currentContext: Option[ExecutionContext]): Boolean =
     val changed = updateMonitor.synchronized {
       val next = f(value)
-      if (value.map(select) != next.map(select)) {
+      if value.map(select) != next.map(select) then
         value = next
         true
-      }
       else false
     }
-    if (changed) notifySubscribers(currentContext)
+    if changed then notifySubscribers(currentContext)
     changed
-  }
 
   override protected def computeValue(current: Option[V]): Option[V] = source.value
-}
 
 final private[signals3] class EventStreamSignal[V](source: EventStream[V], v: Option[V] = None) extends Signal[V](v) {
   private[this] lazy val subscription = source.onCurrent(publish)(using EventContext.Global)

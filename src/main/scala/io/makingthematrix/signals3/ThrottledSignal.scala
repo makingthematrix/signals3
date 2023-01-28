@@ -5,7 +5,7 @@ import CancellableFuture.delayed
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 
-object ThrottledSignal {
+object ThrottledSignal:
   /** Creates a new throttled signal which publishes changes to the original signal no more often than once during the time interval.
     *
     * @see [[Signal.throttled]]
@@ -16,7 +16,6 @@ object ThrottledSignal {
     * @return The new throttled signal of the same type as the original one.
     */
   def apply[V](source: Signal[V], delay: FiniteDuration): ThrottledSignal[V] = new ThrottledSignal(source, delay)
-}
 
 /** A signal which publishes changes of its parent signal but no more often than once during a given time interval.
   * The initial value of the parent signal will be published immediately. The first change to it will happen at the earliest
@@ -33,7 +32,7 @@ object ThrottledSignal {
   * @param delay The time interval used for publishing. No more than one change of the value per `delay` will be published.
   * @tparam V The value type of the signal.
   */
-class ThrottledSignal[V](val source: Signal[V], val delay: FiniteDuration) extends ProxySignal[V](source) {
+class ThrottledSignal[V](val source: Signal[V], val delay: FiniteDuration) extends ProxySignal[V](source):
   @volatile private var throttle = Option.empty[CancellableFuture[Unit]]
   @volatile private var ignoredEvent = false
 
@@ -45,15 +44,13 @@ class ThrottledSignal[V](val source: Signal[V], val delay: FiniteDuration) exten
   private def syncNotifySubscribers(fromThrottle: Boolean)(using context: ExecutionContext): Unit = synchronized {
     inline def newThrottle = delayed(delay)(syncNotifySubscribers(fromThrottle = true))
 
-    if (throttle.isEmpty) throttle = Some(newThrottle)
-    else if (!fromThrottle) ignoredEvent = true
-    else {
+    if throttle.isEmpty then throttle = Some(newThrottle)
+    else if !fromThrottle then ignoredEvent = true
+    else
       super.notifySubscribers(Some(context))
-      throttle.foreach(t => if (!t.future.isCompleted) t.cancel())
-      throttle = if (ignoredEvent) {
+      throttle.foreach(t => if !t.future.isCompleted then t.cancel())
+      throttle = if ignoredEvent then
         ignoredEvent = false
         Some(newThrottle) // if we ignored an event, let's notify subscribers again, just to be sure the signal is up to date.
-      } else None
-    }
+      else None
   }
-}

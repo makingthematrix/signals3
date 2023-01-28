@@ -3,7 +3,7 @@ package io.makingthematrix.signals3
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success}
 
-object RefreshingSignal {
+object RefreshingSignal:
   /** Creates a new refreshing signal from the `loader` which will be used to compute the signal's value and a stream of
     * events which will trigger reloading. The `loader` - a cancellable future - will be every time executed in the
     * provided execution context. If the execution context is not provided, the default one will be used.
@@ -28,7 +28,6 @@ object RefreshingSignal {
     */
   def from[V](loader: => Future[V], refreshStream: EventStream[_])(using ec: ExecutionContext = Threading.defaultContext): RefreshingSignal[V] =
     new RefreshingSignal(() => CancellableFuture.lift(loader), refreshStream)
-}
 
 /** A signal which initializes its value by executing the `loader` cancellable future and then updates the value the same way
   * every time a new refresh event is published in the associated event stream. The type of the event is not important.
@@ -53,7 +52,7 @@ object RefreshingSignal {
   */
 class RefreshingSignal[V](loader: () => CancellableFuture[V], refreshStream: EventStream[_])
                          (using ec: ExecutionContext = Threading.defaultContext)
-  extends Signal[V] {
+  extends Signal[V]:
   @volatile private var loadFuture = CancellableFuture.cancelled[Unit]()
   @volatile private var subscription = Option.empty[Subscription]
 
@@ -71,15 +70,14 @@ class RefreshingSignal[V](loader: () => CancellableFuture[V], refreshStream: Eve
     }
   }
 
-  override protected def onWire(): Unit = {
+  override protected def onWire(): Unit =
     super.onWire()
     Future {
       subscription = Some(refreshStream.on(ec)(_ => reload())(using EventContext.Global))
       reload()
     }(ec)
-  }
 
-  override protected def onUnwire(): Unit = {
+  override protected def onUnwire(): Unit =
     super.onUnwire()
     Future {
       subscription.foreach(_.unsubscribe())
@@ -87,5 +85,3 @@ class RefreshingSignal[V](loader: () => CancellableFuture[V], refreshStream: Eve
       loadFuture.cancel()
       value = None
     }(ec)
-  }
-}

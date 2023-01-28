@@ -14,39 +14,36 @@ import scala.concurrent.ExecutionContext
   * @tparam B The value type of the signal produced by `f`.
   */
 final private[signals3] class FlatMapSignal[A, B](source: Signal[A], f: A => Signal[B])
-  extends Signal[B] with SignalSubscriber {
+  extends Signal[B] with SignalSubscriber:
   private object wiringMonitor
 
   private var sourceValue: Option[A] = None
   private var mapped: Signal[B] = Signal.empty[B]
 
-  private val subscriber = new SignalSubscriber {
+  private val subscriber = new SignalSubscriber:
     /** @todo Is this synchronization needed? Or, otoh, is it enough? What if we just got unwired ? */
-    override def changed(currentContext: Option[ExecutionContext]): Unit = {
+    override def changed(currentContext: Option[ExecutionContext]): Unit =
       val changed = wiringMonitor.synchronized {
         val next = source.value
-        if (sourceValue != next) {
+        if sourceValue != next then
           sourceValue = next
 
           mapped.unsubscribe(FlatMapSignal.this)
           mapped = next.map(f).getOrElse(Signal.empty[B])
           mapped.subscribe(FlatMapSignal.this)
           true
-        } else false
+        else false
       }
 
-      if (changed) set(mapped.value)
-    }
-  }
+      if changed then set(mapped.value)
 
   override def onWire(): Unit = wiringMonitor.synchronized {
     source.subscribe(subscriber)
 
     val next = source.value
-    if (sourceValue != next) {
+    if sourceValue != next then
       sourceValue = next
       mapped = next.map(f).getOrElse(Signal.empty[B])
-    }
 
     mapped.subscribe(this)
     value = mapped.value
@@ -58,4 +55,3 @@ final private[signals3] class FlatMapSignal[A, B](source: Signal[A], f: A => Sig
   }
 
   override def changed(currentContext: Option[ExecutionContext]): Unit = set(mapped.value, currentContext)
-}

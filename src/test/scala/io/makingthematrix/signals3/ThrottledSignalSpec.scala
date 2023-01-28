@@ -10,7 +10,7 @@ import CancellableFuture.delayed
 
 import java.lang.Thread.sleep
 
-class ThrottledSignalSpec extends munit.FunSuite {
+class ThrottledSignalSpec extends munit.FunSuite:
 
   test("throttle serial events") {
     100 times spying { spy =>
@@ -86,10 +86,8 @@ class ThrottledSignalSpec extends munit.FunSuite {
     assertEquals(res, 4)
   }
 
-  class Spy {
+  class Spy:
     val received = new AtomicReference(Vector.empty[(Int, Long)])
     val capture: Int => Unit = { value => compareAndSet(received)(_ :+ (value -> System.currentTimeMillis())) }
-  }
 
   def spying(f: Spy => Unit): Unit = f(new Spy)
-}

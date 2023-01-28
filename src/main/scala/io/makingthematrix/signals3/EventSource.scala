@@ -3,7 +3,7 @@ package io.makingthematrix.signals3
 import scala.concurrent.ExecutionContext
 import scala.collection.immutable.Set
 
-abstract class EventSource[E, S] {
+abstract class EventSource[E, S]:
   private object subscribersMonitor
 
   private[this] var autowiring = true
@@ -60,7 +60,7 @@ abstract class EventSource[E, S] {
   def subscribe(subscriber: S): Unit = subscribersMonitor.synchronized {
     val wiredAlready = wired
     subscribers += subscriber
-    if (!wiredAlready) onWire()
+    if !wiredAlready then onWire()
   }
 
   /** Removes a previously registered subscriber instance.
@@ -70,7 +70,7 @@ abstract class EventSource[E, S] {
     */
   def unsubscribe(subscriber: S): Unit = subscribersMonitor.synchronized {
     subscribers -= subscriber
-    if (autowiring && !hasSubscribers) onUnwire()
+    if autowiring && !hasSubscribers then onUnwire()
   }
 
   /** The class which implements this `EventRelay` can use this method to notify all the subscribers that a new event
@@ -90,7 +90,7 @@ abstract class EventSource[E, S] {
     */
   def unsubscribeAll(): Unit = subscribersMonitor.synchronized {
     subscribers = Set.empty
-    if (autowiring) onUnwire()
+    if autowiring then onUnwire()
   }
 
   /** Typically, a newly created event streams and signals are lazy in the sense that till there are no subscriptions to them,
@@ -105,10 +105,9 @@ abstract class EventSource[E, S] {
     */
   def disableAutowiring(): this.type = subscribersMonitor.synchronized {
     autowiring = false
-    if (subscribers.isEmpty) onWire()
+    if subscribers.isEmpty then onWire()
     this
   }
 
   inline final def wired: Boolean = hasSubscribers || !autowiring
-}
 

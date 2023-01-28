@@ -8,29 +8,26 @@ import scala.ref.WeakReference
 import scala.util.{Failure, Success, Try}
 import scala.util.chaining.scalaUtilChainingOps
 
-object EventStream {
-  private[signals3] trait EventSubscriber[E] {
+object EventStream:
+  private[signals3] trait EventSubscriber[E]:
     // 'currentContext' is the context this method IS run in, NOT the context any subsequent methods SHOULD run in
     protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit
-  }
 
   final private class EventStreamSubscription[E](source:            EventStream[E],
                                                  f:                 E => Unit,
                                                  executionContext:  Option[ExecutionContext] = None
                                                 )(using context: WeakReference[EventContext])
-    extends BaseSubscription(context) with EventSubscriber[E] {
+    extends BaseSubscription(context) with EventSubscriber[E]:
 
     override def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
-      if (subscribed)
-        executionContext match {
-          case Some(ec) if !currentContext.contains(ec) => Future(if (subscribed) Try(f(event)))(ec)
+      if subscribed then
+        executionContext match
+          case Some(ec) if !currentContext.contains(ec) => Future(if subscribed then Try(f(event)))(ec)
           case _ => f(event)
-        }
 
     override protected[signals3] def onSubscribe(): Unit = source.subscribe(this)
 
     override protected[signals3] def onUnsubscribe(): Unit = source.unsubscribe(this)
-  }
 
   /** Creates a new [[SourceStream]] of events of the type `E`. A usual entry point for the event streams network.
     *
@@ -89,7 +86,6 @@ object EventStream {
 
   /** A shorthand for creating an event stream from a cancellable future in the default execution context. */
   inline def from[E](future: CancellableFuture[E]): EventStream[E] = from(future.future)
-}
 
 /** An event stream of type `E` dispatches events (of type `E`) to all functions of type `(E) => Unit` which were registered in
   * the event stream as its subscribers. It doesn't have an internal state. It provides a handful of methods which enable
@@ -104,7 +100,7 @@ object EventStream {
   *
   * @see `ExecutionContext`
   */
-class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
+class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]]:
 
   /** Dispatches the event to all subscribers.
     *
@@ -243,12 +239,11 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
     *                future is finished or cancelled.
     * @return A cancellable future which will finish with the next event emitted by the event stream.
     */
-  final def next(using context: EventContext = EventContext.Global, executionContext: ExecutionContext = Threading.defaultContext): CancellableFuture[E] = {
+  final def next(using context: EventContext = EventContext.Global, executionContext: ExecutionContext = Threading.defaultContext): CancellableFuture[E] =
     val p = Promise[E]()
     val o = onCurrent { p.trySuccess }
     p.future.onComplete(_ => o.destroy())
     new Cancellable(p)
-  }
 
   /** A shorthand for `next` which additionally unwraps the cancellable future */
   inline final def future(using context: EventContext = EventContext.Global, executionContext: ExecutionContext = Threading.defaultContext): Future[E] =
@@ -276,7 +271,6 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
 
   /** By default, an event stream does not have the internal state so there's nothing to do in `onWire` and `onUnwire`*/
   override protected def onUnwire(): Unit = {}
-}
 
 /** A superclass for all event streams which compose other event streams into one.
   *
@@ -284,22 +278,20 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]] {
   * @tparam A The type of the events emitted by all the source streams.
   * @tparam E The type of the events emitted by the stream constructed from the sources.
   */
-abstract class ProxyEventStream[A, E](sources: EventStream[A]*) extends EventStream[E] with EventSubscriber[A] {
+abstract class ProxyEventStream[A, E](sources: EventStream[A]*) extends EventStream[E] with EventSubscriber[A]:
   /** When the first subscriber is registered in this stream, subscribe the stream to all its sources. */
   override protected[signals3] def onWire(): Unit = sources.foreach(_.subscribe(this))
 
   /** When the last subscriber is unregistered from this stream, unsubscribe the stream from all its sources. */
   override protected[signals3] def onUnwire(): Unit = sources.foreach(_.unsubscribe(this))
-}
 
 final private[signals3] class MapEventStream[E, V](source: EventStream[E], f: E => V)
-  extends ProxyEventStream[E, V](source) {
+  extends ProxyEventStream[E, V](source):
   override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
     dispatch(f(event), sourceContext)
-}
 
 final private[signals3] class FutureEventStream[E, V](source: EventStream[E], f: E => Future[V])
-  extends ProxyEventStream[E, V](source) {
+  extends ProxyEventStream[E, V](source):
   private val key = java.util.UUID.randomUUID()
 
   override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
@@ -308,55 +300,45 @@ final private[signals3] class FutureEventStream[E, V](source: EventStream[E], f:
       case Failure(_: NoSuchElementException) => // do nothing to allow Future.filter/collect
       case Failure(_)                         =>
     }(sourceContext.getOrElse(Threading.defaultContext))
-}
 
 final private[signals3] class CollectEventStream[E, V](source: EventStream[E], pf: PartialFunction[E, V])
-  extends ProxyEventStream[E, V](source) {
+  extends ProxyEventStream[E, V](source):
   override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-    if (pf.isDefinedAt(event)) dispatch(pf(event), sourceContext)
-}
+    if pf.isDefinedAt(event) then dispatch(pf(event), sourceContext)
 
 final private[signals3] class FilterEventStream[E](source: EventStream[E], f: E => Boolean)
-  extends ProxyEventStream[E, E](source) {
+  extends ProxyEventStream[E, E](source):
   override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-    if (f(event)) dispatch(event, sourceContext)
-}
+    if f(event) then dispatch(event, sourceContext)
 
 final private[signals3] class ZipEventStream[E](sources: EventStream[E]*)
-  extends ProxyEventStream[E, E](sources: _*) {
+  extends ProxyEventStream[E, E](sources: _*):
   override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
     dispatch(event, sourceContext)
-}
 
 final private[signals3] class ScanEventStream[E, V](source: EventStream[E], zero: V, f: (V, E) => V)
-  extends ProxyEventStream[E, V](source) {
+  extends ProxyEventStream[E, V](source):
   @volatile private var value = zero
 
-  override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
+  override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
     value = f(value, event)
     dispatch(value, sourceContext)
-  }
-}
 
 final private[signals3] class FlatMapEventStream[E, V](source: EventStream[E], f: E => EventStream[V])
-  extends EventStream[V] with EventSubscriber[E] {
+  extends EventStream[V] with EventSubscriber[E]:
   @volatile private var mapped: Option[EventStream[V]] = None
 
-  private val subscriber = new EventSubscriber[V] {
+  private val subscriber = new EventSubscriber[V]:
     override protected[signals3] def onEvent(event: V, currentContext: Option[ExecutionContext]): Unit =
       dispatch(event, currentContext)
-  }
 
-  override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit = {
+  override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
     mapped.foreach(_.unsubscribe(subscriber))
     mapped = Some(f(event).tap(_.subscribe(subscriber)))
-  }
 
   override protected def onWire(): Unit = source.subscribe(this)
 
-  override protected def onUnwire(): Unit = {
+  override protected def onUnwire(): Unit =
     mapped.foreach(_.unsubscribe(subscriber))
     mapped = None
     source.unsubscribe(this)
-  }
-}

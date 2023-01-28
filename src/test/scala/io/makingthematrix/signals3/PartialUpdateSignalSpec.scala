@@ -2,7 +2,7 @@ package io.makingthematrix.signals3
 
 import testutils.waitForResult
 
-class PartialUpdateSignalSpec extends munit.FunSuite {
+class PartialUpdateSignalSpec extends munit.FunSuite:
 
   import EventContext.Implicits.global
   import PartialUpdateSignalSpec._
@@ -42,8 +42,6 @@ class PartialUpdateSignalSpec extends munit.FunSuite {
       assertEquals(d, Data(0, 1))
     }
   }
-}
 
-object PartialUpdateSignalSpec {
+object PartialUpdateSignalSpec:
   final case class Data(value1: Int, value2: Int)
-}

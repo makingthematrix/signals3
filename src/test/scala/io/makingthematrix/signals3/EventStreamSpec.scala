@@ -6,7 +6,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}
 import scala.language.postfixOps
 
-class EventStreamSpec extends munit.FunSuite {
+class EventStreamSpec extends munit.FunSuite:
 
   import EventContext.Implicits.global
 
@@ -33,7 +33,7 @@ class EventStreamSpec extends munit.FunSuite {
     var flatMapCalledCount = 0
     var lastReceivedElement: Option[String] = None
     val subscription = a.flatMap { _ =>
-      val count = if (flatMapCalledCount == 0) b else c
+      val count = if flatMapCalledCount == 0 then b else c
       flatMapCalledCount += 1
       count
     }.onCurrent {
@@ -110,12 +110,11 @@ class EventStreamSpec extends munit.FunSuite {
       waitForResult(expected, n)
     }
 
-    def test(n: Int, source: SourceStream[Int]): Unit = {
+    def test(n: Int, source: SourceStream[Int]): Unit =
       eventReceived ! false
       expected ! n
       source ! n
       waitForResult(eventReceived, true)
-    }
 
     test(1, stream1)
     test(2, stream2)
@@ -135,12 +134,11 @@ class EventStreamSpec extends munit.FunSuite {
       waitForResult(expected, n)
     }
 
-    def test(n: Int, source: SourceStream[Int]): Unit = {
+    def test(n: Int, source: SourceStream[Int]): Unit =
       eventReceived ! false
       expected ! n
       source ! n
       waitForResult(eventReceived, true)
-    }
 
     test(1, stream1)
     test(2, stream2)
@@ -160,12 +158,11 @@ class EventStreamSpec extends munit.FunSuite {
       waitForResult(expected, n)
     }
 
-    def test(n: Int): Unit = {
+    def test(n: Int): Unit =
       eventReceived ! false
       expected ! n
       stream1 ! n
       waitForResult(eventReceived, true)
-    }
 
     test(1)
     test(2)
@@ -185,12 +182,11 @@ class EventStreamSpec extends munit.FunSuite {
       waitForResult(expected, n)
     }
 
-    def test(n: Int): Unit = {
+    def test(n: Int): Unit =
       eventReceived ! false
       expected ! n
       stream1 ! n
       waitForResult(eventReceived, true)
-    }
 
     test(1)
     test(2)
@@ -209,12 +205,11 @@ class EventStreamSpec extends munit.FunSuite {
       waitForResult(expected, n)
     }
 
-    def test(n: Int): Unit = {
+    def test(n: Int): Unit =
       eventReceived ! false
       expected ! n
       signal ! n
       waitForResult(eventReceived, true)
-    }
 
     test(1)
     test(2)
@@ -255,7 +250,7 @@ class EventStreamSpec extends munit.FunSuite {
     val source = EventStream[Int]()
 
     val mappedSync = source.mapSync { n =>
-      if (n % 2 == 0) Future {
+      if n % 2 == 0 then Future {
         Thread.sleep(500)
         n + 100
       } else Future {
@@ -290,10 +285,9 @@ class EventStreamSpec extends munit.FunSuite {
     var oddResults = List[Int]()
     val waitForMe = Promise[Unit]()
 
-    def add(n: Int, toEven: Boolean) = {
-      if (toEven) evenResults :+= n else oddResults :+= n
-      if (evenResults.length + oddResults.length == numbers.length) waitForMe.success(())
-    }
+    def add(n: Int, toEven: Boolean) =
+      if toEven then evenResults :+= n else oddResults :+= n
+      if evenResults.length + oddResults.length == numbers.length then waitForMe.success(())
 
     evenEvents.foreach(add(_, toEven = true))
     oddEvents.foreach(add(_, toEven = false))
@@ -319,7 +313,7 @@ class EventStreamSpec extends munit.FunSuite {
 
     oddEvents.foreach { n =>
       oddResults :+= n
-      if (oddResults.length == 5) waitForMe.success(())
+      if oddResults.length == 5 then waitForMe.success(())
     }
 
     numbers.foreach(source ! _)
@@ -342,7 +336,7 @@ class EventStreamSpec extends munit.FunSuite {
 
     scanned.foreach { n =>
       oddResults :+= n
-      if (oddResults.length == numbers.length) waitForMe.success(())
+      if oddResults.length == numbers.length then waitForMe.success(())
     }
 
     numbers.foreach(source ! _)
@@ -396,4 +390,3 @@ class EventStreamSpec extends munit.FunSuite {
     assertEquals(howMuchTrue, 3)
     assertEquals(howMuchFalse, 2)
   }
-}

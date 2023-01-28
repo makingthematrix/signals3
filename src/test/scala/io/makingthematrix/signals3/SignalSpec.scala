@@ -9,16 +9,14 @@ import scala.jdk.CollectionConverters.*
 import scala.concurrent.*
 import scala.concurrent.duration.*
 
-class SignalSpec extends munit.FunSuite {
+class SignalSpec extends munit.FunSuite:
   private val eventContext = EventContext()
 
-  override def beforeEach(context: BeforeEach): Unit = {
+  override def beforeEach(context: BeforeEach): Unit =
     eventContext.start()
-  }
 
-  override def afterEach(context: AfterEach): Unit = {
+  override def afterEach(context: AfterEach): Unit =
     eventContext.stop()
-  }
 
   test("Receive initial value") {
 
@@ -125,10 +123,10 @@ class SignalSpec extends munit.FunSuite {
     val s = Signal(0)
     val s1 = Signal.const(1)
     val s2 = Signal.const(2)
-    val r = for {
+    val r = for
       x <- s
       y <- Seq(s1, s2)(x)
-    } yield y * 2
+    yield y * 2
     r.foreach(capture)
     s ! 1
     waitForResult(received, Seq(2, 4))
@@ -205,7 +203,7 @@ class SignalSpec extends munit.FunSuite {
     })
   }
 
-  private def incrementalUpdates(onUpdate: (Signal[Int], ConcurrentLinkedQueue[Int]) => Unit): Unit = {
+  private def incrementalUpdates(onUpdate: (Signal[Int], ConcurrentLinkedQueue[Int]) => Unit): Unit =
     given defaultContext: DispatchQueue = Threading.defaultContext
     100 times {
       val signal = Signal(0)
@@ -216,7 +214,7 @@ class SignalSpec extends munit.FunSuite {
       val send = new AtomicInteger(0)
       val done = new CountDownLatch(10)
       (1 to 10).foreach(_ => Future {
-        for (_ <- 1 to 100) {
+        for _ <- 1 to 100 do {
           val v = send.incrementAndGet()
           signal.mutate(_ max v)
         }
@@ -230,7 +228,6 @@ class SignalSpec extends munit.FunSuite {
       val arr = received.asScala.toVector
       assertEquals(arr, arr.sorted)
     }
-  }
 
   test("Two concurrent dispatches (global event and background execution contexts)") {
     given defaultContext: DispatchQueue = Threading.defaultContext
@@ -312,7 +309,7 @@ class SignalSpec extends munit.FunSuite {
 
       val subscriber = subscribe(signal) { i =>
         lastSent = i
-        if (received.incrementAndGet() == dispatches + 1) p.trySuccess({})
+        if received.incrementAndGet() == dispatches + 1 then p.trySuccess({})
       }
 
       (1 to dispatches).foreach(n => Future(f(signal, n))(actualExecutionContext))
@@ -470,10 +467,9 @@ class SignalSpec extends munit.FunSuite {
     var oddResults = List[Int]()
     val waitForMe = Promise[Unit]()
 
-    def add(n: Int, toEven: Boolean) = {
-      if (toEven) evenResults :+= n else oddResults :+= n
-      if (evenResults.length + oddResults.length == numbers.length) waitForMe.success(())
-    }
+    def add(n: Int, toEven: Boolean) =
+      if toEven then evenResults :+= n else oddResults :+= n
+      if evenResults.length + oddResults.length == numbers.length then waitForMe.success(())
 
     evenNumbers.foreach(add(_, toEven = true))
     oddNumbers.foreach(add(_, toEven = false))
@@ -751,4 +747,3 @@ class SignalSpec extends munit.FunSuite {
 
     assert(waitForResult(s2, 3))
   }
-}

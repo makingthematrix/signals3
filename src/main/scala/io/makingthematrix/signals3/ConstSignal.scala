@@ -4,7 +4,7 @@ import Signal.SignalSubscriber
 
 import scala.concurrent.ExecutionContext
 
-object ConstSignal {
+object ConstSignal:
   /** Creates a const signal holding the given value.
     *
     * @see also `Signal.const`
@@ -14,14 +14,13 @@ object ConstSignal {
     * @return A new const signal with the given value.
     */
   def apply[V](v: V): ConstSignal[V] = new ConstSignal(Option(v))
-}
 
 /** A signal holding an immutable value.
   * Using const signals in flatMap chains should have better performance compared to source signals with the same value.
   * Since the value never changes, the subscriber function will be called only in the moment of subscription, but never
   * after that, so there's no need to keep the subscription.
   */
-final class ConstSignal[V] private[signals3] (private val v: Option[V]) extends Signal[V](v) with NoAutowiring[V] {
+final class ConstSignal[V] private[signals3] (private val v: Option[V]) extends Signal[V](v) with NoAutowiring[V]:
   override def subscribe(subscriber: SignalSubscriber): Unit = {}
 
   override def unsubscribe(subscriber: SignalSubscriber): Unit = {}
@@ -29,5 +28,4 @@ final class ConstSignal[V] private[signals3] (private val v: Option[V]) extends 
   override protected[signals3] def update(f: Option[V] => Option[V], ec: Option[ExecutionContext]): Boolean = false
 
   override protected[signals3] def set(v: Option[V], ec: Option[ExecutionContext]): Boolean = false
-}
 
