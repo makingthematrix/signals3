@@ -257,14 +257,14 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]]:
     *
     * @return A new event stream of units.
     */
-  inline final def ifTrue(using ev: E <:< Boolean): EventStream[Unit] = collect { case true => () }
+  inline final def ifTrue(using E <:< Boolean): EventStream[Unit] = collect { case true => () }
 
   /** Assuming that the event emitted by the stream can be interpreted as a boolean, this method creates a new event stream
     * of type `Unit` which emits unit events for each original event which is interpreted as false.
     *
     * @return A new event stream of units.
     */
-  inline final def ifFalse(using ev: E <:< Boolean): EventStream[Unit] = collect { case false => () }
+  inline final def ifFalse(using E <:< Boolean): EventStream[Unit] = collect { case false => () }
 
   /** By default, an event stream does not have the internal state so there's nothing to do in `onWire` and `onUnwire`*/
   override protected def onWire(): Unit = {}

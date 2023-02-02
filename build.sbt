@@ -19,7 +19,8 @@ val standardOptions = Seq(
 )
 
 val scala3Options = Seq(
-  "-explain"
+  "-explain",
+  "-rewrite"
 )
 
 publishMavenStyle := true
@@ -35,8 +36,8 @@ ThisBuild / publishTo := {
 
 scmInfo := Some(
   ScmInfo(
-    url("https://github.com/wireapp/wire-signals"),
-    "scm:git:git@github.com:wireapp/wire-signals.git"
+    url("https://github.com/makingthematrix/signals3"),
+    "scm:git:git@github.com:makingthematrix/signals3.git"
   )
 )
 
