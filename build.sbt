@@ -2,7 +2,7 @@
 
 val _scalaVersion = "3.2.2"
 
-organization := "io.makingthematrix"
+organization := "io.github.makingthematrix"
 name := "signals3"
 homepage := Some(url("https://github.com/makingthematrix/signals3"))
 licenses := Seq("GPL 3.0" -> url("https://www.gnu.org/licenses/gpl-3.0.en.html"))
