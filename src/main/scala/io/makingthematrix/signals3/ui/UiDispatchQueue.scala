@@ -2,7 +2,7 @@ package io.makingthematrix.signals3.ui
 
 import io.makingthematrix.signals3.{DispatchQueue, EventContext, EventStream, Signal, Subscription}
 
-/** This is a utility class to help you set up wire-signals to transport events between the default execution context
+/** This is a utility class to help you set up signals3 to transport events between the default execution context
   * (`Threading.defaultContext`) and other custom contexts, and a secondary execution context usually associated with GUI.
   * On platforms such as Android or JavaFX, a `Runnable` task that involves changes to the app's GUI requires to be run
   * in a special execution context - otherwise it will either not work, will result in errors, or may even crash the app.

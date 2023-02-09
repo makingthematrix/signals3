@@ -1,6 +1,6 @@
 // based on http://caryrobbins.com/dev/sbt-publishing/
 
-val _scalaVersion = "3.2.1"
+val _scalaVersion = "3.2.2"
 
 organization := "io.makingthematrix"
 name := "signals3"
@@ -20,14 +20,15 @@ val standardOptions = Seq(
 
 val scala3Options = Seq(
   "-explain",
-  "-rewrite"
+  "-Ysafe-init",
+  "-Ycheck-all-patmat"
 )
 
 publishMavenStyle := true
 Test / publishArtifact := false
 pomIncludeRepository := { _ => false }
 ThisBuild / publishTo := {
-  val nexus = "https://oss.sonatype.org/"
+  val nexus = "https://s01.oss.sonatype.org/"
   if (isSnapshot.value)
     Some("snapshots" at nexus + "content/repositories/snapshots")
   else
@@ -49,11 +50,10 @@ developers := List(
     url("https://github.com/makingthematrix"))
 )
 
-resolvers ++= Seq(
-  Resolver.sonatypeRepo("releases"),
-  Resolver.sonatypeRepo("public"),
-  Resolver.mavenLocal
-)
+resolvers ++=
+  Resolver.sonatypeOssRepos("releases") ++
+  Resolver.sonatypeOssRepos("public") ++
+  Seq(Resolver.mavenLocal)
 
 publishMavenStyle := true
 

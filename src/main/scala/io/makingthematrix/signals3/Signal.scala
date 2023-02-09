@@ -273,7 +273,7 @@ object Signal:
   * @param value The option of the last value published in the signal or `None` if the signal was not initialized yet.
   * @tparam V The type of the value held in the signal.
   */
-class Signal[V] protected (@volatile protected[signals3] var value: Option[V] = None) extends EventSource[V, SignalSubscriber] { self =>
+class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) extends EventSource[V, SignalSubscriber] { self =>
   private object updateMonitor
 
   /** Updates the current value of the signal by applying a given function to it.

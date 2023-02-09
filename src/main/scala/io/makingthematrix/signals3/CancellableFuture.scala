@@ -397,9 +397,9 @@ abstract class CancellableFuture[+T](using ec: ExecutionContext = Threading.defa
     * @return a new cancellable future that will finish with success only if the predicate is satisfied
     */
   final def filter(p: T => Boolean)(using executor: ExecutionContext = ec): CancellableFuture[T] =
-    flatMap { res =>
-      if p(res) then CancellableFuture.successful(res)
-      else CancellableFuture.failed(new NoSuchElementException(s"CancellableFuture.filter predicate is not satisfied, the result is $res"))
+    flatMap {
+      case res if p(res) => CancellableFuture.successful(res)
+      case res => CancellableFuture.failed(new NoSuchElementException(s"CancellableFuture.filter predicate is not satisfied, the result is $res"))
     }
 
   /** An alias for `filter`, used by for-comprehensions. */
@@ -419,7 +419,7 @@ abstract class CancellableFuture[+T](using ec: ExecutionContext = Threading.defa
     */
   final def collect[U](pf: PartialFunction[T, U])(using executor: ExecutionContext = ec): CancellableFuture[U] =
     flatMap {
-      case r if pf.isDefinedAt(r) => CancellableFuture(pf.apply(r))(using executor)
+      case r if pf.isDefinedAt(r) => CancellableFuture(pf.apply(r))
       case t => CancellableFuture.failed(new NoSuchElementException(s"CancellableFuture.collect partial function is not defined at $t"))
     }
 
@@ -481,7 +481,7 @@ abstract class CancellableFuture[+T](using ec: ExecutionContext = Threading.defa
     * @return A new cancellable future that will finish with success only if the partial function is applied
     */
   inline final def recover[U >: T](pf: PartialFunction[Throwable, U])(using executor: ExecutionContext = ec): CancellableFuture[U] =
-    recoverWith(pf.andThen(res => CancellableFuture.successful(res)))
+    recoverWith(pf.andThen(CancellableFuture.successful(_)))
 
   /** Creates a new cancellable future that will handle any matching throwable that the current one might contain by
     * assigning it a value of another future. Works also if the current future is cancelled. If there is no match,
@@ -500,7 +500,7 @@ abstract class CancellableFuture[+T](using ec: ExecutionContext = Threading.defa
     * @return A new cancellable future that will finish with success only if the partial function is applied
     */
   final def recoverWith[U >: T](pf: PartialFunction[Throwable, CancellableFuture[U]])
-                         (using executor: ExecutionContext = ec): CancellableFuture[U] =
+                               (using executor: ExecutionContext = ec): CancellableFuture[U] =
     val p = Promise[U]()
     @volatile var cancelSelf: Option[() => Unit] = Some(() => self.cancel())
 

@@ -747,3 +747,17 @@ class SignalSpec extends munit.FunSuite:
 
     assert(waitForResult(s2, 3))
   }
+
+  test("foo") {
+    val lst = List(1, 1, 5, 5, 5, 2, 2, 2, 4, 1, 1)
+    println(lst)
+
+    val folded = lst.foldLeft(List.empty[(Int, Int)]) {
+      case ((counter, value) :: tail, n) if value == n => (counter + 1, value) :: tail
+      case (acc, n) => (1, n) :: acc
+    }.reverse.flatMap {
+      case (counter, value) => List(counter, value)
+    }
+    println(folded)
+  }
+
