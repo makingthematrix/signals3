@@ -4,12 +4,20 @@
 
 [Signals3 API documentation](https://makingthematrix.github.io/signals3)
 
-This is a lightweight event streaming library wfor Scala. It's based on [Wire Signals](https://github.com/wireapp/wire-signals). 
+This is a lightweight event streaming library for Scala. It's based on [Wire Signals](https://github.com/wireapp/wire-signals). 
 Wire Signals was used extensively in the Wire Android client app - the biggest Scala project for Android, as far as I know - in everything from 
 [fetching and decoding data from another device](https://github.com/wireapp/wire-android-sync-engine/blob/develop/zmessaging/src/main/scala/com/waz/service/push/PushService.scala) 
 to [updating the list of messages displayed in a conversation](https://github.com/wireapp/wire-android/blob/develop/app/src/main/scala/com/waz/zclient/messages/MessagesController.scala).
 
-This new version of Wire Signals starts as a humble copy, just rewritten in Scala 3, but I have big plans for it.  
+This new version of Wire Signals starts as a humble copy, just rewritten in Scala 3, but I have some plans for it.
+
+### Main features
+
+* Event streams
+* Signals - event streams with internal values
+* Abstractions for easy data transfer between execution contexts
+* An implementation of (sometimes) cancellable futures
+* Methods to work with event streams and signals in a way similar to standard Scala collections
 
 ### How to use
 
