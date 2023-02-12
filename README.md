@@ -2,6 +2,8 @@
 
 ![Scala CI](https://github.com/makingthematrix/signals3/workflows/Scala%20CI/badge.svg)
 
+[Signals3 API documentation](https://makingthematrix.github.io/signals3)
+
 This is a lightweight event streaming library wfor Scala. It's based on [Wire Signals](https://github.com/wireapp/wire-signals). 
 Wire Signals was used extensively in the Wire Android client app - the biggest Scala project for Android, as far as I know - in everything from 
 [fetching and decoding data from another device](https://github.com/wireapp/wire-android-sync-engine/blob/develop/zmessaging/src/main/scala/com/waz/service/push/PushService.scala) 
@@ -10,6 +12,8 @@ to [updating the list of messages displayed in a conversation](https://github.co
 This new version of Wire Signals starts as a humble copy, just rewritten in Scala 3, but I have big plans for it.  
 
 ### How to use
+
+Signals3 works with Scala 3.* . For Scala 2.*, try [wire-signals](https://github.com/wireapp/wire-signals).
 
 If you use sbt, just add this to your library dependencies:
 ```sbt
