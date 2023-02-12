@@ -10,36 +10,40 @@ to [updating the list of messages displayed in a conversation](https://github.co
 This new version of Wire Signals starts as a humble copy, just rewritten in Scala 3, but I have big plans for it.  
 
 ### How to use
-At the moment, `signals3` is not yet on Maven Central. If you want to try it out, you can just copy the code.
+
+If you use sbt, just add this to your library dependencies:
+```sbt
+  libraryDependencies += "io.github.makingthematrix" %% "signals3" % "1.0.0"
+```
 
 #### Syntax
 
 In short, you can create a `SourceSignal` somewhere in the code:
-```
+```scala
 val intSignal = Signal(1) // SourceSignal[Int] with the initial value 1
 val strSignal = Signal[String]() // initially empty SourceSignal[String]
 ```
 
 and subscribe it in another place:
-```
+```scala
 intSignal.foreach { number => println("number: $number") }
 strSignal.foreach { str => println("str: $str") }
 ```
 
 Now every time you publish something to the signals, the functions you provided above will be executed, just as in case of a regular event stream...
-```
+```scala
 scala> intSignal ! 2
 number: 2
 ```
 ... but if you happen to subscribe to a signal after an event was published, the subscriber will still have access to that event. On the moment of subscription the provided function will be executed with the last event in the signal if there is one. So at this point in the example subscribing to `intSignal` will result in the number being displayed:
-```
+```scala
 > intSignal.foreach { number => println("number: $number") }
 number: 2
 ```
 but subscribing to `strSignal` will not display anything, because `strSignal` is still empty. Or, if you simply don't need that functionality, you can use a standard `EventStream` instead.
 
 You can also of course `map` and `flatMap` signals, `zip` them, `throttle`, `fold`, or make any future or an event stream into one. With a bit of Scala magic you can even do for-comprehensions:
-```
+```scala
 val fooSignal = for {
  number <- intSignal
  str    <- if (number % 3 == 0) Signal.const("Foo") else strSignal
@@ -58,4 +62,5 @@ This library is a result of work of many programmers who developed Wire Android 
 My thanks go especially to:
 * Dean Cook (https://github.com/deanrobertcook)
 * Zbigniew Szymański (https://github.com/zbsz)
+
 Thanks, guys. I couldn't do it without you.
