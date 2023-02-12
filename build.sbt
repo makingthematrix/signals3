@@ -3,6 +3,7 @@
 val _scalaVersion = "3.2.2"
 
 organization := "io.github.makingthematrix"
+sonatypeProfileName := "io.github.makingthematrix"
 name := "signals3"
 homepage := Some(url("https://github.com/makingthematrix/signals3"))
 licenses := Seq("GPL 3.0" -> url("https://www.gnu.org/licenses/gpl-3.0.en.html"))
@@ -27,13 +28,9 @@ val scala3Options = Seq(
 publishMavenStyle := true
 Test / publishArtifact := false
 pomIncludeRepository := { _ => false }
-ThisBuild / publishTo := {
-  val nexus = "https://s01.oss.sonatype.org/"
-  if (isSnapshot.value)
-    Some("snapshots" at nexus + "content/repositories/snapshots")
-  else
-    Some("releases" at nexus + "service/local/staging/deploy/maven2")
-}
+ThisBuild / publishTo := sonatypePublishToBundle.value
+// For all Sonatype accounts created on or after February 2021
+ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"
 
 scmInfo := Some(
   ScmInfo(
