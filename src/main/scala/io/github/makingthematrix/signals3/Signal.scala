@@ -1,7 +1,6 @@
 package io.github.makingthematrix.signals3
 
 import Signal.{SignalSubscriber, SignalSubscription}
-
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.ref.WeakReference
@@ -164,6 +163,15 @@ object Signal:
     */
   inline def foldLeft[V, Z](sources: Signal[V]*)(zero: Z)(f: (Z, V) => Z): Signal[Z] = new FoldLeftSignal[V, Z](sources: _*)(zero)(f)
 
+  /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
+    * The new signal's value will be `true` if both parent signals values are `true` - or `false` otherwise.
+    *
+    * @param s1 The first parent signal of the type `Boolean`.
+    * @param s2 The second parent signal of the type `Boolean`.
+    * @return A new signal of `Boolean`.
+    */
+  inline def and(s1: Signal[Boolean], s2: Signal[Boolean]): Signal[Boolean] = zip(s1, s2).map(_ && _)
+
   /** Creates a `Signal[Boolean]` of an arbitrary number of parent signals of `Boolean`.
     * The new signal's value will be `true` only if *all* parent signals values are `true`, and `false` if even one of them
     * changes its value to `false`.
@@ -171,7 +179,17 @@ object Signal:
     * @param sources  A variable arguments list of parent signals of the type `Boolean`.
     * @return A new signal of `Boolean`.
     */
-  inline def and(sources: Signal[Boolean]*): Signal[Boolean] = new FoldLeftSignal[Boolean, Boolean](sources: _*)(true)(_ && _)
+  inline def and(sources: Signal[Boolean]*): Signal[Boolean] = foldLeft[Boolean, Boolean](sources: _*)(true)(_ && _)
+
+
+  /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
+    * The new signal's value will be `true` if any of the parent signals values is `true` - or `false` otherwise.
+    *
+    * @param s1 The first parent signal of the type `Boolean`.
+    * @param s2 The second parent signal of the type `Boolean`.
+    * @return A new signal of `Boolean`.
+    */
+  inline def or(s1: Signal[Boolean], s2: Signal[Boolean]): Signal[Boolean] = zip(s1, s2).map(_ || _)
 
   /** Creates a `Signal[Boolean]` of an arbitrary number of parent signals of `Boolean`.
     * The new signal's value will be `true` if *any* of the parent signals values is `true`, and `false` only if all one of them
@@ -180,7 +198,49 @@ object Signal:
     * @param sources  A variable arguments list of parent signals of the type `Boolean`.
     * @return A new signal of `Boolean`.
     */
-  inline def or(sources: Signal[Boolean]*): Signal[Boolean] = new FoldLeftSignal[Boolean, Boolean](sources: _*)(false)(_ || _)
+  inline def or(sources: Signal[Boolean]*): Signal[Boolean] = foldLeft[Boolean, Boolean](sources: _*)(false)(_ || _)
+
+  /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
+    * The new signal's value will be `true` if both parent signals values are `true` or if both are `false`.
+    * If only one of them is true, the result value will be `true`.
+    *
+    * @param s1 The first parent signal of the type `Boolean`.
+    * @param s2 The second parent signal of the type `Boolean`.
+    * @return A new signal of `Boolean`.
+    */
+  inline def xor(s1: Signal[Boolean], s2: Signal[Boolean]): Signal[Boolean] =
+    zip(s1, s2).map {
+      case (a, b) if a == b => false
+      case _                => true
+    }
+
+  /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
+    * The new signal's value will be `true` if any of the parent signals values is `false` - or `true` otherwise.
+    * This is a slightly faster version of `or(s1, s2).not`.
+    *
+    * @param s1 The first parent signal of the type `Boolean`.
+    * @param s2 The second parent signal of the type `Boolean`.
+    * @return A new signal of `Boolean`.
+    */
+  inline def nor(s1: Signal[Boolean], s2: Signal[Boolean]): Signal[Boolean] =
+    zip(s1, s2).map {
+      case (false, false) => true
+      case _              => false
+    }
+
+  /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
+    * The new signal's value will be `false` if both parent signals values are `true` - or `false` otherwise.
+    * This is a slightly faster version of `and(s1, s2).not`.
+    *
+    * @param s1 The first parent signal of the type `Boolean`.
+    * @param s2 The second parent signal of the type `Boolean`.
+    * @return A new signal of `Boolean`.
+    */
+  inline def nand(s1: Signal[Boolean], s2: Signal[Boolean]): Signal[Boolean] =
+    zip(s1, s2).map {
+      case (true, true) => false
+      case _            => true
+    }
 
   /** Creates a signal of an arbitrary number of parent signals of the same value.
     * The value of the new signal is the sequence of values of all parent signals in the same order.
@@ -665,6 +725,87 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     *                       does not say otherwise.
     */
   protected def publish(value: V, currentContext: ExecutionContext): Unit = set(Some(value), Some(currentContext))
+
+  /** Creates a boolean signal where the value is the result of comparison of current values in both the original signals.
+    * This method uses Scala `equals` internally and for the sake of consistency with how `equals` works in Scala, 
+    * `sameAs` allows for comparison between values of different types - there still may exist a valid `equals` for them.
+    * 
+    * If any of the original signals is empty, the result signal will stay empty as well.
+    * 
+    * @param other The other signal used in comparison
+    * @return A new boolean signal
+    */
+  final inline def sameAs[Z](other: Signal[Z]): Signal[Boolean] = zip(other).map(_ == _)
+
+  /** An alias for `sameAs` */
+  final inline def ===[Z](other: Signal[Z]): Signal[Boolean] = sameAs(other)
+
+  /** Assuming that the value of the signal can be interpreted as a boolean, this method creates a new signal
+    * of type `Boolean` with the value opposite to that of the original signal.
+    *
+    * @return A new signal of `Boolean`.
+    */
+  inline final def not(using V <:< Boolean): Signal[Boolean] = map(!_)
+
+  /** Assuming that both the value of `this` signal and the value of the `other` signal can be interpreted as a boolean,
+    * this method creates a new signal of type `Boolean` by applying logical AND.
+    *
+    * @param other The other signal with the value type that can be interpreted as `Boolean`
+    * @return A new signal of `Boolean`.
+    */
+  final inline def and[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] =
+    Signal.and(this.asInstanceOf[Signal[Boolean]], other.asInstanceOf[Signal[Boolean]])
+
+  /**
+    * An alias to `and`.
+    */
+  final inline def &&[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] = and(other)
+
+  /** Assuming that both the value of `this` signal and the value of the `other` signal can be interpreted as a boolean,
+    * this method creates a new signal of type `Boolean` by applying logical OR.
+    *
+    * @param other The other signal with the value type that can be interpreted as `Boolean`
+    * @return A new signal of `Boolean`.
+    */
+  final inline def or[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] =
+    Signal.or(this.asInstanceOf[Signal[Boolean]], other.asInstanceOf[Signal[Boolean]])
+
+  /**
+    * An alias to `or`.
+    */
+  final inline def ||[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] = or(other)
+
+  /** Assuming that both the value of `this` signal and the value of the `other` signal can be interpreted as a boolean,
+    * this method creates a new signal of type `Boolean` by applying logical XOR.
+    *
+    * @param other The other signal with the value type that can be interpreted as `Boolean`
+    * @return A new signal of `Boolean`.
+    */
+  final inline def xor[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] =
+    Signal.xor(this.asInstanceOf[Signal[Boolean]], other.asInstanceOf[Signal[Boolean]])
+
+  /**
+    * An alias to `xor`.
+    */
+  final inline def ^^[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] = xor(other)
+
+  /** Assuming that both the value of `this` signal and the value of the `other` signal can be interpreted as a boolean,
+    * this method creates a new signal of type `Boolean` by applying logical NOR.
+    *
+    * @param other The other signal with the value type that can be interpreted as `Boolean`
+    * @return A new signal of `Boolean`.
+    */
+  final inline def nor[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] =
+    Signal.nor(this.asInstanceOf[Signal[Boolean]], other.asInstanceOf[Signal[Boolean]])
+
+  /** Assuming that both the value of `this` signal and the value of the `other` signal can be interpreted as a boolean,
+    * this method creates a new signal of type `Boolean` by applying logical NAND.
+    *
+    * @param other The other signal with the value type that can be interpreted as `Boolean`
+    * @return A new signal of `Boolean`.
+    */
+  final inline def nand[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] =
+    Signal.nand(this.asInstanceOf[Signal[Boolean]], other.asInstanceOf[Signal[Boolean]])
 }
 
 /** By default, a new signal is initialized lazily, i.e. only when the first subscriber function is registered in it.
