@@ -390,3 +390,24 @@ class EventStreamSpec extends munit.FunSuite:
     assertEquals(howMuchTrue, 3)
     assertEquals(howMuchFalse, 2)
   }
+
+  test("Flip the boolean event stream with the .not method") {
+    given dq: DispatchQueue = SerialDispatchQueue()
+
+    val booleans = List(true, false, true, false, true)
+
+    val source = EventStream[Boolean]()
+    val flipped = source.not
+    
+    var howMuchTrue = 0
+    var howMuchFalse = 0
+
+    flipped.ifTrue.foreach { _ => howMuchTrue += 1 }
+    flipped.ifFalse.foreach { _ => howMuchFalse += 1 }
+
+    booleans.foreach(source ! _)
+    awaitAllTasks
+
+    assertEquals(howMuchTrue, 2)
+    assertEquals(howMuchFalse, 3)
+  }

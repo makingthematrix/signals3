@@ -748,16 +748,257 @@ class SignalSpec extends munit.FunSuite:
     assert(waitForResult(s2, 3))
   }
 
-  test("foo") {
-    val lst = List(1, 1, 5, 5, 5, 2, 2, 2, 4, 1, 1)
-    println(lst)
+  test("Compare values of two signals and create a boolean signal") {
+    val s1 = Signal(1)
+    assert(!s1.empty)
+    val s2 = Signal[Int]()
+    assert(s2.empty)
 
-    val folded = lst.foldLeft(List.empty[(Int, Int)]) {
-      case ((counter, value) :: tail, n) if value == n => (counter + 1, value) :: tail
-      case (acc, n) => (1, n) :: acc
-    }.reverse.flatMap {
-      case (counter, value) => List(counter, value)
-    }
-    println(folded)
+    val res: Signal[Boolean] = s1 === s2
+    assert(res.empty)
+
+    s2 ! 1
+    assert(waitForResult(s2, 1))
+    assert(waitForResult(res, true))
+
+    s1 ! 2
+    assert(waitForResult(s1, 2))
+    assert(waitForResult(res, false))
+    
+    s2 ! 2
+    assert(waitForResult(s2, 2))
+    assert(waitForResult(res, true))
   }
 
+  test("Compare values of two boolean signals with AND and create a new boolean signal") {
+    val s1 = Signal[Boolean]()
+    assert(s1.empty)
+    val s2 = Signal[Boolean]()
+    assert(s2.empty)
+
+    val res: Signal[Boolean] = s1 && s2
+    assert(res.empty)
+
+    s1 ! true
+    assert(waitForResult(s1, true))
+    assert(res.empty)
+
+    s2 ! true
+    assert(waitForResult(s2, true))
+    assert(waitForResult(res, true)) // true && true => true
+
+    s1 ! false
+    assert(waitForResult(s1, false))
+    assert(waitForResult(res, false)) // false && true => false
+
+    s2 ! false
+    assert(waitForResult(s2, false))
+    assert(waitForResult(res, false)) // false && false => false
+
+    s1 ! true
+    assert(waitForResult(s1, true))
+    assert(waitForResult(res, false)) // true && false => false
+
+    s2 ! true
+    assert(waitForResult(s2, true))
+    assert(waitForResult(res, true)) // true && true => true
+  }
+
+  test("Compare values of three boolean signals with AND and create a new boolean signal") {
+    val s1 = Signal[Boolean](true)
+    val s2 = Signal[Boolean](true)
+    val s3 = Signal[Boolean](true)
+
+    val res: Signal[Boolean] = Signal.and(s1, s2, s3)
+    assert(waitForResult(res, true)) // true && true && true => true
+
+    s1 ! false
+    assert(waitForResult(res, false)) // false && true && true => false
+    s1 ! true
+    assert(waitForResult(res, true)) // true && true && true => true
+
+    s2 ! false
+    assert(waitForResult(res, false)) // true && false && true => false
+    s2 ! true
+    assert(waitForResult(res, true)) // true && true && true => true
+
+    s3 ! false
+    assert(waitForResult(res, false)) // true && true && false => false
+    s3 ! true
+    assert(waitForResult(res, true)) // true && true && true => true
+  }
+
+  test("Compare values of two boolean signals with OR and create a new boolean signal") {
+    val s1 = Signal[Boolean]()
+    assert(s1.empty)
+    val s2 = Signal[Boolean]()
+    assert(s2.empty)
+
+    val res: Signal[Boolean] = s1 || s2
+    assert(res.empty)
+
+    s1 ! true
+    assert(waitForResult(s1, true))
+    assert(res.empty)
+
+    s2 ! true
+    assert(waitForResult(s2, true))
+    assert(waitForResult(res, true)) // true || true => true
+
+    s1 ! false
+    assert(waitForResult(s1, false))
+    assert(waitForResult(res, true)) // false || true => true
+
+    s2 ! false
+    assert(waitForResult(s2, false))
+    assert(waitForResult(res, false)) // false || false => false
+
+    s1 ! true
+    assert(waitForResult(s1, true))
+    assert(waitForResult(res, true)) // true || false => true
+
+    s2 ! true
+    assert(waitForResult(s2, true))
+    assert(waitForResult(res, true)) // true || true => true
+  }
+
+  test("Compare values of three boolean signals with OR and create a new boolean signal") {
+    val s1 = Signal[Boolean](false)
+    val s2 = Signal[Boolean](false)
+    val s3 = Signal[Boolean](false)
+
+    val res: Signal[Boolean] = Signal.or(s1, s2, s3)
+    assert(waitForResult(res, false)) // false && false && false => false
+
+    s1 ! true
+    assert(waitForResult(res, true)) // true && false && false => true
+    s1 ! false
+    assert(waitForResult(res, false)) // false && false && false => false
+
+    s2 ! true
+    assert(waitForResult(res, true)) // false && true && false => true
+    s2 ! false
+    assert(waitForResult(res, false)) // false && false && false => false
+
+    s3 ! true
+    assert(waitForResult(res, true)) // false && false && true => true
+    s3 ! false
+    assert(waitForResult(res, false)) // false && false && false => false
+  }
+
+  test("Compare values of two boolean signals with XOR and create a new boolean signal") {
+    val s1 = Signal[Boolean]()
+    assert(s1.empty)
+    val s2 = Signal[Boolean]()
+    assert(s2.empty)
+
+    val res: Signal[Boolean] = s1 ^^ s2
+    assert(res.empty)
+
+    s1 ! true
+    assert(waitForResult(s1, true))
+    assert(res.empty)
+
+    s2 ! true
+    assert(waitForResult(s2, true))
+    assert(waitForResult(res, false)) // true ^^ true => false
+
+    s1 ! false
+    assert(waitForResult(s1, false))
+    assert(waitForResult(res, true)) // false ^^ true => true
+
+    s2 ! false
+    assert(waitForResult(s2, false))
+    assert(waitForResult(res, false)) // false ^^ false => false
+
+    s1 ! true
+    assert(waitForResult(s1, true))
+    assert(waitForResult(res, true)) // true ^^ false => true
+
+    s2 ! true
+    assert(waitForResult(s2, true))
+    assert(waitForResult(res, false)) // true ^^ true => false
+  }
+
+  test("Compare values of two boolean signals with NOR and create a new boolean signal") {
+    val s1 = Signal[Boolean]()
+    assert(s1.empty)
+    val s2 = Signal[Boolean]()
+    assert(s2.empty)
+
+    val res: Signal[Boolean] = s1 nor s2
+    assert(res.empty)
+
+    s1 ! true
+    assert(waitForResult(s1, true))
+    assert(res.empty)
+
+    s2 ! true
+    assert(waitForResult(s2, true))
+    assert(waitForResult(res, false)) // true nor true => false
+
+    s1 ! false
+    assert(waitForResult(s1, false))
+    assert(waitForResult(res, false)) // false nor true => false
+
+    s2 ! false
+    assert(waitForResult(s2, false))
+    assert(waitForResult(res, true)) // false nor false => true
+
+    s1 ! true
+    assert(waitForResult(s1, true))
+    assert(waitForResult(res, false)) // true nor false => false
+
+    s2 ! true
+    assert(waitForResult(s2, true))
+    assert(waitForResult(res, false)) // true nor true => false
+  }
+
+  test("Compare values of two boolean signals with NAND and create a new boolean signal") {
+    val s1 = Signal[Boolean]()
+    assert(s1.empty)
+    val s2 = Signal[Boolean]()
+    assert(s2.empty)
+
+    val res: Signal[Boolean] = s1 nand s2
+    assert(res.empty)
+
+    s1 ! true
+    assert(waitForResult(s1, true))
+    assert(res.empty)
+
+    s2 ! true
+    assert(waitForResult(s2, true))
+    assert(waitForResult(res, false)) // true nand true => false
+
+    s1 ! false
+    assert(waitForResult(s1, false))
+    assert(waitForResult(res, true)) // false nand true => true
+
+    s2 ! false
+    assert(waitForResult(s2, false))
+    assert(waitForResult(res, true)) // false nand false => true
+
+    s1 ! true
+    assert(waitForResult(s1, true))
+    assert(waitForResult(res, true)) // true nand false => true
+
+    s2 ! true
+    assert(waitForResult(s2, true))
+    assert(waitForResult(res, false)) // true nand true => false
+  }
+
+  test("Flip the boolean signal with the .not method") {
+    val source = Signal[Boolean]()
+    assert(source.empty)
+    val flipped = source.not
+    assert(flipped.empty)
+
+    source ! true
+    assert(waitForResult(source, true))
+    assert(waitForResult(flipped, false))
+
+    source ! false
+    assert(waitForResult(source, false))
+    assert(waitForResult(flipped, true))
+  }
