@@ -266,6 +266,13 @@ class EventStream[E] protected () extends EventSource[E, EventSubscriber[E]]:
     */
   inline final def ifFalse(using E <:< Boolean): EventStream[Unit] = collect { case false => () }
 
+  /** Assuming that the event emitted by the stream can be interpreted as a boolean, this method creates a new event stream
+    * of type `Boolean` where each event is the opposite of the original event.
+    *
+    * @return A new event stream of `Boolean`.
+    */
+  inline final def not(using E <:< Boolean): EventStream[Boolean] = map(!_)
+
   /** By default, an event stream does not have the internal state so there's nothing to do in `onWire` and `onUnwire`*/
   override protected def onWire(): Unit = {}
 
