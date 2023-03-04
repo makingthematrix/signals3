@@ -1,6 +1,7 @@
 # Signals3
 
 ![Scala CI](https://github.com/makingthematrix/signals3/workflows/Scala%20CI/badge.svg)
+[![signals3 Scala version support](https://index.scala-lang.org/makingthematrix/signals3/signals3/latest-by-scala-version.svg?platform=jvm)](https://index.scala-lang.org/makingthematrix/signals3/signals3)
 
 [Signals3 API documentation](https://makingthematrix.github.io/signals3)
 
