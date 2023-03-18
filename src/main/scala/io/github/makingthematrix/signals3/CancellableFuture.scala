@@ -86,12 +86,12 @@ object CancellableFuture:
     * longer than `duration` it will not be cancelled after the given time, but also the ability to cancel
     * it will be lost.
     *
-    * @param duration The initial delay and the consecutive time interval between repeats.
+    * @param interval The initial delay and the consecutive time interval between repeats.
     * @param body A task repeated every `duration`.
     * @return A cancellable future representing the whole repeating process.
     */
-  def repeat(duration: Duration)(body: => Unit)(using ec: ExecutionContext = Threading.defaultContext): CancellableFuture[Unit] =
-    if duration <= Duration.Zero then
+  def repeat(interval: FiniteDuration)(body: => Unit)(using ec: ExecutionContext = Threading.defaultContext): CancellableFuture[Unit] =
+    if interval <= Duration.Zero then
       successful(())
     else
       new Cancellable(Promise[Unit]()):
@@ -101,7 +101,7 @@ object CancellableFuture:
         private def startNewTimeoutLoop(): Unit =
           currentTask = Some(schedule(
             () => { body; startNewTimeoutLoop() },
-            duration.toMillis
+            interval.toMillis
           ))
 
         override def cancel(): Boolean =

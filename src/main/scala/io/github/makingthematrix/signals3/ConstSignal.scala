@@ -20,7 +20,7 @@ object ConstSignal:
   * Since the value never changes, the subscriber function will be called only in the moment of subscription, but never
   * after that, so there's no need to keep the subscription.
   */
-final class ConstSignal[V] private[signals3] (private val v: Option[V]) extends Signal[V](v) with NoAutowiring[V]:
+final class ConstSignal[V] private[signals3] (private val v: Option[V]) extends Signal[V](v) with NoAutowiring:
   override def subscribe(subscriber: SignalSubscriber): Unit = {}
 
   override def unsubscribe(subscriber: SignalSubscriber): Unit = {}
