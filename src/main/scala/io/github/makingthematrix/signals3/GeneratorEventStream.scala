@@ -26,6 +26,9 @@ object GeneratorEventStream:
               (using ec: ExecutionContext = Threading.defaultContext): GeneratorEventStream[E] =
     new GeneratorEventStream[E](generate, interval, pause)
 
+  inline def generate[E](interval: FiniteDuration)(body: => E)(using ec: ExecutionContext = Threading.defaultContext): GeneratorEventStream[E] =
+    GeneratorEventStream(generate = () => body, interval = interval, pause = () => false)
+  
   inline def repeat[E](event: E, interval: FiniteDuration)(using ec: ExecutionContext = Threading.defaultContext): GeneratorEventStream[E] =
     GeneratorEventStream(generate = () => event, interval = interval, pause = () => false)
 
