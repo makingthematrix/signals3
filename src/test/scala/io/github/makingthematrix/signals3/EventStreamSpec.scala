@@ -7,7 +7,6 @@ import scala.concurrent.{Future, Promise}
 import scala.language.postfixOps
 
 class EventStreamSpec extends munit.FunSuite:
-
   import EventContext.Implicits.global
 
   test("unsubscribe from source and current mapped signal on onUnwire") {

@@ -808,15 +808,6 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     Signal.nand(this.asInstanceOf[Signal[Boolean]], other.asInstanceOf[Signal[Boolean]])
 }
 
-/** By default, a new signal is initialized lazily, i.e. only when the first subscriber function is registered in it.
-  * You can decorate it with `NoAutowiring` to enforce initialization.
-  *
-  * @see [[EventSource]]
-  */
-trait NoAutowiring[V] { self: Signal[V] =>
-  disableAutowiring()
-}
-
 abstract class ProxySignal[V](sources: Signal[_]*) extends Signal[V] with SignalSubscriber:
   override def onWire(): Unit =
     sources.foreach(_.subscribe(this))

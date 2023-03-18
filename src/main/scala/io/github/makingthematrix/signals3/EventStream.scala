@@ -1,8 +1,6 @@
 package io.github.makingthematrix.signals3
 
 import EventStream.{EventStreamSubscription, EventSubscriber}
-import Signal.SignalSubscriber
-
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.ref.WeakReference
 import scala.util.{Failure, Success, Try}
