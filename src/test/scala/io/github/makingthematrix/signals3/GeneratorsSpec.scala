@@ -22,7 +22,7 @@ class GeneratorsSpec extends munit.FunSuite:
     assert(stream.isStopped)
   }
 
-  test("test fibonacci event stream") {
+  test("test fibonacci event stream with generate") {
     var a = 0
     var b = 1
     val builder = mutable.ArrayBuilder.make[Int]
@@ -35,6 +35,16 @@ class GeneratorsSpec extends munit.FunSuite:
     stream.foreach { builder.addOne }
     waitForResult(stream, 8)
     stream.stop()
+    awaitAllTasks
+    assertEquals(builder.result().toSeq, Seq(1, 2, 3, 5, 8))
+  }
+
+  test("test fibonacci signal with unfold") {
+    val builder = mutable.ArrayBuilder.make[Int]
+    val signal = GeneratorSignal.unfold(100.millis, (0, 1)) { case (a, b) => (b, a + b) }
+    signal.map(_._2).foreach { builder.addOne }
+    waitForResult(signal.map(_._2), 8)
+    signal.stop()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(1, 2, 3, 5, 8))
   }
