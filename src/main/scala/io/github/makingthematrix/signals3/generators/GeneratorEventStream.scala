@@ -1,4 +1,6 @@
-package io.github.makingthematrix.signals3
+package io.github.makingthematrix.signals3.generators
+
+import io.github.makingthematrix.signals3.*
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
