@@ -5,30 +5,44 @@ import io.github.makingthematrix.signals3.*
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 
-final class GeneratorSignal[V] private (init    : Option[V],
-                                        generate: V => V,
-                                        interval: FiniteDuration,
-                                        pause   : () => Boolean)
-                                       (using ec: ExecutionContext) extends Signal[V](init) with NoAutowiring:
+final class GeneratorSignal[V](init    : V,
+                               generate: V => V,
+                               interval: Either[FiniteDuration, V => Long],
+                               paused  : () => Boolean)
+                              (using ec: ExecutionContext) extends Signal[V](Some(init)) with NoAutowiring:
   private var stopped = false
 
-  private val beat = CancellableFuture.repeat(interval) {
-    if !pause() then head.foreach(v => set(Option(generate(v)), Some(ec)))
-  }.onCancel {
-    stopped = true
-  }
+  private val beat =
+    interval match
+      case Left(intv) =>
+        CancellableFuture.repeat(intv) {
+          if !paused() then head.foreach(v => set(Option(generate(v)), Some(ec)))
+        }.onCancel {
+          stopped = true
+        }
+      case Right(calcInterval) =>
+        CancellableFuture.repeatWithMod(() => calcInterval(currentValue.getOrElse(init))) {
+          if !paused() then head.foreach(v => set(Option(generate(v)), Some(ec)))
+        }.onCancel {
+          stopped = true
+        }
 
   inline def stop(): Unit = beat.cancel()
 
   inline def isStopped: Boolean = stopped
 
 object GeneratorSignal:
-  def apply[V](generate: V => V,
+  def apply[V](init    : V,
+               generate: V => V,
                interval: FiniteDuration,
-               init    : Option[V] = None,
-               pause   : () => Boolean = () => false)
+               paused  : () => Boolean = () => false)
               (using ec: ExecutionContext = Threading.defaultContext): GeneratorSignal[V] =
-    new GeneratorSignal[V](init, generate, interval, pause)
+    new GeneratorSignal[V](init, generate, Left(interval), paused)
 
-  inline def unfold[V](interval: FiniteDuration, init: V)(body: V => V)(using ec: ExecutionContext = Threading.defaultContext): GeneratorSignal[V] =
-    GeneratorSignal(generate = body, interval = interval, Some(init), pause = () => false)
+  inline def unfold[V](init: V, interval: FiniteDuration)(body: V => V)
+                      (using ec: ExecutionContext = Threading.defaultContext): GeneratorSignal[V] =
+    new GeneratorSignal[V](init, body, Left(interval), () => false)
+
+  inline def unfoldWithMod[V](init: V, interval: V => FiniteDuration)(body: V => V)
+                             (using ec: ExecutionContext = Threading.defaultContext): GeneratorSignal[V] =
+    new GeneratorSignal[V](init, body, Right(v => interval(v).toMillis), () => false)
