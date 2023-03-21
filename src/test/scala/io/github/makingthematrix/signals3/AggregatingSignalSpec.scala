@@ -1,7 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import Threading._
-import testutils._
+import testutils.*
 
 import scala.concurrent.Promise
 

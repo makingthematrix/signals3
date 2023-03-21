@@ -91,8 +91,16 @@ object CancellableFuture:
     * @param body A task repeated every `interval`.
     * @return A cancellable future representing the whole repeating process.
     */
-  inline def repeat(interval: FiniteDuration)(body: => Unit)(using ec: ExecutionContext = Threading.defaultContext): CancellableFuture[Unit] =
-    repeatWithMod(() => interval)(body)
+  def repeat(interval: FiniteDuration)(body: => Unit)(using ec: ExecutionContext = Threading.defaultContext): CancellableFuture[Unit] =
+    val intervalMillis = interval.toMillis
+    @volatile var last = System.currentTimeMillis
+    def calcInterval(): Long =
+      val now = System.currentTimeMillis
+      val error = now - last - intervalMillis
+      last = now
+      intervalMillis - (error / 2L) - 1L
+
+    repeatWithMod(calcInterval)(body)
 
   /** Creates an empty cancellable future which will repeat the mapped computation until cancelled. At creation,
     * and then after each execution, the c.f. will call the `interval` function to get the `FiniteDuration` after which
@@ -105,24 +113,24 @@ object CancellableFuture:
     * @param body A task repeated every `interval`.
     * @return A cancellable future representing the whole repeating process.
     */
-  def repeatWithMod(interval: () => FiniteDuration)(body: => Unit)(using ec: ExecutionContext = Threading.defaultContext): CancellableFuture[Unit] =
-    val currentInterval = interval()
-    if currentInterval <= Duration.Zero then
+  def repeatWithMod(interval: () => Long)(body: => Unit)(using ec: ExecutionContext = Threading.defaultContext): CancellableFuture[Unit] =
+    if interval() <=0L then
       successful(())
     else
       new Cancellable(Promise[Unit]()):
+        @volatile private var cancelled: Boolean = false
         @volatile private var currentTask: Option[TimerTask] = None
+
         startNewTimeoutLoop()
 
         private def startNewTimeoutLoop(): Unit =
-          currentTask = Some(schedule(
-            () => { body; startNewTimeoutLoop() },
-            currentInterval.toMillis
-          ))
+          if !cancelled then
+            currentTask = Some(schedule(() => { body; startNewTimeoutLoop() }, interval()))
 
         override def cancel(): Boolean =
           currentTask.foreach(_.cancel())
           currentTask = None
+          cancelled = true
           super.cancel()
 
   private val timer: Timer = new Timer()

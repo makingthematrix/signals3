@@ -1,6 +1,5 @@
 package io.github.makingthematrix.signals3.generators
 
-import io.github.makingthematrix.signals3.generators.{GeneratorEventStream, GeneratorSignal}
 import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, waitForResult}
 import io.github.makingthematrix.signals3.{EventContext, Signal, Threading}
 

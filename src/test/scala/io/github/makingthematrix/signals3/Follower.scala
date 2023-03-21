@@ -2,7 +2,7 @@ package io.github.makingthematrix.signals3
 
 import java.util.concurrent.atomic.AtomicReference
 
-import testutils._
+import testutils.compareAndSet
 
 final case class Follower[A](signal: Signal[A]):
   private val receivedValues = new AtomicReference(Vector.empty[A])

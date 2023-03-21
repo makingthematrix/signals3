@@ -2,7 +2,7 @@ package io.github.makingthematrix.signals3
 
 import testutils.{awaitAllTasks, result, waitForResult}
 
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 import scala.concurrent.{Future, Promise}
 import scala.language.postfixOps
 
