@@ -81,17 +81,33 @@ object CancellableFuture:
       val task = schedule(() => p.trySuccess(()), duration.toMillis)
       new Cancellable(p).onCancel(task.cancel())
 
-  /** Creates an empty cancellable future which will repeat the mapped computation every given `duration`
-    * until cancelled. The first computation is executed with `duration` delay. If the operation takes
-    * longer than `duration` it will not be cancelled after the given time, but also the ability to cancel
-    * it will be lost.
+  /** Creates an empty cancellable future which will repeat the mapped computation every given `interval` until
+    * cancelled. The first computation is executed with `interval` delay. If the executed operation takes longer
+    * than `interval` it will not be cancelled - the new execution will start as scheduled, but the old one will
+    * continue. The ability to cancel the old one will be lost, as the reference will from now on point to
+    * the new execution.
     *
     * @param interval The initial delay and the consecutive time interval between repeats.
-    * @param body A task repeated every `duration`.
+    * @param body A task repeated every `interval`.
     * @return A cancellable future representing the whole repeating process.
     */
-  def repeat(interval: FiniteDuration)(body: => Unit)(using ec: ExecutionContext = Threading.defaultContext): CancellableFuture[Unit] =
-    if interval <= Duration.Zero then
+  inline def repeat(interval: FiniteDuration)(body: => Unit)(using ec: ExecutionContext = Threading.defaultContext): CancellableFuture[Unit] =
+    repeatWithMod(() => interval)(body)
+
+  /** Creates an empty cancellable future which will repeat the mapped computation until cancelled. At creation,
+    * and then after each execution, the c.f. will call the `interval` function to get the `FiniteDuration` after which
+    * the next execution should occur. This allows to modify the interval between each two executions based on some
+    * external data. If the executed operation takes longer than `interval` it will not be cancelled - the new execution
+    * will start as scheduled, but the old one will continue. The ability to cancel the old one will be lost,
+    * as the reference will from now on point to the new execution.
+    *
+    * @param interval The function returning the delay to the first and then to each next execution.
+    * @param body A task repeated every `interval`.
+    * @return A cancellable future representing the whole repeating process.
+    */
+  def repeatWithMod(interval: () => FiniteDuration)(body: => Unit)(using ec: ExecutionContext = Threading.defaultContext): CancellableFuture[Unit] =
+    val currentInterval = interval()
+    if currentInterval <= Duration.Zero then
       successful(())
     else
       new Cancellable(Promise[Unit]()):
@@ -101,7 +117,7 @@ object CancellableFuture:
         private def startNewTimeoutLoop(): Unit =
           currentTask = Some(schedule(
             () => { body; startNewTimeoutLoop() },
-            interval.toMillis
+            currentInterval.toMillis
           ))
 
         override def cancel(): Boolean =
@@ -109,7 +125,7 @@ object CancellableFuture:
           currentTask = None
           super.cancel()
 
-  private lazy val timer: Timer = new Timer()
+  private val timer: Timer = new Timer()
 
   private def schedule(f: () => Any, delay: Long): TimerTask =
     new TimerTask {
