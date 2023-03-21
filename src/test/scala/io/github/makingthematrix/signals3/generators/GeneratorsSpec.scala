@@ -43,7 +43,7 @@ class GeneratorsSpec extends munit.FunSuite:
 
   test("test fibonacci signal with unfold") {
     val builder = mutable.ArrayBuilder.make[Int]
-    val signal = GeneratorSignal.unfold(100.millis, (0, 1)) { case (a, b) => (b, a + b) }
+    val signal = GeneratorSignal.unfold((0, 1), 100.millis) { case (a, b) => (b, a + b) }
     signal.map(_._2).foreach { builder.addOne }
     waitForResult(signal.map(_._2), 8)
     signal.stop()
