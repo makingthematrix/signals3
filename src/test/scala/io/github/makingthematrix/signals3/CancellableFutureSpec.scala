@@ -5,8 +5,8 @@ import CancellableFuture.toFuture
 import scala.language.implicitConversions
 
 import scala.concurrent.{Future, Promise}
-import scala.concurrent.duration._
-import testutils._
+import scala.concurrent.duration.*
+import testutils.*
 
 class CancellableFutureSpec extends munit.FunSuite:
   test("Transform between a future and a cancellable future") {

@@ -1,10 +1,9 @@
 package io.github.makingthematrix.signals3
 
 import java.util.concurrent.atomic.AtomicReference
-import testutils._
-
+import testutils.*
 import scala.concurrent.{Await, Future}
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 import Threading.defaultContext
 import CancellableFuture.delayed
 
