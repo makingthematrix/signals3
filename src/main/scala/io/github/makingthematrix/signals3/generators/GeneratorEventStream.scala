@@ -8,27 +8,23 @@ import scala.concurrent.duration.FiniteDuration
 final class GeneratorEventStream[E](generate: () => E,
                                     interval: Either[FiniteDuration, () => Long],
                                     paused  : () => Boolean)
-                                   (using ec: ExecutionContext) extends EventStream[E] with NoAutowiring:
-  private var stopped = false
+                                   (using ec: ExecutionContext) 
+  extends EventStream[E] with NoAutowiring:
+  private var closed = false
 
   private val beat =
-    interval match
-      case Left(intv) =>
-        CancellableFuture.repeat(intv) {
-          if !paused() then publish(generate())
-        }.onCancel {
-          stopped = true
-        }
-      case Right(calcInterval) =>
-        CancellableFuture.repeatWithMod(calcInterval) {
-          if !paused() then publish(generate())
-        }.onCancel {
-          stopped = true
-        }
+    (interval match
+       case Left(intv)          => CancellableFuture.repeat(intv) 
+       case Right(calcInterval) => CancellableFuture.repeatWithMod(calcInterval)
+    ) {
+      if !paused() then publish(generate())
+    }.onCancel {
+      closed = true
+    }     
 
-  inline def stop(): Unit = beat.cancel()
+  inline def close(): Unit = beat.cancel()
 
-  inline def isStopped: Boolean = stopped
+  inline def isClosed: Boolean = closed
 
 object GeneratorEventStream:
   def apply[E](generate: () => E,
@@ -37,18 +33,22 @@ object GeneratorEventStream:
               (using ec: ExecutionContext = Threading.defaultContext): GeneratorEventStream[E] =
     new GeneratorEventStream[E](generate, Left(interval), paused)
 
-  inline def generate[E](interval: FiniteDuration)(body: => E)(using ec: ExecutionContext = Threading.defaultContext): GeneratorEventStream[E] =
+  inline def generate[E](interval: FiniteDuration)(body: => E)
+                        (using ec: ExecutionContext = Threading.defaultContext): GeneratorEventStream[E] =
     new GeneratorEventStream[E](() => body, Left(interval), () => false)
 
-  inline def generateWithMod[E](interval: () => FiniteDuration)(body: => E)(using ec: ExecutionContext = Threading.defaultContext): GeneratorEventStream[E] =
+  inline def generateWithMod[E](interval: () => FiniteDuration)(body: => E)
+                               (using ec: ExecutionContext = Threading.defaultContext): GeneratorEventStream[E] =
     new GeneratorEventStream[E](() => body, Right(() => interval().toMillis), () => false)
 
-  inline def repeat[E](event: E, interval: FiniteDuration)(using ec: ExecutionContext = Threading.defaultContext): GeneratorEventStream[E] =
+  inline def repeat[E](event: E, interval: FiniteDuration)
+                      (using ec: ExecutionContext = Threading.defaultContext): GeneratorEventStream[E] =
     new GeneratorEventStream[E](() => event, Left(interval), () => false)
 
   inline def repeatWithMod[E](event: E, interval: () => FiniteDuration)(using ec: ExecutionContext = Threading.defaultContext): GeneratorEventStream[E] =
     new GeneratorEventStream[E](() => event, Right(() => interval().toMillis), () => false)
 
-  inline def heartbeat(interval: FiniteDuration)(using ec: ExecutionContext = Threading.defaultContext): GeneratorEventStream[Unit] =
+  inline def heartbeat(interval: FiniteDuration)
+                      (using ec: ExecutionContext = Threading.defaultContext): GeneratorEventStream[Unit] =
     repeat((), interval)
 
