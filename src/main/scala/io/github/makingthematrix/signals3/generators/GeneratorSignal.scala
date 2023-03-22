@@ -9,27 +9,23 @@ final class GeneratorSignal[V](init    : V,
                                generate: V => V,
                                interval: Either[FiniteDuration, V => Long],
                                paused  : () => Boolean)
-                              (using ec: ExecutionContext) extends Signal[V](Some(init)) with NoAutowiring:
-  private var stopped = false
+                              (using ec: ExecutionContext) 
+  extends Signal[V](Some(init)) with NoAutowiring:
+  private var closed = false
 
   private val beat =
-    interval match
-      case Left(intv) =>
-        CancellableFuture.repeat(intv) {
-          if !paused() then head.foreach(v => set(Option(generate(v)), Some(ec)))
-        }.onCancel {
-          stopped = true
-        }
-      case Right(calcInterval) =>
-        CancellableFuture.repeatWithMod(() => calcInterval(currentValue.getOrElse(init))) {
-          if !paused() then head.foreach(v => set(Option(generate(v)), Some(ec)))
-        }.onCancel {
-          stopped = true
-        }
+    (interval match
+       case Left(intv)          => CancellableFuture.repeat(intv) 
+       case Right(calcInterval) => CancellableFuture.repeatWithMod(() => calcInterval(currentValue.getOrElse(init)))
+    ) {
+      if !paused() then head.foreach(v => set(Option(generate(v)), Some(ec)))
+    }.onCancel {
+      closed = true
+    }
 
-  inline def stop(): Unit = beat.cancel()
+  inline def close(): Unit = beat.cancel()
 
-  inline def isStopped: Boolean = stopped
+  inline def isClosed: Boolean = closed
 
 object GeneratorSignal:
   def apply[V](init    : V,

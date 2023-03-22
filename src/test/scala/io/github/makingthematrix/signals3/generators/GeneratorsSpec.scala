@@ -19,9 +19,9 @@ class GeneratorsSpec extends munit.FunSuite:
       if counter == 3 then isSuccess ! true
     }
     waitForResult(isSuccess, true)
-    stream.stop()
+    stream.close()
     awaitAllTasks
-    assert(stream.isStopped)
+    assert(stream.isClosed)
   }
 
   test("test fibonacci event stream with generate") {
@@ -36,7 +36,7 @@ class GeneratorsSpec extends munit.FunSuite:
     }
     stream.foreach { builder.addOne }
     waitForResult(stream, 8)
-    stream.stop()
+    stream.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(1, 2, 3, 5, 8))
   }
@@ -46,7 +46,28 @@ class GeneratorsSpec extends munit.FunSuite:
     val signal = GeneratorSignal.unfold((0, 1), 100.millis) { case (a, b) => (b, a + b) }
     signal.map(_._2).foreach { builder.addOne }
     waitForResult(signal.map(_._2), 8)
-    signal.stop()
+    signal.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(1, 2, 3, 5, 8))
   }
+  
+  /** 
+    * TODO: After extracting the Closeable trait, create unfoldLeft that would look something like this:
+    * ```scala 
+    * inline def unfoldLeft[V, Z](init: V, interval: FiniteDuration, map: V => Z)(body: V => V)
+    *                            (using ec: ExecutionContext = Threading.defaultContext): Signal[Z] with Closeable =
+    *   new GeneratorSignal[V](init, body, Left(interval), () => false).map(map)
+    * ```
+    * and then the test above could look like this:
+    * ```scala
+    * val builder = mutable.ArrayBuilder.make[Int]
+    * val signal = GeneratorSignal.unfoldLeft((0, 1), 100.millis, _._2) { case (a, b) => (b, a + b) }
+    * signal.foreach { builder.addOne }
+    * waitForResult(signal, 8)
+    * signal.close()
+    * awaitAllTasks
+    * assertEquals(builder.result().toSeq, Seq(1, 2, 3, 5, 8))
+    * ```
+    * Right now this is impossible because `.map(...)` on `GeneratorSignal` returns a non-closeable `Signal`
+    * and so we lose the ability to close the original generator signal. 
+    */
