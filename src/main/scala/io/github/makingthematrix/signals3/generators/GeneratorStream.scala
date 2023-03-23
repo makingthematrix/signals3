@@ -28,15 +28,15 @@ import scala.concurrent.duration.FiniteDuration
   * @param interval Time to the next event generation (to the first event as well). Might be either a `FiniteDuration`
   *                 or a function that returns the number of milliseconds. In the second case, the function will be
   *                 called on initialization, and then after each generated event.
-  * @param paused A function called on each event to check if the generator is paused. If it returns `true`,
-  *               the `generate` function will not be called.
-  * @param executionContext The execution context in which the generator works.
-  * @tparam E The type of the generated event.
+  * @param paused   A function called on each event to check if the generator is paused. If it returns `true`,
+  *                 the `generate` function will not be called.
+  * @param ec       The execution context in which the generator works.
+  * @tparam E       The type of the generated event.
   */
-final class GeneratorStream[E](generate              : () => E,
-                               interval              : Either[FiniteDuration, () => Long],
-                               paused                : () => Boolean)
-                              (using executionContext: ExecutionContext)
+final class GeneratorStream[E](generate: () => E,
+                               interval: Either[FiniteDuration, () => Long],
+                               paused  : () => Boolean)
+                              (using ec: ExecutionContext)
   extends EventStream[E] with NoAutowiring:
   private var closed = false
 
@@ -51,12 +51,13 @@ final class GeneratorStream[E](generate              : () => E,
     }
 
   /**
-    * Closes the generator permanently. There will be no further calls to `generate`, `interval`, and `pause`.
+    * Closes the generator permanently. There will be no further calls to `generate`, `interval`, and `paused`.
     */
   inline def close(): Unit = beat.cancel()
 
   /**
-    * Checks if the generator is closed
+    * Checks if the generator is closed.
+    * 
     * @return `true` if the generator was closed
     */
   inline def isClosed: Boolean = closed
@@ -70,14 +71,13 @@ object GeneratorStream:
     *                 in the stream. If the function throws an exception, no event will be generated, but
     *                 the generator will call the `generate` function again, after `interval`. The exception
     *                 will be ignored.
-    * @param interval Time to the next event generation (to the first event as well). Might be either
-    *                 a `FiniteDuration` or a function that returns the number of milliseconds. In the second
-    *                 case, the function will be called on initialization, and then after each generated event.
+    * @param interval Time to the next event generation (to the first event as well). 
     * @param paused   A function called on each event to check if the generator is paused. If it returns `true`,
     *                 the `generate` function will not be called. Optional. By default the generator is never paused.
-    * @param ec The execution context in which the generator works. Optional. By default it's `Threading.defaultContext`.
-    * @tparam E The type of the generated event.
-    * @return A generator event stream.
+    * @param ec       The execution context in which the generator works. Optional. 
+    *                 By default it's `Threading.defaultContext`.
+    * @tparam E       The type of the generated event.
+    * @return         A new generator event stream.
     */
   def apply[E](generate: () => E,
                interval: FiniteDuration,
@@ -91,9 +91,9 @@ object GeneratorStream:
     *
     * @param interval Time to the next event generation (and to the first event as well). See [[CancellableFuture.repeat]]
     *                 for explanation how Signals3 tries to ensure that intervals are constant.
-    * @param body     A block of code that creates a new event `E` every time it's called. The event will be resealed
-    *                 in the stream. If the code throws an exception, no event will be generated, but
-    *                 the generator will call it again, after `interval`. The exception will be ignored.
+    * @param body     A block of code that creates a new event `E` every time it's called. The event will be published
+    *                 in the stream. If the code throws an exception, no event will be generated, but the generator 
+    *                 will call it again, after `interval`. The exception will be ignored.
     * @param ec       The execution context in which the generator works. Optional.
     *                 By default it's `Threading.defaultContext`.
     * @tparam E       The type of the generated event.
