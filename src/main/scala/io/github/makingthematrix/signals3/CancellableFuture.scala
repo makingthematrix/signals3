@@ -86,10 +86,17 @@ object CancellableFuture:
     * than `interval` it will not be cancelled - the new execution will start as scheduled, but the old one will
     * continue. The ability to cancel the old one will be lost, as the reference will from now on point to
     * the new execution.
+    * 
+    * @note Since Signals3 1.1.0 this method tries to adjust for inevitable delays caused by calling its own code.
+    *       We assume that the initialization will cause the first call to be executed with some delay, so the second
+    *       call will be executed a bit earlier than `interval` to accomodate that. The next calls should be executed
+    *       as planned, unless external causes will make another delay, after which the `repeat` method will again
+    *       try to adjust by shortening the delay for the consecutive call.
     *
     * @param interval The initial delay and the consecutive time interval between repeats.
-    * @param body A task repeated every `interval`.
-    * @return A cancellable future representing the whole repeating process.
+    * @param body A task repeated every `interval`. If `body` throws an exception, the method will ignore it and 
+    *             call `body` again, after interval`.
+    * @return A cancellable future representing the whole process.
     */
   def repeat(interval: FiniteDuration)(body: => Unit)(using ec: ExecutionContext = Threading.defaultContext): CancellableFuture[Unit] =
     val intervalMillis = interval.toMillis
@@ -110,22 +117,27 @@ object CancellableFuture:
     * as the reference will from now on point to the new execution.
     *
     * @param interval The function returning the delay to the first and then to each next execution.
-    * @param body A task repeated every `interval`.
-    * @return A cancellable future representing the whole repeating process.
+    * @param body A task repeated every `interval`. If `body` throws an exception, the method will ignore it and 
+    *             call `body` again, after interval`.
+    * @return A cancellable future representing the whole process.
     */
   def repeatWithMod(interval: () => Long)(body: => Unit)(using ec: ExecutionContext = Threading.defaultContext): CancellableFuture[Unit] =
-    new Cancellable(Promise[Unit]()):
-      @volatile private var cancelled: Boolean = false
-      @volatile private var task: TimerTask = schedule(() => { body; startNewTimeoutLoop() }, interval())
+    val intv = interval()
+    if intv <= 0L then successful(Try(body))
+    else
+      new Cancellable(Promise[Unit]()):
+        inline def sched(t: Long): TimerTask = schedule(() => { Try(body); startNewTimeoutLoop() }, t)
+        @volatile private var cancelled: Boolean = false
+        @volatile private var task: TimerTask = sched(intv)
 
-      private def startNewTimeoutLoop(): Unit =
-        if !cancelled then
-          task = schedule(() => { body; startNewTimeoutLoop() }, interval())
+        private def startNewTimeoutLoop(): Unit =
+          if !cancelled then
+            task = sched(interval())
 
-      override def cancel(): Boolean =
-        task.cancel()
-        cancelled = true
-        super.cancel()
+        override def cancel(): Boolean =
+          task.cancel()
+          cancelled = true
+          super.cancel()
 
   private val timer: Timer = new Timer()
 
