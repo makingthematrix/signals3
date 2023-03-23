@@ -81,35 +81,65 @@ object CancellableFuture:
       val task = schedule(() => p.trySuccess(()), duration.toMillis)
       new Cancellable(p).onCancel(task.cancel())
 
-  /** Creates an empty cancellable future which will repeat the mapped computation every given `duration`
-    * until cancelled. The first computation is executed with `duration` delay. If the operation takes
-    * longer than `duration` it will not be cancelled after the given time, but also the ability to cancel
-    * it will be lost.
+  /** Creates an empty cancellable future which will repeat the mapped computation every given `interval` until
+    * cancelled. The first computation is executed with `interval` delay. If the executed operation takes longer
+    * than `interval` it will not be cancelled - the new execution will start as scheduled, but the old one will
+    * continue. The ability to cancel the old one will be lost, as the reference will from now on point to
+    * the new execution.
     *
-    * @param duration The initial delay and the consecutive time interval between repeats.
-    * @param body A task repeated every `duration`.
-    * @return A cancellable future representing the whole repeating process.
+    * @note Since Signals3 1.1.0 this method tries to adjust for inevitable delays caused by calling its own code.
+    *       We assume that the initialization will cause the first call to be executed with some delay, so the second
+    *       call will be executed a bit earlier than `interval` to accomodate that. The next calls should be executed
+    *       as planned, unless external causes will make another delay, after which the `repeat` method will again
+    *       try to adjust by shortening the delay for the consecutive call.
+    *
+    * @param interval The initial delay and the consecutive time interval between repeats.
+    * @param body A task repeated every `interval`. If `body` throws an exception, the method will ignore it and
+    *             call `body` again, after interval`.
+    * @return A cancellable future representing the whole process.
     */
-  def repeat(duration: Duration)(body: => Unit)(using ec: ExecutionContext = Threading.defaultContext): CancellableFuture[Unit] =
-    if duration <= Duration.Zero then
-      successful(())
+  def repeat(interval: FiniteDuration)(body: => Unit)(using ec: ExecutionContext = Threading.defaultContext): CancellableFuture[Unit] =
+    val intervalMillis = interval.toMillis
+    @volatile var last = System.currentTimeMillis
+    def calcInterval(): Long =
+      val now = System.currentTimeMillis
+      val error = now - last - intervalMillis
+      last = now
+      intervalMillis - (error / 2L) - 1L
+
+    repeatWithMod(calcInterval)(body)
+
+  /** Creates an empty cancellable future which will repeat the mapped computation until cancelled. At creation,
+    * and then after each execution, the c.f. will call the `interval` function to get the `FiniteDuration` after which
+    * the next execution should occur. This allows to modify the interval between each two executions based on some
+    * external data. If the executed operation takes longer than `interval` it will not be cancelled - the new execution
+    * will start as scheduled, but the old one will continue. The ability to cancel the old one will be lost,
+    * as the reference will from now on point to the new execution.
+    *
+    * @param interval The function returning the delay to the first and then to each next execution.
+    * @param body A task repeated every `interval`. If `body` throws an exception, the method will ignore it and
+    *             call `body` again, after interval`.
+    * @return A cancellable future representing the whole process.
+    */
+  def repeatWithMod(interval: () => Long)(body: => Unit)(using ec: ExecutionContext = Threading.defaultContext): CancellableFuture[Unit] =
+    val intv = interval()
+    if intv <= 0L then successful(Try(body))
     else
       new Cancellable(Promise[Unit]()):
-        @volatile private var currentTask: Option[TimerTask] = None
-        startNewTimeoutLoop()
+        inline def sched(t: Long): TimerTask = schedule(() => { Try(body); startNewTimeoutLoop() }, t)
+        @volatile private var cancelled: Boolean = false
+        @volatile private var task: TimerTask = sched(intv)
 
         private def startNewTimeoutLoop(): Unit =
-          currentTask = Some(schedule(
-            () => { body; startNewTimeoutLoop() },
-            duration.toMillis
-          ))
+          if !cancelled then
+            task = sched(interval())
 
         override def cancel(): Boolean =
-          currentTask.foreach(_.cancel())
-          currentTask = None
+          task.cancel()
+          cancelled = true
           super.cancel()
 
-  private lazy val timer: Timer = new Timer()
+  private val timer: Timer = new Timer()
 
   private def schedule(f: () => Any, delay: Long): TimerTask =
     new TimerTask {

@@ -4,7 +4,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, CyclicBarrier, TimeUnit}
 import testutils.*
 
-import scala.annotation.nowarn
 import scala.jdk.CollectionConverters.*
 import scala.concurrent.*
 import scala.concurrent.duration.*

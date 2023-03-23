@@ -1,6 +1,6 @@
 // based on http://caryrobbins.com/dev/sbt-publishing/
 
-val _scalaVersion = "3.2.2"
+val _scalaVersion = "3.3.0-RC3"
 
 organization := "io.github.makingthematrix"
 sonatypeProfileName := "io.github.makingthematrix"
@@ -22,7 +22,8 @@ val standardOptions = Seq(
 val scala3Options = Seq(
   "-explain",
   "-Ysafe-init",
-  "-Ycheck-all-patmat"
+  "-Ycheck-all-patmat",
+  "-Wunused:imports"
 )
 
 publishMavenStyle := true
