@@ -13,7 +13,7 @@ class GeneratorsSpec extends munit.FunSuite:
   test("test heartbeat event stream") {
     var counter = 0
     val isSuccess = Signal(false)
-    val stream = GeneratorEventStream.heartbeat(100.millis)
+    val stream = GeneratorStream.heartbeat(100.millis)
     stream.foreach { _ =>
       counter += 1
       if counter == 3 then isSuccess ! true
@@ -28,7 +28,7 @@ class GeneratorsSpec extends munit.FunSuite:
     var a = 0
     var b = 1
     val builder = mutable.ArrayBuilder.make[Int]
-    val stream = GeneratorEventStream.generate(100.millis) {
+    val stream = GeneratorStream.generate(100.millis) {
       val t = a + b
       a = b
       b = t
@@ -75,11 +75,11 @@ class GeneratorsSpec extends munit.FunSuite:
     var a = 0
     var b = 1
 
-    def fibDelay(): FiniteDuration = (b * 100L).millis
+    def fibDelay(): Long = b * 100L
 
     val builder = mutable.ArrayBuilder.make[Int]
     val now = System.currentTimeMillis
-    val stream = GeneratorEventStream.generateWithMod(fibDelay) {
+    val stream = GeneratorStream.generateWithMod(fibDelay) {
       val t = a + b
       a = b
       b = t
@@ -92,6 +92,8 @@ class GeneratorsSpec extends munit.FunSuite:
     val totalTime = System.currentTimeMillis - now
     stream.close()
     awaitAllTasks
+    // in case of an event stream, the first element in the sequence is the resut of the first computation, so
+    // the initial `1` is ignored
     assertEquals(builder.result().toSeq, Seq(1, 2, 3, 5, 8))
     // it should take (100 + 200 + 300 + 500 + 800)ms + 100ms for a buffer, but still it can be flaky
     assert(totalTime <= 1300L)
@@ -117,4 +119,3 @@ class GeneratorsSpec extends munit.FunSuite:
     * Right now this is impossible because `.map(...)` on `GeneratorSignal` returns a non-closeable `Signal`
     * and so we lose the ability to close the original generator signal. 
     */
-  
