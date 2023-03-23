@@ -62,7 +62,7 @@ class GeneratorsSpec extends munit.FunSuite:
   }
 
   test("test fibonacci signal with delays also in fibonacci") {
-    def fibDelay(t: (Int, Int)): FiniteDuration = (t._2 * 200L).millis
+    def fibDelay(t: (Int, Int)): Long = t._2 * 200L
 
     val builder = mutable.ArrayBuilder.make[Int]
     val now = System.currentTimeMillis
@@ -130,7 +130,7 @@ class GeneratorsSpec extends munit.FunSuite:
     * waitForResult(signal, 5)
     * signal.close()
     * awaitAllTasks
-    * assertEquals(builder.result().toSeq, Seq(1, 1, 2, 3, 5))
+    * assertEquals(builder.result().toSeq, Seq(1, 2, 3, 5))
     * ```
     * Right now this is impossible because `.map(...)` on `GeneratorSignal` returns a non-closeable `Signal`
     * and so we lose the ability to close the original generator signal. 

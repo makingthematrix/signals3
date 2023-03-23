@@ -122,6 +122,6 @@ object GeneratorSignal:
     * @tparam V       The type of the signal's value.
     * @return         A new generator signal.
     */
-  inline def unfoldWithMod[V](init: V, interval: V => FiniteDuration)(body: V => V)
+  inline def unfoldWithMod[V](init: V, interval: V => Long)(body: V => V)
                              (using ec: ExecutionContext = Threading.defaultContext): GeneratorSignal[V] =
-    new GeneratorSignal[V](init, body, Right(v => interval(v).toMillis), () => false)
+    new GeneratorSignal[V](init, body, Right(interval), () => false)
