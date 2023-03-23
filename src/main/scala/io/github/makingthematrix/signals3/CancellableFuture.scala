@@ -114,24 +114,18 @@ object CancellableFuture:
     * @return A cancellable future representing the whole repeating process.
     */
   def repeatWithMod(interval: () => Long)(body: => Unit)(using ec: ExecutionContext = Threading.defaultContext): CancellableFuture[Unit] =
-    if interval() <=0L then
-      successful(())
-    else
-      new Cancellable(Promise[Unit]()):
-        @volatile private var cancelled: Boolean = false
-        @volatile private var currentTask: Option[TimerTask] = None
+    new Cancellable(Promise[Unit]()):
+      @volatile private var cancelled: Boolean = false
+      @volatile private var task: TimerTask = schedule(() => { body; startNewTimeoutLoop() }, interval())
 
-        startNewTimeoutLoop()
+      private def startNewTimeoutLoop(): Unit =
+        if !cancelled then
+          task = schedule(() => { body; startNewTimeoutLoop() }, interval())
 
-        private def startNewTimeoutLoop(): Unit =
-          if !cancelled then
-            currentTask = Some(schedule(() => { body; startNewTimeoutLoop() }, interval()))
-
-        override def cancel(): Boolean =
-          currentTask.foreach(_.cancel())
-          currentTask = None
-          cancelled = true
-          super.cancel()
+      override def cancel(): Boolean =
+        task.cancel()
+        cancelled = true
+        super.cancel()
 
   private val timer: Timer = new Timer()
 

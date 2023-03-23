@@ -44,13 +44,59 @@ class GeneratorsSpec extends munit.FunSuite:
   test("test fibonacci signal with unfold") {
     val builder = mutable.ArrayBuilder.make[Int]
     val signal = GeneratorSignal.unfold((0, 1), 100.millis) { case (a, b) => (b, a + b) }
-    signal.map(_._2).foreach { builder.addOne }
+
+    signal.foreach { case (_, b) => builder.addOne(b) }
     waitForResult(signal.map(_._2), 8)
     signal.close()
     awaitAllTasks
-    assertEquals(builder.result().toSeq, Seq(1, 2, 3, 5, 8))
+    assertEquals(builder.result().toSeq, Seq(1, 1, 2, 3, 5, 8))
   }
-  
+
+  test("test fibonacci signal with delays also in fibonacci") {
+    def fibDelay(t: (Int, Int)): FiniteDuration = (t._2 * 100L).millis
+
+    val builder = mutable.ArrayBuilder.make[Int]
+    val now = System.currentTimeMillis
+
+    val signal = GeneratorSignal.unfoldWithMod[(Int, Int)]((0, 1), fibDelay) { case (a, b) => (b, a + b) }
+    signal.foreach { case (_, b) => builder.addOne(b) }
+
+    waitForResult(signal.map(_._2), 8)
+
+    val totalTime = System.currentTimeMillis - now
+    signal.close()
+    awaitAllTasks
+    assertEquals(builder.result().toSeq, Seq(1, 1, 2, 3, 5, 8))
+    // it should take (100 + 200 + 300 + 500 + 800)ms + 100ms for a buffer, but still it can be flaky
+    assert(totalTime >= 1200 && totalTime <= 1300L, totalTime)
+  }
+
+  test("test fibonacci event stream with delays also in fibonacci") {
+    var a = 0
+    var b = 1
+
+    def fibDelay(): FiniteDuration = (b * 100L).millis
+
+    val builder = mutable.ArrayBuilder.make[Int]
+    val now = System.currentTimeMillis
+    val stream = GeneratorEventStream.generateWithMod(fibDelay) {
+      val t = a + b
+      a = b
+      b = t
+      t
+    }
+    stream.foreach { builder.addOne }
+
+    waitForResult(stream, 8)
+
+    val totalTime = System.currentTimeMillis - now
+    stream.close()
+    awaitAllTasks
+    assertEquals(builder.result().toSeq, Seq(1, 2, 3, 5, 8))
+    // it should take (100 + 200 + 300 + 500 + 800)ms + 100ms for a buffer, but still it can be flaky
+    assert(totalTime <= 1300L)
+  }
+
   /** 
     * TODO: After extracting the Closeable trait, create unfoldLeft that would look something like this:
     * ```scala 
@@ -71,3 +117,4 @@ class GeneratorsSpec extends munit.FunSuite:
     * Right now this is impossible because `.map(...)` on `GeneratorSignal` returns a non-closeable `Signal`
     * and so we lose the ability to close the original generator signal. 
     */
+  
