@@ -86,7 +86,7 @@ object CancellableFuture:
     * than `interval` it will not be cancelled - the new execution will start as scheduled, but the old one will
     * continue. The ability to cancel the old one will be lost, as the reference will from now on point to
     * the new execution.
-    * 
+    *
     * @note Since Signals3 1.1.0 this method tries to adjust for inevitable delays caused by calling its own code.
     *       We assume that the initialization will cause the first call to be executed with some delay, so the second
     *       call will be executed a bit earlier than `interval` to accomodate that. The next calls should be executed
@@ -94,7 +94,7 @@ object CancellableFuture:
     *       try to adjust by shortening the delay for the consecutive call.
     *
     * @param interval The initial delay and the consecutive time interval between repeats.
-    * @param body A task repeated every `interval`. If `body` throws an exception, the method will ignore it and 
+    * @param body A task repeated every `interval`. If `body` throws an exception, the method will ignore it and
     *             call `body` again, after interval`.
     * @return A cancellable future representing the whole process.
     */
@@ -117,7 +117,7 @@ object CancellableFuture:
     * as the reference will from now on point to the new execution.
     *
     * @param interval The function returning the delay to the first and then to each next execution.
-    * @param body A task repeated every `interval`. If `body` throws an exception, the method will ignore it and 
+    * @param body A task repeated every `interval`. If `body` throws an exception, the method will ignore it and
     *             call `body` again, after interval`.
     * @return A cancellable future representing the whole process.
     */

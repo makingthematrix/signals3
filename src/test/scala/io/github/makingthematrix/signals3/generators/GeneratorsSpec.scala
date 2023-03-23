@@ -13,7 +13,7 @@ class GeneratorsSpec extends munit.FunSuite:
   test("test heartbeat event stream") {
     var counter = 0
     val isSuccess = Signal(false)
-    val stream = GeneratorStream.heartbeat(100.millis)
+    val stream = GeneratorStream.heartbeat(200.millis)
     stream.foreach { _ =>
       counter += 1
       if counter == 3 then isSuccess ! true
@@ -27,76 +27,92 @@ class GeneratorsSpec extends munit.FunSuite:
   test("test fibonacci event stream with generate") {
     var a = 0
     var b = 1
+    val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Int]
-    val stream = GeneratorStream.generate(100.millis) {
+    val stream = GeneratorStream.generate(200.millis) {
+      val res = b
       val t = a + b
       a = b
       b = t
-      t
+      res
     }
-    stream.foreach { builder.addOne }
-    waitForResult(stream, 8)
+    stream.foreach { t =>
+      builder.addOne(t)
+      isSuccess ! (t == 8)
+    }
+    waitForResult(isSuccess, true)
     stream.close()
     awaitAllTasks
-    assertEquals(builder.result().toSeq, Seq(1, 2, 3, 5, 8))
+    assertEquals(builder.result().toSeq, Seq(1, 1, 2, 3, 5, 8))
   }
 
   test("test fibonacci signal with unfold") {
     val builder = mutable.ArrayBuilder.make[Int]
-    val signal = GeneratorSignal.unfold((0, 1), 100.millis) { case (a, b) => (b, a + b) }
+    val isSuccess = Signal(false)
 
-    signal.foreach { case (_, b) => builder.addOne(b) }
-    waitForResult(signal.map(_._2), 8)
+    val signal = GeneratorSignal.unfold((0, 1), 200.millis) { case (a, b) => (b, a + b) }
+    signal.foreach { case (_, b) =>
+      builder.addOne(b)
+      isSuccess ! (b == 8)
+    }
+    waitForResult(isSuccess, true)
     signal.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(1, 1, 2, 3, 5, 8))
   }
 
   test("test fibonacci signal with delays also in fibonacci") {
-    def fibDelay(t: (Int, Int)): FiniteDuration = (t._2 * 100L).millis
+    def fibDelay(t: (Int, Int)): FiniteDuration = (t._2 * 200L).millis
 
     val builder = mutable.ArrayBuilder.make[Int]
     val now = System.currentTimeMillis
+    val isSuccess = Signal(false)
 
     val signal = GeneratorSignal.unfoldWithMod[(Int, Int)]((0, 1), fibDelay) { case (a, b) => (b, a + b) }
-    signal.foreach { case (_, b) => builder.addOne(b) }
+    signal.foreach { case (_, b) =>
+      builder.addOne(b)
+      isSuccess ! (b == 5)
+    }
 
-    waitForResult(signal.map(_._2), 8)
+    waitForResult(isSuccess, true)
 
     val totalTime = System.currentTimeMillis - now
     signal.close()
     awaitAllTasks
-    assertEquals(builder.result().toSeq, Seq(1, 1, 2, 3, 5, 8))
-    // it should take (100 + 200 + 300 + 500 + 800)ms + 100ms for a buffer, but still it can be flaky
-    assert(totalTime >= 1200 && totalTime <= 1300L, totalTime)
+    assertEquals(builder.result().toSeq, Seq(1, 1, 2, 3, 5))
+    // it should take (0 + 100 + 100 + 200 + 300 + 500)ms * 2 + 100ms for a buffer, but still it can be flaky
+    assert(totalTime >= 1400 && totalTime <= 1500L, s"total time: $totalTime")
   }
 
   test("test fibonacci event stream with delays also in fibonacci") {
     var a = 0
     var b = 1
 
-    def fibDelay(): Long = b * 100L
+    def fibDelay(): Long = b * 200L
 
     val builder = mutable.ArrayBuilder.make[Int]
     val now = System.currentTimeMillis
+    val isSuccess = Signal(false)
+
     val stream = GeneratorStream.generateWithMod(fibDelay) {
+      val res = b
       val t = a + b
       a = b
       b = t
-      t
+      res
     }
-    stream.foreach { builder.addOne }
-
-    waitForResult(stream, 8)
+    stream.foreach { t =>
+      builder.addOne(t)
+      isSuccess ! (t == 5)
+    }
+    waitForResult(isSuccess, true)
 
     val totalTime = System.currentTimeMillis - now
     stream.close()
     awaitAllTasks
-    // in case of an event stream, the first element in the sequence is the resut of the first computation, so
-    // the initial `1` is ignored
-    assertEquals(builder.result().toSeq, Seq(1, 2, 3, 5, 8))
-    // it should take (100 + 200 + 300 + 500 + 800)ms + 100ms for a buffer, but still it can be flaky
-    assert(totalTime <= 1300L)
+    assertEquals(builder.result().toSeq, Seq(1, 1, 2, 3, 5))
+    // it should take (100 + 100 + 200 + 300 + 500)ms * 2 + 100ms for a buffer, but still it can be flaky
+    assert(totalTime >= 2400L && totalTime <= 2500L, s"total time: $totalTime")
   }
 
   /** 
@@ -109,12 +125,12 @@ class GeneratorsSpec extends munit.FunSuite:
     * and then the test above could look like this:
     * ```scala
     * val builder = mutable.ArrayBuilder.make[Int]
-    * val signal = GeneratorSignal.unfoldLeft((0, 1), 100.millis, _._2) { case (a, b) => (b, a + b) }
+    * val signal = GeneratorSignal.unfoldLeft((0, 1), 200.millis, _._2) { case (a, b) => (b, a + b) }
     * signal.foreach { builder.addOne }
-    * waitForResult(signal, 8)
+    * waitForResult(signal, 5)
     * signal.close()
     * awaitAllTasks
-    * assertEquals(builder.result().toSeq, Seq(1, 2, 3, 5, 8))
+    * assertEquals(builder.result().toSeq, Seq(1, 1, 2, 3, 5))
     * ```
     * Right now this is impossible because `.map(...)` on `GeneratorSignal` returns a non-closeable `Signal`
     * and so we lose the ability to close the original generator signal. 
