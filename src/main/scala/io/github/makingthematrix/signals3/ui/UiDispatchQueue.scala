@@ -18,7 +18,7 @@ import io.github.makingthematrix.signals3.{DispatchQueue, EventContext, EventStr
   *
   * ```
   * import android.os.{Handler, Looper}
-  * import com.wire.signals.ui.UiDispatchQueue
+  * import io.github.makingthematrix.signal3.ui.UiDispatchQueue
   *
   * val handler = new Handler(Looper.getMainLooper)
   * UiDispatchQueue.setUi(handler.post)
@@ -28,7 +28,7 @@ import io.github.makingthematrix.signals3.{DispatchQueue, EventContext, EventStr
   *
   * ```
   * import javafx.application.Platform
-  * import com.wire.signals.ui.UiDispatchQueue
+  * import io.github.makingthematrix.signal3.ui.UiDispatchQueue
   *
   * UiDispatchQueue.setUi(Platform.runLater)
   *```
@@ -36,7 +36,7 @@ import io.github.makingthematrix.signals3.{DispatchQueue, EventContext, EventStr
   * ### Usage in all cases:
   *
   * ```
-  * import com.wire.signals.ui.UiDispatchQueue._
+  * import io.github.makingthematrix.signal3.ui.UiDispatchQueue.*
   *
   * signal ! true
   * signal.onUi { value => ... }
