@@ -3,17 +3,19 @@ package io.github.makingthematrix.signals3.testutils
 import java.io.{PrintWriter, StringWriter}
 
 object WhereAmI:
-  class WhereAmI extends Exception("Where am I?")
+  final private[signals3] class WhereAmI extends Exception("Where am I?")
 
-  def whereAmI: String =
-    val where = new WhereAmI
-    val result = new StringWriter
-    val printWriter = new PrintWriter(result)
-    where.printStackTrace(printWriter)
-    result.toString
+  inline def whereAmI: String = whereAmI(new WhereAmI, None)
 
-  def whereAmI(throwable: Throwable): String =
+  inline def whereAmI(maxLines: Int): String = whereAmI(new WhereAmI, Some(maxLines))
+
+  inline def whereAmI(throwable: Throwable): String = whereAmI(throwable, None)
+
+  inline def whereAmI(throwable: Throwable, maxLines: Int): String = whereAmI(throwable, Some(maxLines))
+
+  private def whereAmI(throwable: Throwable, maxLines: Option[Int]): String =
     val result = new StringWriter
-    val printWriter = new PrintWriter(result)
-    throwable.printStackTrace(printWriter)
-    result.toString
+    throwable.printStackTrace(new PrintWriter(result))
+    maxLines match
+      case None    => result.toString
+      case Some(n) => result.toString.split('\n').take(n).mkString("\n")
