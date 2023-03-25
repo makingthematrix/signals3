@@ -36,8 +36,8 @@ final class GeneratorSignal[V](init    : V,
   private var closed = false
   private val beat =
     (interval match
-       case intv: FiniteDuration      => CancellableFuture.repeat(intv)
-       case calcInterval: (V => Long) => CancellableFuture.repeatWithMod(() => calcInterval(currentValue.getOrElse(init)))
+       case intv: FiniteDuration => CancellableFuture.repeat(intv)
+       case intv: (V => Long)    => CancellableFuture.repeatWithMod(() => intv(currentValue.getOrElse(init)))
     ) {
       if !paused() then currentValue.foreach(v => publish(update(v), ec))
     }.onCancel {
@@ -124,9 +124,5 @@ object GeneratorSignal:
     */
   inline def unfoldWithMod[V](init: V, interval: V => Long)(body: V => V)
                              (using ec: ExecutionContext = Threading.defaultContext): GeneratorSignal[V] =
-<<<<<<< Updated upstream
-    new GeneratorSignal[V](init, body, Right(interval), () => false)
-=======
     new GeneratorSignal[V](init, body, interval, () => false)
 
->>>>>>> Stashed changes
