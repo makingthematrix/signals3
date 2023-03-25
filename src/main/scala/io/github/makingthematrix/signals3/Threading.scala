@@ -4,7 +4,7 @@ import DispatchQueue.Unlimited
 import scala.concurrent.ExecutionContext
 
 /** Use `Threading` to set up the default execution context which will be later used as the parent for other
-  * dispatch queues and to run cancellable futures, event streams, and signals, if no other execution context
+  * dispatch queues and to run closeable futures, event streams, and signals, if no other execution context
   * is provided.
   */
 object Threading:
@@ -35,7 +35,7 @@ object Threading:
     * @param queue - a custom dispatch queue that will serve as the default execution context in cases where no other execution
     *              context is provided and as the parent for all new dispatch queues when their parents are not provided.
     */
-  def setAsDefault(queue: DispatchQueue): Unit =
+  inline def setAsDefault(queue: DispatchQueue): Unit =
     instance = Some(queue)
 
   /**

@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3
 
 import java.util.concurrent.atomic.AtomicInteger
-import EventStream.EventSubscriber
+import Stream.EventSubscriber
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -17,14 +17,14 @@ object AggregatingSignal:
     *               is registered in the signal, or immediately if `disableAutowiring` is used.
     *               If a new event comes while the `loader` not yet finished, the event will be memorized and used to produce
     *               the first updated value right afterwards.
-    * @param sourceStream  An event stream publishing events which will be used to update the value of the signal.
+    * @param sourceStream  a stream publishing events which will be used to update the value of the signal.
     * @param updater A function combining the current value of the signal with a new event to produce the updated value.
     * @param ec The execution context in which the `loader` is executed (optional).
     * @tparam E The type of the update events.
     * @tparam V The type of the value held in the signal and the result of the `loader` execution.
     * @return A new aggregating signal with the value type `V`.
     */
-  def apply[E, V](loader: () => Future[V], sourceStream: EventStream[E], updater: (V, E) => V)
+  def apply[E, V](loader: () => Future[V], sourceStream: Stream[E], updater: (V, E) => V)
                  (using ec: ExecutionContext = Threading.defaultContext): AggregatingSignal[E, V]
     = new AggregatingSignal(loader, sourceStream, updater)
 
@@ -34,7 +34,7 @@ object AggregatingSignal:
   * requires heavy computations but an update between one value and another is simple in comparison. For example:
   * ```
   * val loader: Future[ Vector[DBEntry] ] = fetchDBTableData()
-  * val sourceStream: EventStream[DBEntry] = newDBTableEntryStream()
+  * val sourceStream: Stream[DBEntry] = newDBTableEntryStream()
   * val updater: (Vector[DBEntry], DBEntry) => Vector[DBEntry] = { (table, newEntry) => table :+ newEntry }
   * val signal = new AggregatingSignal(loader, sourceStream, updater)
   * ```
@@ -50,14 +50,14 @@ object AggregatingSignal:
   *               is registered in the signal, or immediately if `disableAutowiring` is used.
   *               If a new event comes while the `loader` not yet finished, the event will be memorized and used to produce
   *               the first updated value right afterwards.
-  * @param sourceStream  An event stream publishing events which will be used to update the value of the signal.
+  * @param sourceStream  a stream publishing events which will be used to update the value of the signal.
   * @param updater A function combining the current value of the signal with a new event to produce the updated value.
   * @param ec The execution context in which the `loader` is executed.
   * @tparam E The type of the update events.
   * @tparam V The type of the value held in the signal and the result of the `loader` execution.
   */
-class AggregatingSignal[E, V](loader: () => Future[V], sourceStream: EventStream[E], updater: (V, E) => V)
-                             (using ec: ExecutionContext = Threading.defaultContext)
+final class AggregatingSignal[E, V](loader: () => Future[V], sourceStream: Stream[E], updater: (V, E) => V)
+                                   (using ec: ExecutionContext = Threading.defaultContext)
   extends Signal[V] with EventSubscriber[E]:
   self =>
   private object valueMonitor

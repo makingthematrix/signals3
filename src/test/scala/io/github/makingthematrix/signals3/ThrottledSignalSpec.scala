@@ -5,7 +5,7 @@ import testutils.*
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.*
 import Threading.defaultContext
-import CancellableFuture.delayed
+import CloseableFuture.delayed
 
 import java.lang.Thread.sleep
 

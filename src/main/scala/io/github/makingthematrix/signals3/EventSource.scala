@@ -111,12 +111,12 @@ abstract class EventSource[E, S]:
 
   inline final def wired: Boolean = hasSubscribers || !autowiring
 
-/** By default, a new event source is initialized lazily, i.e. only when the first subscriber function is registered in it.
-  * You can decorate it with `NoAutowiring` to enforce initialization.
-  *
-  * @see [[EventSource]]
-  */
-trait NoAutowiring { self: EventSource[_, _] =>
-  self.disableAutowiring()
-}
-
+object EventSource:
+  /** By default, a new event source is initialized lazily, i.e. only when the first subscriber function is registered in it.
+    * You can decorate it with `NoAutowiring` to enforce initialization.
+    *
+    * @see [[EventSource]]
+    */
+  trait NoAutowiring:
+    self: EventSource[_, _] =>
+    self.disableAutowiring()

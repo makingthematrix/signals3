@@ -1,9 +1,9 @@
 package io.github.makingthematrix.signals3
 
-class EventStreamWithAuxSignalSpec extends munit.FunSuite:
+class StreamWithAuxSignalSpec extends munit.FunSuite:
   private lazy val aux = new SourceSignal[Int](None)
   private lazy val e = new SourceStream[String]()
-  private lazy val r = new EventStreamWithAuxSignal(e, aux)
+  private lazy val r = new StreamWithAuxSignal(e, aux)
 
   private var events = List.empty[(String, Option[Int])]
 

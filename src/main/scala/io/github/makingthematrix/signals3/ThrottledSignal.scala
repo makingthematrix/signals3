@@ -1,21 +1,9 @@
 package io.github.makingthematrix.signals3
 
-import CancellableFuture.delayed
+import CloseableFuture.delayed
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
-
-object ThrottledSignal:
-  /** Creates a new throttled signal which publishes changes to the original signal no more often than once during the time interval.
-    *
-    * @see [[Signal.throttled]]
-    *
-    * @param source The original signal providing the value and changes to it.
-    * @param delay The time interval used for publishing. No more than one change of the value per `delay` will be published.
-    * @tparam V The value type of the signal.
-    * @return The new throttled signal of the same type as the original one.
-    */
-  def apply[V](source: Signal[V], delay: FiniteDuration): ThrottledSignal[V] = new ThrottledSignal(source, delay)
 
 /** A signal which publishes changes of its parent signal but no more often than once during a given time interval.
   * The initial value of the parent signal will be published immediately. The first change to it will happen at the earliest
@@ -32,8 +20,8 @@ object ThrottledSignal:
   * @param delay The time interval used for publishing. No more than one change of the value per `delay` will be published.
   * @tparam V The value type of the signal.
   */
-class ThrottledSignal[V](val source: Signal[V], val delay: FiniteDuration) extends ProxySignal[V](source):
-  @volatile private var throttle = Option.empty[CancellableFuture[Unit]]
+final class ThrottledSignal[V](val source: Signal[V], val delay: FiniteDuration) extends ProxySignal[V](source):
+  @volatile private var throttle = Option.empty[CloseableFuture[Unit]]
   @volatile private var ignoredEvent = false
 
   override protected def computeValue(current: Option[V]): Option[V] = source.value
@@ -48,9 +36,21 @@ class ThrottledSignal[V](val source: Signal[V], val delay: FiniteDuration) exten
     else if !fromThrottle then ignoredEvent = true
     else
       super.notifySubscribers(Some(context))
-      throttle.foreach(t => if !t.future.isCompleted then t.cancel())
+      throttle.foreach(t => if !t.future.isCompleted then t.close())
       throttle = if ignoredEvent then
         ignoredEvent = false
         Some(newThrottle) // if we ignored an event, let's notify subscribers again, just to be sure the signal is up to date.
       else None
   }
+
+object ThrottledSignal:
+  /** Creates a new throttled signal which publishes changes to the original signal no more often than once during the time interval.
+    *
+    * @see [[Signal.throttled]]
+    *
+    * @param source The original signal providing the value and changes to it.
+    * @param delay The time interval used for publishing. No more than one change of the value per `delay` will be published.
+    * @tparam V The value type of the signal.
+    * @return The new throttled signal of the same type as the original one.
+    */
+  def apply[V](source: Signal[V], delay: FiniteDuration): ThrottledSignal[V] = new ThrottledSignal(source, delay)

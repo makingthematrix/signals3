@@ -17,7 +17,7 @@ This new version of Wire Signals starts as a humble copy, just rewritten in Scal
 * Event streams
 * Signals - event streams with internal values
 * Abstractions for easy data transfer between execution contexts
-* An implementation of (sometimes) cancellable futures
+* An implementation of (sometimes) closeable futures
 * Methods to work with event streams and signals in a way similar to standard Scala collections
 
 ### How to use
@@ -43,7 +43,7 @@ intSignal.foreach { number => println("number: $number") }
 strSignal.foreach { str => println("str: $str") }
 ```
 
-Now every time you publish something to the signals, the functions you provided above will be executed, just as in case of a regular event stream...
+Now every time you publish something to the signals, the functions you provided above will be executed, just as in case of a regular stream...
 ```scala
 scala> intSignal ! 2
 number: 2
@@ -53,9 +53,9 @@ number: 2
 > intSignal.foreach { number => println("number: $number") }
 number: 2
 ```
-but subscribing to `strSignal` will not display anything, because `strSignal` is still empty. Or, if you simply don't need that functionality, you can use a standard `EventStream` instead.
+but subscribing to `strSignal` will not display anything, because `strSignal` is still empty. Or, if you simply don't need that functionality, you can use a standard `Stream` instead.
 
-You can also of course `map` and `flatMap` signals, `zip` them, `throttle`, `fold`, or make any future or an event stream into one. With a bit of Scala magic you can even do for-comprehensions:
+You can also of course `map` and `flatMap` signals, `zip` them, `throttle`, `fold`, or make any future or a stream into one. With a bit of Scala magic you can even do for-comprehensions:
 ```scala
 val fooSignal = for {
  number <- intSignal

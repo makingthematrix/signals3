@@ -7,7 +7,7 @@ import scala.concurrent.duration.*
 import scala.annotation.tailrec
 import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
 import scala.util.{Failure, Success, Try}
-import CancellableFuture.toFuture
+import CloseableFuture.toFuture
 import scala.language.implicitConversions
 
 package object testutils:
@@ -26,8 +26,8 @@ package object testutils:
     if ref.compareAndSet(current, updated) then updated
     else compareAndSet(ref)(updater)
 
-  def withDelay[T](body: => T, delay: FiniteDuration = 300.millis)(using ec: ExecutionContext): CancellableFuture[T] =
-    CancellableFuture.delayed(delay)(body)
+  def withDelay[T](body: => T, delay: FiniteDuration = 300.millis)(using ec: ExecutionContext): CloseableFuture[T] =
+    CloseableFuture.delayed(delay)(body)
 
   val DefaultTimeout: FiniteDuration = 5.seconds
 
@@ -55,7 +55,7 @@ package object testutils:
 
   def waitForResult[V](signal: Signal[V], expected: V): Boolean = waitForResult(signal, expected, DefaultTimeout)
 
-  def waitForResult[E](stream: EventStream[E], expected: E, timeout: FiniteDuration): Boolean =
+  def waitForResult[E](stream: Stream[E], expected: E, timeout: FiniteDuration): Boolean =
     val offset = System.currentTimeMillis()
     while System.currentTimeMillis() - offset < timeout.toMillis do
       Try(result(stream.next)(using timeout)) match
@@ -67,7 +67,7 @@ package object testutils:
       Thread.sleep(100)
     false
 
-  def waitForResult[E](stream: EventStream[E], expected: E): Boolean = waitForResult(stream, expected, DefaultTimeout)
+  def waitForResult[E](stream: Stream[E], expected: E): Boolean = waitForResult(stream, expected, DefaultTimeout)
 
   /**
     * Very useful for checking that something DOESN'T happen (e.g., ensure that a signal doesn't get updated after
