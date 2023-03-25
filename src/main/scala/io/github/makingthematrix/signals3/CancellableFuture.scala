@@ -116,6 +116,10 @@ object CancellableFuture:
     * will start as scheduled, but the old one will continue. The ability to cancel the old one will be lost,
     * as the reference will from now on point to the new execution.
     *
+    * @todo The logic for interval <= 0L is wrong. This version, with one call to `successful` must be moved to `repeat`
+    *       with constant interval. In case of variable interval, it's possible that one interval <= 0L will occur.
+    *       The task should be then performed immediately, and then another interval should be computer.
+    *
     * @param interval The function returning the delay to the first and then to each next execution.
     * @param body A task repeated every `interval`. If `body` throws an exception, the method will ignore it and
     *             call `body` again, after interval`.

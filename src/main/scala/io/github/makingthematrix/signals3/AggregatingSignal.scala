@@ -58,7 +58,8 @@ object AggregatingSignal:
   */
 class AggregatingSignal[E, V](loader: () => Future[V], sourceStream: EventStream[E], updater: (V, E) => V)
                              (using ec: ExecutionContext = Threading.defaultContext)
-  extends Signal[V] with EventSubscriber[E] { self =>
+  extends Signal[V] with EventSubscriber[E]:
+  self =>
   private object valueMonitor
 
   private val loadId = new AtomicInteger(0)
@@ -89,4 +90,3 @@ class AggregatingSignal[E, V](loader: () => Future[V], sourceStream: EventStream
   override def onUnwire(): Unit =
     loadId.set(0)
     sourceStream.unsubscribe(this)
-}
