@@ -28,7 +28,7 @@ import scala.concurrent.duration.FiniteDuration
 
 final class GeneratorSignal[V](init    : V,
                                update  : V => V,
-                               interval: Either[FiniteDuration, V => Long],
+                               interval: FiniteDuration | (V => Long),
                                paused  : () => Boolean)
                               (using ec: ExecutionContext)
   extends Signal[V](Some(init)) with NoAutowiring:
@@ -36,8 +36,8 @@ final class GeneratorSignal[V](init    : V,
   private var closed = false
   private val beat =
     (interval match
-       case Left(intv)          => CancellableFuture.repeat(intv)
-       case Right(calcInterval) => CancellableFuture.repeatWithMod(() => calcInterval(currentValue.getOrElse(init)))
+       case intv: FiniteDuration      => CancellableFuture.repeat(intv)
+       case calcInterval: (V => Long) => CancellableFuture.repeatWithMod(() => calcInterval(currentValue.getOrElse(init)))
     ) {
       if !paused() then currentValue.foreach(v => publish(update(v), ec))
     }.onCancel {
@@ -79,7 +79,7 @@ object GeneratorSignal:
                interval: FiniteDuration,
                paused  : () => Boolean = () => false)
               (using ec: ExecutionContext = Threading.defaultContext): GeneratorSignal[V] =
-    new GeneratorSignal[V](init, update, Left(interval), paused)
+    new GeneratorSignal[V](init, update, interval, paused)
 
   /**
     * A utility method for easier creation of a generator sginal of "unfolding" values. The user provides the initial
@@ -101,7 +101,7 @@ object GeneratorSignal:
     */
   inline def unfold[V](init: V, interval: FiniteDuration)(body: V => V)
                       (using ec: ExecutionContext = Threading.defaultContext): GeneratorSignal[V] =
-    new GeneratorSignal[V](init, body, Left(interval), () => false)
+    new GeneratorSignal[V](init, body, interval, () => false)
 
   /**
     * A utility method for easier creation of a generator sginal of "unfolding" values. The user provides the initial
@@ -124,4 +124,9 @@ object GeneratorSignal:
     */
   inline def unfoldWithMod[V](init: V, interval: V => Long)(body: V => V)
                              (using ec: ExecutionContext = Threading.defaultContext): GeneratorSignal[V] =
+<<<<<<< Updated upstream
     new GeneratorSignal[V](init, body, Right(interval), () => false)
+=======
+    new GeneratorSignal[V](init, body, interval, () => false)
+
+>>>>>>> Stashed changes
