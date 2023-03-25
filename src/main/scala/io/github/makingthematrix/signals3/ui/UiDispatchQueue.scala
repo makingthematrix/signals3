@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.ui
 
-import io.github.makingthematrix.signals3.{DispatchQueue, EventContext, EventStream, Signal, Subscription}
+import io.github.makingthematrix.signals3.{DispatchQueue, EventContext, Stream, Signal, Subscription}
 
 /** This is a utility class to help you set up signals3 to transport events between the default execution context
   * (`Threading.defaultContext`) and other custom contexts, and a secondary execution context usually associated with GUI.
@@ -93,15 +93,15 @@ object UiDispatchQueue:
   def clearUi(): Unit =
     this._ui = Empty
 
-  /** An extension method to the `EventStream` class. You can use `eventStream.onUi { event => ... }` instead of
-    * `eventStream.foreach { event => ... }` to enforce the subscription to be run on the UI dispatch queue when
+  /** An extension method to the `Stream` class. You can use `Stream.onUi { event => ... }` instead of
+    * `Stream.foreach { event => ... }` to enforce the subscription to be run on the UI dispatch queue when
     * the default dispatch queue in the given code block is different.
     *
     * @param subscriber A subscriber function which consumes the event.
     * @param context The event context the subscription is assigned to.
     * @return A new `Subscription` to the signal.
     */
-  extension [E](stream: EventStream[E])
+  extension [E](stream: Stream[E])
     def onUi(subscriber: E => Unit)(using context: EventContext): Subscription = stream.on(_ui)(subscriber)
 
   /** An extension method to the `Signal` class. You can use `signal.onUi { value => ... }` instead of

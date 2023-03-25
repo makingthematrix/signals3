@@ -5,33 +5,31 @@ import scala.concurrent.ExecutionContext
 
 /** The usual entry point for publishing events.
   *
-  * Create a new source stream either using the default constructor or the `EventStream.apply[V]()` method. The source stream exposes
+  * Create a new source stream either using the default constructor or the `Stream.apply[V]()` method. The source stream exposes
   * methods you can use for publishing new events. Then you can combine it with other event streams and finally subscribe a function
   * to it which will receive the resulting events.
   *
   * @tparam E the type of the event
   */
-class SourceStream[E] extends EventStream[E]:
+final class SourceStream[E] extends Stream[E]:
   /** Publishes the event to all subscribers.
     *
-    * @see [[EventStream.publish]]
+    * @see [[Stream.publish]]
     *
-    * The original `publish` method of the [[EventStream]] class is `protected` to ensure that intermediate event streams - those created
-    * by methods like `map`, `flatMap`, `filter`, etc. - will not be used to directly publish events to them. The source stream
-    * exposes this method for public use.
-    *
+    *      The original `publish` method of the [[Stream]] class is `protected` to ensure that intermediate event streams - those created
+    *      by methods like `map`, `flatMap`, `filter`, etc. - will not be used to directly publish events to them. The source stream
+    *      exposes this method for public use.
     * @param event The event to be published.
     */
   override def publish(event: E): Unit = dispatch(event, None)
 
   /** An alias for the `publish` method with no explicit execution context. */
   @targetName("bang")
-  inline final def !(event: E): Unit = publish(event)
+  inline def !(event: E): Unit = publish(event)
 
   /** Publishes the event to all subscriber, using the given execution context.
     *
-    * @see [[EventStream.publish]]
-    *
+    * @see [[Stream.publish]]
     * @param event The event to be published.
     * @param ec The execution context used for dispatching. The default implementation ensures that if `ec` is the same as
     *           the execution context used to register the subscriber, the subscriber will be called immediately. Otherwise,
@@ -47,4 +45,4 @@ class SourceStream[E] extends EventStream[E]:
     * execution context the call will be synchronous. This may be desirable in some cases, but please use with caution.
     */
   @targetName("twobang")
-  inline final def !!(event: E)(using ec: ExecutionContext): Unit = publish(event, ec)
+  inline def !!(event: E)(using ec: ExecutionContext): Unit = publish(event, ec)

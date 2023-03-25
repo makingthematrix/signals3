@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3
 
 import Signal.SignalSubscriber
-
+import EventSource.NoAutowiring
 import scala.concurrent.ExecutionContext
 
 /** A signal holding an immutable value.

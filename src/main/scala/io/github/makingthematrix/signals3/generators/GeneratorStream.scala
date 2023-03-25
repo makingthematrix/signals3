@@ -1,12 +1,12 @@
 package io.github.makingthematrix.signals3.generators
 
-import io.github.makingthematrix.signals3.*
-
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Stream, Threading}
+import io.github.makingthematrix.signals3.EventSource.NoAutowiring
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 
 /**
-  * An event stream capable of generating new events in the given intervals of time, by repeatedly calling a function
+  * a stream capable of generating new events in the given intervals of time, by repeatedly calling a function
   * that returns a new event. The interval can be given either as `FiniteDuration` or as a function that will return
   * the number of milliseconds in `Long` every time it's called. The difference in returned types is there to avoid
   * repeated wrapping and unwrapping of milliseconds in `FiniteDuration` but it also means that it is now on the user
@@ -35,37 +35,34 @@ import scala.concurrent.duration.FiniteDuration
   */
 
 final class GeneratorStream[E](generate: () => E,
-                         interval: FiniteDuration | (() => Long),
-                         paused  : () => Boolean)
-                        (using ec: ExecutionContext)
-  extends EventStream[E] with NoAutowiring:
-  private var closed = false
+                               interval: FiniteDuration | (() => Long),
+                               paused  : () => Boolean)
+                              (using ec: ExecutionContext)
+  extends Stream[E] with Closeable with NoAutowiring:
 
   private val beat =
     (interval match
-       case intv: FiniteDuration => CancellableFuture.repeat(intv)
-       case intv: (() => Long)   => CancellableFuture.repeatWithMod(intv)
+       case intv: FiniteDuration => CloseableFuture.repeat(intv)
+       case intv: (() => Long)   => CloseableFuture.repeatVariant(intv)
     ) {
       if !paused() then publish(generate())
-    }.onCancel {
-      closed = true
     }
 
   /**
     * Closes the generator permanently. There will be no further calls to `generate`, `interval`, and `paused`.
     */
-  inline def close(): Unit = beat.cancel()
+  override inline def closeAndCheck(): Boolean = beat.closeAndCheck()
 
   /**
     * Checks if the generator is closed.
     * 
     * @return `true` if the generator was closed
     */
-  inline def isClosed: Boolean = closed
+  override inline def isClosed: Boolean = beat.isClosed
 
 object GeneratorStream:
   /**
-    * Creates an event stream which generates a new event every `interval` by calling the `generate` function which
+    * Creates a stream which generates a new event every `interval` by calling the `generate` function which
     * returns an event and publishing it.
     *
     * @param generate A function that creates a new event `E` every time it's called. The event will be resealed
@@ -78,7 +75,7 @@ object GeneratorStream:
     * @param ec       The execution context in which the generator works. Optional. 
     *                 By default it's `Threading.defaultContext`.
     * @tparam E       The type of the generated event.
-    * @return         A new generator event stream.
+    * @return         A new generator stream.
     */
   def apply[E](generate: () => E,
                interval: FiniteDuration,
@@ -87,10 +84,10 @@ object GeneratorStream:
     new GeneratorStream[E](generate, interval, paused)
 
   /**
-    * Creates an event stream which generates a new event every `interval` by calling the `generate` function which
+    * Creates a stream which generates a new event every `interval` by calling the `generate` function which
     * returns an event and publishing it.
     *
-    * @param interval Time to the next event generation (and to the first event as well). See [[CancellableFuture.repeat]]
+    * @param interval Time to the next event generation (and to the first event as well). See [[CloseableFuture.repeat]]
     *                 for explanation how Signals3 tries to ensure that intervals are constant.
     * @param body     A block of code that creates a new event `E` every time it's called. The event will be published
     *                 in the stream. If the code throws an exception, no event will be generated, but the generator 
@@ -98,16 +95,15 @@ object GeneratorStream:
     * @param ec       The execution context in which the generator works. Optional.
     *                 By default it's `Threading.defaultContext`.
     * @tparam E       The type of the generated event.
-    * @return         A generator event stream.
+    * @return         A generator stream.
     */
   inline def generate[E](interval: FiniteDuration)(body: => E)
                         (using ec: ExecutionContext = Threading.defaultContext): GeneratorStream[E] =
     new GeneratorStream[E](() => body, interval, () => false)
 
-
   /**
-    * Creates an event stream which generates a new event every `interval` by calling the `generate` function which
-    * returns an event and publishing it. In contrast to the simpler `generate` method, `generateWithMod` allows to
+    * Creates a stream which generates a new event every `interval` by calling the `generate` function which
+    * returns an event and publishing it. In contrast to the simpler `generate` method, `generateVariant` allows to
     * provide a function which will determine the interval.
     *
     * @param interval A function that returns the number of milliseconds to the next event generation (and to the first
@@ -118,30 +114,30 @@ object GeneratorStream:
     * @param ec       The execution context in which the generator works. Optional.
     *                 By default it's `Threading.defaultContext`.
     * @tparam E       The type of the generated event.
-    * @return         A generator event stream.
+    * @return         A generator stream.
     */
-  inline def generateWithMod[E](interval: () => Long)(body: => E)
+  inline def generateVariant[E](interval: () => Long)(body: => E)
                                (using ec: ExecutionContext = Threading.defaultContext): GeneratorStream[E] =
     new GeneratorStream[E](() => body, interval, () => false)
 
   /**
-    * Creates an event stream which publishes the same event every `interval`.
+    * Creates a stream which publishes the same event every `interval`.
     *
     * @param event    The event which will be published in the stream every `interval`
-    * @param interval Time to the next event generation (and to the first event as well). See [[CancellableFuture.repeat]]
+    * @param interval Time to the next event generation (and to the first event as well). See [[CloseableFuture.repeat]]
     *                 for explanation how Signals3 tries to ensure that intervals are constant.
     * @param ec       The execution context in which the generator works. Optional.
     *                 By default it's `Threading.defaultContext`.
     * @tparam E       The type of the generated event.
-    * @return         A generator event stream.
+    * @return         A generator stream.
     */
   inline def repeat[E](event: E, interval: FiniteDuration)
                       (using ec: ExecutionContext = Threading.defaultContext): GeneratorStream[E] =
     new GeneratorStream[E](() => event, interval, () => false)
 
   /**
-    * Creates an event stream which publishes the same event every given `interval`. In contrast to the simpler
-    * `repeat` method, `repeatWithMod` allows to provide a function which will determine the interval.
+    * Creates a stream which publishes the same event every given `interval`. In contrast to the simpler
+    * `repeat` method, `repeatVariant` allows to provide a function which will determine the interval.
     *
     * @param event    The event which will be published in the stream every `interval`.
     * @param interval A function that returns the number of milliseconds to the next event generation (and to the first
@@ -149,20 +145,20 @@ object GeneratorStream:
     * @param ec       The execution context in which the generator works. Optional.
     *                 By default it's `Threading.defaultContext`.
     * @tparam E The type of the generated event.
-    * @return A generator event stream.
+    * @return A generator stream.
     */
-  inline def repeatWithMod[E](event: E, interval: () => Long)
+  inline def repeatVariant[E](event: E, interval: () => Long)
                              (using ec: ExecutionContext = Threading.defaultContext): GeneratorStream[E] =
     new GeneratorStream[E](() => event, interval, () => false)
 
   /**
-    * A utility method that creates an event stream which publishes `Unit` every given `interval`.
+    * A utility method that creates a stream which publishes `Unit` every given `interval`.
     *
-    * @param interval Time to the next event generation (and to the first event as well). See [[CancellableFuture.repeat]]
+    * @param interval Time to the next event generation (and to the first event as well). See [[CloseableFuture.repeat]]
     *                 for explanation how Signals3 tries to ensure that intervals are constant.
     * @param ec       The execution context in which the generator works. Optional.
     *                 By default it's `Threading.defaultContext`.
-    * @return A generator event stream.
+    * @return A generator stream.
     */
   inline def heartbeat(interval: FiniteDuration)
                       (using ec: ExecutionContext = Threading.defaultContext): GeneratorStream[Unit] =

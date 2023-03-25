@@ -7,6 +7,7 @@ import testutils.*
 import scala.jdk.CollectionConverters.*
 import scala.concurrent.*
 import scala.concurrent.duration.*
+import scala.language.postfixOps
 
 class SignalSpec extends munit.FunSuite:
   private val eventContext = EventContext()
@@ -1001,3 +1002,31 @@ class SignalSpec extends munit.FunSuite:
     assert(waitForResult(source, false))
     assert(waitForResult(flipped, true))
   }
+
+  test("update the signal when a future is successfully completed") {
+    given dq: DispatchQueue = SerialDispatchQueue()
+
+    val promise = Promise[Int]()
+    val resPromise = Promise[Int]()
+
+    Signal.from(promise.future).onCurrent { event =>
+      assertEquals(event, 1)
+      resPromise.success(event)
+    }
+
+    testutils.withDelay(promise.success(1))
+
+    assertEquals(testutils.result(resPromise.future), 1)
+  }
+  
+  test("don't update the signal when a future is completed with a failure") {
+    val promise = Promise[Int]()
+    val resPromise = Promise[Int]()
+
+    Signal.from(promise.future).onCurrent { event => resPromise.success(event) }
+
+    promise.failure(new IllegalArgumentException)
+
+    assert(testutils.tryResult(resPromise.future)(using 1 seconds).isFailure)
+  }
+

@@ -1,318 +1,18 @@
 package io.github.makingthematrix.signals3
 
 import Signal.{SignalSubscriber, SignalSubscription}
+import ProxySignal.*
+
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.ref.WeakReference
 import scala.util.Try
 import scala.util.chaining.scalaUtilChainingOps
 
-object Signal:
-  private[signals3] trait SignalSubscriber:
-    // 'currentContext' is the context this method IS run in, NOT the context any subsequent methods SHOULD run in
-    protected[signals3] def changed(currentContext: Option[ExecutionContext]): Unit
-
-  final private class SignalSubscription[V](source:           Signal[V],
-                                            f:                V => Unit,
-                                            executionContext: Option[ExecutionContext] = None
-                                          )(using context: WeakReference[EventContext])
-    extends BaseSubscription(context) with SignalSubscriber:
-
-    override def changed(currentContext: Option[ExecutionContext]): Unit = synchronized {
-      source.value.foreach { event =>
-        if subscribed then
-          executionContext match
-            case Some(ec) if !currentContext.contains(ec) => Future(if subscribed then Try(f(event)))(ec)
-            case _ => f(event)
-      }
-    }
-
-    override protected[signals3] def onSubscribe(): Unit =
-      source.subscribe(this)
-      changed(None) // refresh the subscriber with current value
-
-    override protected[signals3] def onUnsubscribe(): Unit = source.unsubscribe(this)
-
-  final private val Empty = new ConstSignal[Any](None)
-
-  /** Creates a new [[SourceSignal]] of values of the type `V`. A usual entry point for the signals network.
-    * Starts uninitialized (its value is set to `None`).
-    *
-    * @tparam V The type of the values which can be published to the signal.
-    * @return A new signal of values of the type `V`.
-    */
-  def apply[V](): SourceSignal[V] = new SourceSignal[V](None)
-
-  /** Creates a new [[SourceSignal]] of values of the type `V`. A usual entry point for the signals network.
-    * Starts initialized to the given value.
-    *
-    * @param v The initial value in the signal.
-    * @tparam V The type of the values which can be published to the signal.
-    * @return A new signal of values of the type `V`.
-    */
-  def apply[V](v: V): SourceSignal[V] = new SourceSignal[V](Some(v))
-
-  /** Returns an empty, uninitialized, immutable signal of the given type.
-    * Empty signals can be used in flatMap chains to signalize (ha!) that for the given value of the parent signal all further
-    * computations should be withheld until the value changes to something more useful.
-    * ```
-    * val parentSignal = Signal[Int]()
-    * val thisSignal = parentSignal.flatMap {
-    *   case n if n > 2 => Signal.const(n * 2)
-    *   case _ => Signal.empty[Int]
-    * }
-    * thisSignal.foreach(println)
-    * ```
-    * Here, the function `println` will be called only for values > 2 published to `parentSignal`.
-    * Basically, you may think of empty signals as a way to build alternatives to `Signal.filter` and `Signal.collect` when
-    * you need more fine-grained control over conditions of propagating values.
-    *
-    * @see [[ConstSignal]]
-    *
-    * @tparam V The type of the value (used only in type-checking)
-    * @return A new empty signal.
-    */
-  inline def empty[V]: Signal[V] = Empty.asInstanceOf[Signal[V]]
-
-  /** Creates a [[ConstSignal]] initialized to the given value.
-    * Use a const signal for providing a source of an immutable value in the chain of signals. Subscribing to a const signal
-    * usually makes no sense, but they can be used in flatMaps in cases where the given value of the parent signal should
-    * result always in the same value. Using [[ConstSignal]] in such case should have some performance advantage over using
-    * a regular signal holding a (in theory mutable) value.
-    *
-    * @see [[ConstSignal]]
-    *
-    * @param v The immutable value held by the signal.
-    * @tparam V The type of the value.
-    * @return A new const signal initialized to the given value.
-    */
-  inline def const[V](v: V): Signal[V] = new ConstSignal[V](Some(v))
-
-  /** Creates a new signal by joining together the original signals of two different types of values, `A` and `B`.
-    * The resulting signal will hold a tuple of the original values and update every time one of them changes.
-    *
-    * Note this is *not* a method analogous to `EventStream.zip`. Here the parent signals can be of different type (`EventStream.zip`
-    * requires all parent streams to be of the same type) but on the other hand we're not able to zip an arbitrary number of signals.
-    * Also, the result value is a tuple, not just one event after another.
-    *
-    * Please also see `Signal.sequence` for a method which resembles `EventStream.zip` in a different way.
-    *
-    * @param s1 The first of the parent signals.
-    * @param s2 The second of the parent signals.
-    * @tparam A The type of the value of the first of parent signals.
-    * @tparam B The type of the value of the second of parent signals.
-    * @return A new signal its the value constructed as a tuple of values form the parent signals.
-    */
-  inline def zip[A, B](s1: Signal[A], s2: Signal[B]): Signal[(A, B)] = new Zip2Signal[A, B](s1, s2)
-
-  /** A version of the `zip` method joining three signals of different value types. */
-  inline def zip[A, B, C](s1: Signal[A], s2: Signal[B], s3: Signal[C]): Signal[(A, B, C)] = new Zip3Signal(s1, s2, s3)
-
-  /** A version of the `zip` method joining four signals of different value types. */
-  inline def zip[A, B, C, D](s1: Signal[A], s2: Signal[B], s3: Signal[C], s4: Signal[D]): Signal[(A, B, C, D)] = 
-    new Zip4Signal(s1, s2, s3, s4)
-
-  /** A version of the `zip` method joining five signals of different value types. */
-  inline def zip[A, B, C, D, E](s1: Signal[A], s2: Signal[B], s3: Signal[C], s4: Signal[D], s5: Signal[E]): Signal[(A, B, C, D, E)] =
-    new Zip5Signal(s1, s2, s3, s4, s5)
-
-  /** A version of the `zip` method joining six signals of different value types. */
-  inline def zip[A, B, C, D, E, F](s1: Signal[A], s2: Signal[B], s3: Signal[C], s4: Signal[D], s5: Signal[E], s6: Signal[F]): Signal[(A, B, C, D, E, F)] =
-    new Zip6Signal(s1, s2, s3, s4, s5, s6)
-
-  /** A generalization of the `orElse` method where the fallback (left) signal can have another value type.
-    * If the value of the main (right) signal is `R` and the value of the fallback (left) signal is `L`, the new signal will return
-    * an `Either[L, R]`. When the right signal is set, the value of the new signal will be `Right(r)`. When the right
-    * signal becomes empty, the value of the new signal will temporarily switch to `Left(l)` where `l` is the current value
-    * of the left signal. The moment the parent signal is set to a new value again, the new signal will switch back to
-    * `Right(r)`.
-    * Only when both signals are empty, the new signal will become empty too.
-    *
-    * @param left The signal providing the left value for the resulting signal. It works as a fallback if the right one is empty.
-    * @param right The signal providing the right value. This is the main signal. It has a priority over `left`.
-    * @tparam L The value type of the fallback (left) signal.
-    * @tparam R The value type of the main (right) signal.
-    * @return A new signal with the value being either the value of the main or the value of the fallback signal if the main is empty.
-    */
-  inline def either[L, R](left: Signal[L], right: Signal[R]): Signal[Either[L, R]] =
-    right.map(Right(_): Either[L, R]).orElse(left.map(Left.apply))
-
-  /** A utility method for creating a [[ThrottledSignal]] with the value of the given type and updated no more often than once
-    * during the given time interval. If changes to the value of the parent signal happen more often, some of them will be ignored.
-    *
-    * @see [[ThrottledSignal]]
-    * @param source The parent signal providing the original value.
-    * @param delay The time interval used for throttling.
-    * @tparam V The type of value in both the parent signal and the new one.
-    * @return A new throttled signal of the same value type as the parent.
-    */
-  inline def throttled[V](source: Signal[V], delay: FiniteDuration): Signal[V] = new ThrottledSignal(source, delay)
-
-  /** Creates a signal from an initial value, a list of parent signals, and a folding function. On initialization, and then on
-    * every change of value of any of the parent signals, the folding function will be called for the whole list and use
-    * the current values to produce a result, analogous to the `foldLeft` method in Scala collections.
-    *
-    * @param sources A variable arguments list of parent signals, all with values of the same type `V`.
-    * @param zero The initial value of the type `Z`.
-    * @param f A folding function which takes the value of the type `Z`, another value of the type `V`, and produces a new value
-    *          of the type `Z` again, so then it can use it in the next interation as its first argument, together with the current
-    *          value of the next of the parent signals.
-    * @tparam V The type of values in the parent streams.
-    * @tparam Z The type of the initial and result value of the new signal.
-    * @return A new signal of values of the type `Z`.
-    */
-  inline def foldLeft[V, Z](sources: Signal[V]*)(zero: Z)(f: (Z, V) => Z): Signal[Z] = new FoldLeftSignal[V, Z](sources: _*)(zero)(f)
-
-  /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
-    * The new signal's value will be `true` if both parent signals values are `true` - or `false` otherwise.
-    *
-    * @param s1 The first parent signal of the type `Boolean`.
-    * @param s2 The second parent signal of the type `Boolean`.
-    * @return A new signal of `Boolean`.
-    */
-  inline def and(s1: Signal[Boolean], s2: Signal[Boolean]): Signal[Boolean] = zip(s1, s2).map(_ && _)
-
-  /** Creates a `Signal[Boolean]` of an arbitrary number of parent signals of `Boolean`.
-    * The new signal's value will be `true` only if *all* parent signals values are `true`, and `false` if even one of them
-    * changes its value to `false`.
-    *
-    * @param sources  A variable arguments list of parent signals of the type `Boolean`.
-    * @return A new signal of `Boolean`.
-    */
-  inline def and(sources: Signal[Boolean]*): Signal[Boolean] = foldLeft[Boolean, Boolean](sources: _*)(true)(_ && _)
-
-
-  /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
-    * The new signal's value will be `true` if any of the parent signals values is `true` - or `false` otherwise.
-    *
-    * @param s1 The first parent signal of the type `Boolean`.
-    * @param s2 The second parent signal of the type `Boolean`.
-    * @return A new signal of `Boolean`.
-    */
-  inline def or(s1: Signal[Boolean], s2: Signal[Boolean]): Signal[Boolean] = zip(s1, s2).map(_ || _)
-
-  /** Creates a `Signal[Boolean]` of an arbitrary number of parent signals of `Boolean`.
-    * The new signal's value will be `true` if *any* of the parent signals values is `true`, and `false` only if all one of them
-    * change its value to `false`.
-    *
-    * @param sources  A variable arguments list of parent signals of the type `Boolean`.
-    * @return A new signal of `Boolean`.
-    */
-  inline def or(sources: Signal[Boolean]*): Signal[Boolean] = foldLeft[Boolean, Boolean](sources: _*)(false)(_ || _)
-
-  /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
-    * The new signal's value will be `true` if both parent signals values are `true` or if both are `false`.
-    * If only one of them is true, the result value will be `true`.
-    *
-    * @param s1 The first parent signal of the type `Boolean`.
-    * @param s2 The second parent signal of the type `Boolean`.
-    * @return A new signal of `Boolean`.
-    */
-  inline def xor(s1: Signal[Boolean], s2: Signal[Boolean]): Signal[Boolean] =
-    zip(s1, s2).map {
-      case (a, b) if a == b => false
-      case _                => true
-    }
-
-  /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
-    * The new signal's value will be `true` if any of the parent signals values is `false` - or `true` otherwise.
-    * This is a slightly faster version of `or(s1, s2).not`.
-    *
-    * @param s1 The first parent signal of the type `Boolean`.
-    * @param s2 The second parent signal of the type `Boolean`.
-    * @return A new signal of `Boolean`.
-    */
-  inline def nor(s1: Signal[Boolean], s2: Signal[Boolean]): Signal[Boolean] =
-    zip(s1, s2).map {
-      case (false, false) => true
-      case _              => false
-    }
-
-  /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
-    * The new signal's value will be `false` if both parent signals values are `true` - or `false` otherwise.
-    * This is a slightly faster version of `and(s1, s2).not`.
-    *
-    * @param s1 The first parent signal of the type `Boolean`.
-    * @param s2 The second parent signal of the type `Boolean`.
-    * @return A new signal of `Boolean`.
-    */
-  inline def nand(s1: Signal[Boolean], s2: Signal[Boolean]): Signal[Boolean] =
-    zip(s1, s2).map {
-      case (true, true) => false
-      case _            => true
-    }
-
-  /** Creates a signal of an arbitrary number of parent signals of the same value.
-    * The value of the new signal is the sequence of values of all parent signals in the same order.
-    * You can actually think of it as an analogous method to `EventStream.zip`.
-    *
-    * @param sources A variable arguments list of parent signals of the same type.
-    * @tparam V The type of the values in the parent signals.
-    * @return A new signal with its value being a sequence of current values of the parent signals.
-    */
-  def sequence[V](sources: Signal[V]*): Signal[Seq[V]] = new ProxySignal[Seq[V]](sources: _*):
-    override protected def computeValue(current: Option[Seq[V]]): Option[Seq[V]] =
-      val res = sources.map(_.value)
-      if res.exists(_.isEmpty) then None else Some(res.flatten)
-
-  /** Creates a new signal from a future.
-    * The signal will start uninitialized and initialize to its only, never again changing value if the future finishes with success.
-    * If the future fails, the signal will stay empty. The subscriber functions registered in this signal will be called in
-    * the given execution context if they don't explicitly specify the execution context they should be called in.
-    *
-    * Please note that in the typical case the subscriber functions probably will have it specified in what execution context
-    * they should be called, as this allows for better control about what code is called in what e.c. The e.c. specified here
-    * does *not* take precedent over the one specified in the subscription. Therefore, usually, it makes sense to use the overloaded
-    * version of this method which uses the default execution context.
-    *
-    * @see [[Threading]]
-    *
-    * @param future The future producing the first and only value for the signal.
-    * @param executionContext The execution context in which the subscriber functions will be called if not specified otherwise.
-    * @tparam V The type of the value produced by the future.
-    * @return A new signal which will hold the value produced by the future.
-    */
-  def from[V](future: Future[V], executionContext: ExecutionContext): Signal[V] =
-    new Signal[V]().tap { signal =>
-      future.foreach {
-        res => signal.set(Option(res), Some(executionContext))
-      }(executionContext)
-    }
-
-  /** A version of `from` using the default execution context as its second argument. */
-  inline def from[V](future: Future[V]): Signal[V] = from(future, Threading.defaultContext)
-
-  /** A version of `from` creating a signal from a cancellable future. */
-  inline def from[V](future: CancellableFuture[V], executionContext: ExecutionContext): Signal[V] = from(future.future, executionContext)
-
-  /** A version of `from` creating a signal from a cancellable future, and using the default execution context. */
-  inline def from[V](future: CancellableFuture[V]): Signal[V] = from(future.future, Threading.defaultContext)
-
-  /** Creates a new signal from an event stream and an initial value.
-    * The signal will be initialized to the initial value on its creation, and subscribe to the event stream.
-    * Subsequently, it will update the value as new events are published in the parent event stream.
-    *
-    * @param initial The initial value of the signal.
-    * @param source The parent event stream.
-    * @tparam V The type of both the initial value and the events in the parent stream.
-    * @return A new signal with the value of the type `V`.
-    */
-  inline def from[V](initial: V, source: EventStream[V]): Signal[V] = new EventStreamSignal[V](source, Option(initial))
-
-  /** Creates a new signal from an event stream.
-    * The signal will start uninitialized and subscribe to the parent event stream. Subsequently, it will update its value
-    * as new events are published in the parent event stream.
-    *
-    * @param source The parent event stream.
-    * @tparam V The type of the events in the parent stream.
-    * @return A new signal with the value of the type `V`.
-    */
-  inline def from[V](source: EventStream[V]): Signal[V] = new EventStreamSignal[V](source)
-
-/** A signal is an event stream with a cache.
+/** A signal is a stream with a cache.
   *
-  * Whereas an event stream holds no internal state and just passes on events it receives, a signal keeps the last value it received.
-  * A new subscriber function registered in an event stream will be called only when a new event is published.
+  * Whereas a stream holds no internal state and just passes on events it receives, a signal keeps the last value it received.
+  * A new subscriber function registered in a stream will be called only when a new event is published.
   * A new subscriber function registered in a signal will be called immediately (or as soon as possible on the given execution context)
   * with the current value of the signal (unless it's not initialized yet) and then again when the value changes.
   * A signal is also able to compare a new value published in it with the old one - the new value will be passed on only if
@@ -325,15 +25,15 @@ object Signal:
   * An signal of the type `V` dispatches values to all functions of the type `(V) => Unit` which were registered in
   * the signal as its subscribers. It provides a handful of methods which enable the user to create new signals by means of composing
   * the old ones, filtering them, etc., in a way similar to how the user can operate on standard collections, as well as to interact with
-  * Scala futures, cancellable futures, and event streams. Please note that by default a signal is not able to receive events from the outside -
+  * Scala futures, closeable futures, and event streams. Please note that by default a signal is not able to receive events from the outside -
   * that functionality belongs to [[SourceSignal]].
   *
-  * @see [[EventStream]]
-  *
+  * @see [[Stream]]
   * @param value The option of the last value published in the signal or `None` if the signal was not initialized yet.
   * @tparam V The type of the value held in the signal.
   */
-class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) extends EventSource[V, SignalSubscriber] { self =>
+class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) extends EventSource[V, SignalSubscriber]: 
+  self =>
   private object updateMonitor
 
   /** Updates the current value of the signal by applying a given function to it.
@@ -439,13 +139,13 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
   final def exists(f: V => Boolean)(using ec: ExecutionContext): Future[Boolean] =
     if empty then Future.successful(false) else future.map(f)(ec)
 
-  /** An event stream where each event is a tuple of the old and the new value of the signal.
+  /** a stream where each event is a tuple of the old and the new value of the signal.
     * Every time the value of the signal changes - actually changes to another value - the new value will be published in this stream,
     * together with the old value which you can use to check what exactly changed. The old value is wrapped in an `Option`: if the signal 
     * was previously empty, the old value will be `None` otherwise it will be `Some[V]`.
     * The values are guaranteed to differ, i.e. if you get a tuple `(Some(oldValue), newValue)` then `oldValue != newValue`.
     */
-  final lazy val onUpdated: EventStream[(Option[V], V)] = new EventStream[(Option[V], V)] with SignalSubscriber { stream =>
+  final lazy val onUpdated: Stream[(Option[V], V)] = new Stream[(Option[V], V)] with SignalSubscriber { stream =>
     private var prev = self.value
 
     override def changed(ec: Option[ExecutionContext]): Unit = stream.synchronized {
@@ -461,11 +161,11 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     override protected[signals3] def onUnwire(): Unit = self.unsubscribe(this)
   }
 
-  /** An event stream where each event is a new value of the signal.
+  /** a stream where each event is a new value of the signal.
     * Every time the value of the signal changes - actually changes to another value - the new value will be published in this stream.
     * The events in the stream are guaranteed to differ. It's not possible to get two equal events one after another.
     */
-  final lazy val onChanged: EventStream[V] = onUpdated.map(_._2)
+  final lazy val onChanged: Stream[V] = onUpdated.map(_._2)
 
   /** Zips this signal with the given one.
     *
@@ -488,10 +188,10 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     * and changes to empty otherwise. Also, if the initial value of the original signal does not satisfy the filter,
     * the new signal will start empty.
     *
-    * @param f A filtering function which for any value of the original signal returns true or false.
-    * @return A new signal of the same value type.
+    * @param predicate A filtering function which for any value of the original signal returns true or false.
+    * @return          A new signal of the same value type.
     */
-  final def filter(f: V => Boolean): Signal[V] = new FilterSignal(this, f)
+  final def filter(predicate: V => Boolean): Signal[V] = new FilterSignal(this, predicate)
 
   /** An alias for `filter` used in the for/yield notation.
     *
@@ -509,7 +209,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     * the condition. If the check fails, `resultSignal` will become empty until `signalA` or `signalB` changes its value and the new
     * pair fulfills the condition.
     */
-  inline final def withFilter(f: V => Boolean): Signal[V] = filter(f)
+  inline final def withFilter(predicate: V => Boolean): Signal[V] = filter(predicate)
 
   /** Assuming that the value of the signal can be interpreted as a boolean, this method returns a future
     * of type `Unit` which will finish with success when the value of the original signal is true.
@@ -544,10 +244,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     * @return A new signal with values of the type `Z`, holding the value produced from the original signal's value by
     *         the partial function, or empty if that's not possible.
     */
-  final def collect[Z](pf: PartialFunction[V, Z]): Signal[Z] = new ProxySignal[Z](this):
-    override protected def computeValue(current: Option[Z]): Option[Z] = self.value.flatMap { v =>
-      pf.andThen(Option(_)).applyOrElse(v, { (_: V) => Option.empty[Z] })
-    }
+  inline final def collect[Z](pf: PartialFunction[V, Z]): Signal[Z] = new CollectSignal[V, Z](this, pf)
 
   /** Creates a new `Signal[Z]` by mapping each event of the original `Signal[V]` to a new signal and switching to it.
     * The usual use case is to create a new complex signal not as one big entity with the value being the result of
@@ -566,7 +263,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     * @tparam Z The type of the value of the nested signal.
     * @return A new signal of the value type the same as the value type of the nested signal.
     */
-  inline final def flatten[Z](using evidence: V <:< Signal[Z]): Signal[Z] = flatMap(x => x)
+  inline final def flatten[Z](using V <:< Signal[Z]): Signal[Z] = flatMap(x => x)
 
   /** Creates a new signal with the value type `Z` where the change in the value is the result of applying a function
     * which combines the previous value of type `Z` with the changed value of the type `V` of the parent signal.
@@ -590,8 +287,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     * @tparam Y The value type of the new signal.
     * @return A new signal with the value of the type `Y`.
     */
-  final def combine[Z, Y](other: Signal[Z])(f: (V, Z) => Y): Signal[Y] = new ProxySignal[Y](this, other):
-    override protected def computeValue(current: Option[Y]): Option[Y] = for v <- self.value; z <- other.value yield f(v, z)
+  inline final def combine[Z, Y](other: Signal[Z])(f: (V, Z) => Y): Signal[Y] = new CombineSignal[V, Z, Y](this, other, f)
 
   /** Creates a throttled version of this signal which updates no more often than once during the given time interval.
     * If changes to the value of the parent signal happen more often, some of them will be ignored.
@@ -806,100 +502,308 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     */
   final inline def nand[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] =
     Signal.nand(this.asInstanceOf[Signal[Boolean]], other.asInstanceOf[Signal[Boolean]])
-}
 
-abstract class ProxySignal[V](sources: Signal[_]*) extends Signal[V] with SignalSubscriber:
-  override def onWire(): Unit =
-    sources.foreach(_.subscribe(this))
-    value = computeValue(value)
+object Signal:
+  private[signals3] trait SignalSubscriber:
+    // 'currentContext' is the context this method IS run in, NOT the context any subsequent methods SHOULD run in
+    protected[signals3] def changed(currentContext: Option[ExecutionContext]): Unit
 
-  override def onUnwire(): Unit = sources.foreach(_.unsubscribe(this))
+  final private class SignalSubscription[V](source:           Signal[V],
+                                            f:                V => Unit,
+                                            executionContext: Option[ExecutionContext] = None
+                                           )(using context: WeakReference[EventContext])
+    extends BaseSubscription(context) with SignalSubscriber:
 
-  override def changed(ec: Option[ExecutionContext]): Unit = update(computeValue, ec)
-
-  protected def computeValue(current: Option[V]): Option[V]
-
-final private[signals3] class ScanSignal[V, Z](source: Signal[V], zero: Z, f: (Z, V) => Z) extends ProxySignal[Z](source):
-  // @todo shouldn't this be in an overridden `onWire`?
-  value = Some(zero)
-
-  override protected def computeValue(current: Option[Z]): Option[Z] =
-    source.value.map { v => f(current.getOrElse(zero), v) }.orElse(current)
-
-final private[signals3] class FilterSignal[V](source: Signal[V], f: V => Boolean) extends ProxySignal[V](source):
-  override protected def computeValue(current: Option[V]): Option[V] = source.value.filter(f)
-
-final private[signals3] class MapSignal[V, Z](source: Signal[V], f: V => Z) extends ProxySignal[Z](source):
-  override protected def computeValue(current: Option[Z]): Option[Z] = source.value.map(f)
-
-final private[signals3] class Zip2Signal[A, B](s1: Signal[A], s2: Signal[B]) extends ProxySignal[(A, B)](s1, s2):
-  override protected def computeValue(current: Option[(A, B)]): Option[(A, B)] =
-    for a <- s1.value; b <- s2.value yield (a, b)
-
-final private[signals3] class Zip3Signal[A, B, C](s1: Signal[A], s2: Signal[B], s3: Signal[C])
-  extends ProxySignal[(A, B, C)](s1, s2, s3):
-  override protected def computeValue(current: Option[(A, B, C)]): Option[(A, B, C)] =
-    for
-      a <- s1.value
-      b <- s2.value
-      c <- s3.value
-    yield (a, b, c)
-
-final private[signals3] class Zip4Signal[A, B, C, D](s1: Signal[A], s2: Signal[B], s3: Signal[C], s4: Signal[D])
-  extends ProxySignal[(A, B, C, D)](s1, s2, s3, s4):
-  override protected def computeValue(current: Option[(A, B, C, D)]): Option[(A, B, C, D)] =
-    for
-      a <- s1.value
-      b <- s2.value
-      c <- s3.value
-      d <- s4.value
-    yield (a, b, c, d)
-
-final private[signals3] class Zip5Signal[A, B, C, D, E](s1: Signal[A], s2: Signal[B], s3: Signal[C], s4: Signal[D], s5: Signal[E])
-  extends ProxySignal[(A, B, C, D, E)](s1, s2, s3, s4, s5):
-  override protected def computeValue(current: Option[(A, B, C, D, E)]): Option[(A, B, C, D, E)] =
-    for
-      a <- s1.value
-      b <- s2.value
-      c <- s3.value
-      d <- s4.value
-      e <- s5.value
-    yield (a, b, c, d, e)
-
-final private[signals3] class Zip6Signal[A, B, C, D, E, F](s1: Signal[A], s2: Signal[B], s3: Signal[C], s4: Signal[D], s5: Signal[E], s6: Signal[F])
-  extends ProxySignal[(A, B, C, D, E, F)](s1, s2, s3, s4, s5, s6):
-  override protected def computeValue(current: Option[(A, B, C, D, E, F)]): Option[(A, B, C, D, E, F)] = for
-    a <- s1.value
-    b <- s2.value
-    c <- s3.value
-    d <- s4.value
-    e <- s5.value
-    f <- s6.value
-  yield (a, b, c, d, e, f)
-
-final private[signals3] class FoldLeftSignal[V, Z](sources: Signal[V]*)(v: Z)(f: (Z, V) => Z) extends ProxySignal[Z](sources: _*):
-  override protected def computeValue(current: Option[Z]): Option[Z] =
-    sources.foldLeft(Option(v))((mv, signal) => for a <- mv; b <- signal.value yield f(a, b))
-
-final private[signals3] class PartialUpdateSignal[V, Z](source: Signal[V])(select: V => Z) extends ProxySignal[V](source):
-  private object updateMonitor
-
-  override protected[signals3] def update(f: Option[V] => Option[V], currentContext: Option[ExecutionContext]): Boolean =
-    val changed = updateMonitor.synchronized {
-      val next = f(value)
-      if value.map(select) != next.map(select) then
-        value = next
-        true
-      else false
+    override def changed(currentContext: Option[ExecutionContext]): Unit = synchronized {
+      source.value.foreach { event =>
+        if subscribed then
+          executionContext match
+            case Some(ec) if !currentContext.contains(ec) => Future(if subscribed then Try(f(event)))(ec)
+            case _ => f(event)
+      }
     }
-    if changed then notifySubscribers(currentContext)
-    changed
 
-  override protected def computeValue(current: Option[V]): Option[V] = source.value
+    override protected[signals3] def onSubscribe(): Unit =
+      source.subscribe(this)
+      changed(None) // refresh the subscriber with current value
 
-final private[signals3] class EventStreamSignal[V](source: EventStream[V], v: Option[V] = None) extends Signal[V](v) {
-  private[this] lazy val subscription = source.onCurrent(publish)(using EventContext.Global)
+    override protected[signals3] def onUnsubscribe(): Unit = source.unsubscribe(this)
 
-  override protected def onWire(): Unit = subscription.enable()
-  override protected def onUnwire(): Unit = subscription.disable()
-}
+  final private val Empty = new ConstSignal[Any](None)
+
+  /** Creates a new [[SourceSignal]] of values of the type `V`. A usual entry point for the signals network.
+    * Starts uninitialized (its value is set to `None`).
+    *
+    * @tparam V The type of the values which can be published to the signal.
+    * @return A new signal of values of the type `V`.
+    */
+  def apply[V](): SourceSignal[V] = new SourceSignal[V](None)
+
+  /** Creates a new [[SourceSignal]] of values of the type `V`. A usual entry point for the signals network.
+    * Starts initialized to the given value.
+    *
+    * @param v The initial value in the signal.
+    * @tparam V The type of the values which can be published to the signal.
+    * @return A new signal of values of the type `V`.
+    */
+  def apply[V](v: V): SourceSignal[V] = new SourceSignal[V](Some(v))
+
+  /** Returns an empty, uninitialized, immutable signal of the given type.
+    * Empty signals can be used in flatMap chains to signalize (ha!) that for the given value of the parent signal all further
+    * computations should be withheld until the value changes to something more useful.
+    * ```
+    * val parentSignal = Signal[Int]()
+    * val thisSignal = parentSignal.flatMap {
+    *   case n if n > 2 => Signal.const(n * 2)
+    *   case _ => Signal.empty[Int]
+    * }
+    * thisSignal.foreach(println)
+    * ```
+    * Here, the function `println` will be called only for values > 2 published to `parentSignal`.
+    * Basically, you may think of empty signals as a way to build alternatives to `Signal.filter` and `Signal.collect` when
+    * you need more fine-grained control over conditions of propagating values.
+    *
+    * @see [[ConstSignal]]
+    *
+    * @tparam V The type of the value (used only in type-checking)
+    * @return A new empty signal.
+    */
+  inline def empty[V]: Signal[V] = Empty.asInstanceOf[Signal[V]]
+
+  /** Creates a [[ConstSignal]] initialized to the given value.
+    * Use a const signal for providing a source of an immutable value in the chain of signals. Subscribing to a const signal
+    * usually makes no sense, but they can be used in flatMaps in cases where the given value of the parent signal should
+    * result always in the same value. Using [[ConstSignal]] in such case should have some performance advantage over using
+    * a regular signal holding a (in theory mutable) value.
+    *
+    * @see [[ConstSignal]]
+    *
+    * @param v The immutable value held by the signal.
+    * @tparam V The type of the value.
+    * @return A new const signal initialized to the given value.
+    */
+  inline def const[V](v: V): Signal[V] = new ConstSignal[V](Some(v))
+
+  /** Creates a new signal by joining together the original signals of two different types of values, `A` and `B`.
+    * The resulting signal will hold a tuple of the original values and update every time one of them changes.
+    *
+    * Note this is *not* a method analogous to `Stream.zip`. Here the parent signals can be of different type (`Stream.zip`
+    * requires all parent streams to be of the same type) but on the other hand we're not able to zip an arbitrary number of signals.
+    * Also, the result value is a tuple, not just one event after another.
+    *
+    * @see `Signal.sequence` for a method which resembles `Stream.zip` in a different way.
+    *
+    * @param a The first of the parent signals.
+    * @param b The second of the parent signals.
+    * @tparam A The type of the value of the first of parent signals.
+    * @tparam B The type of the value of the second of parent signals.
+    * @return A new signal its the value constructed as a tuple of values form the parent signals.
+    */
+  inline def zip[A, B](a: Signal[A], b: Signal[B]): Signal[(A, B)] = new Zip2Signal[A, B](a, b)
+
+  /** A version of the `zip` method joining three signals of different value types. */
+  inline def zip[A, B, C](a: Signal[A], b: Signal[B], c: Signal[C]): Signal[(A, B, C)] = new Zip3Signal(a, b, c)
+
+  /** A version of the `zip` method joining four signals of different value types. */
+  inline def zip[A, B, C, D](a: Signal[A], b: Signal[B], c: Signal[C], d: Signal[D]): Signal[(A, B, C, D)] =
+    new Zip4Signal(a, b, c, d)
+
+  /** A version of the `zip` method joining five signals of different value types. */
+  inline def zip[A, B, C, D, E](a: Signal[A], 
+                                b: Signal[B], 
+                                c: Signal[C], 
+                                d: Signal[D], 
+                                e: Signal[E]): Signal[(A, B, C, D, E)] =
+    new Zip5Signal(a, b, c, d, e)
+
+  /** A version of the `zip` method joining six signals of different value types. */
+  inline def zip[A, B, C, D, E, F](a: Signal[A], 
+                                   b: Signal[B], 
+                                   c: Signal[C], 
+                                   d: Signal[D], 
+                                   e: Signal[E], 
+                                   f: Signal[F]): Signal[(A, B, C, D, E, F)] =
+    new Zip6Signal(a, b, c, d, e, f)
+
+  /** A generalization of the `orElse` method where the fallback (left) signal can have another value type.
+    * If the value of the main (right) signal is `R` and the value of the fallback (left) signal is `L`, the new signal will return
+    * an `Either[L, R]`. When the right signal is set, the value of the new signal will be `Right(r)`. When the right
+    * signal becomes empty, the value of the new signal will temporarily switch to `Left(l)` where `l` is the current value
+    * of the left signal. The moment the parent signal is set to a new value again, the new signal will switch back to
+    * `Right(r)`.
+    * Only when both signals are empty, the new signal will become empty too.
+    *
+    * @param left The signal providing the left value for the resulting signal. It works as a fallback if the right one is empty.
+    * @param right The signal providing the right value. This is the main signal. It has a priority over `left`.
+    * @tparam L The value type of the fallback (left) signal.
+    * @tparam R The value type of the main (right) signal.
+    * @return A new signal with the value being either the value of the main or the value of the fallback signal if the main is empty.
+    */
+  inline def either[L, R](left: Signal[L], right: Signal[R]): Signal[Either[L, R]] =
+    right.map(Right(_): Either[L, R]).orElse(left.map(Left.apply))
+
+  /** A utility method for creating a [[ThrottledSignal]] with the value of the given type and updated no more often than once
+    * during the given time interval. If changes to the value of the parent signal happen more often, some of them will be ignored.
+    *
+    * @see [[ThrottledSignal]]
+    * @param source The parent signal providing the original value.
+    * @param delay The time interval used for throttling.
+    * @tparam V The type of value in both the parent signal and the new one.
+    * @return A new throttled signal of the same value type as the parent.
+    */
+  inline def throttled[V](source: Signal[V], delay: FiniteDuration): Signal[V] = new ThrottledSignal(source, delay)
+
+  /** Creates a signal from an initial value, a list of parent signals, and a folding function. On initialization, and then on
+    * every change of value of any of the parent signals, the folding function will be called for the whole list and use
+    * the current values to produce a result, analogous to the `foldLeft` method in Scala collections.
+    *
+    * @param sources A variable arguments list of parent signals, all with values of the same type `V`.
+    * @param zero The initial value of the type `Z`.
+    * @param f A folding function which takes the value of the type `Z`, another value of the type `V`, and produces a new value
+    *          of the type `Z` again, so then it can use it in the next interation as its first argument, together with the current
+    *          value of the next of the parent signals.
+    * @tparam V The type of values in the parent streams.
+    * @tparam Z The type of the initial and result value of the new signal.
+    * @return A new signal of values of the type `Z`.
+    */
+  inline def foldLeft[V, Z](sources: Signal[V]*)(zero: Z)(f: (Z, V) => Z): Signal[Z] = new FoldLeftSignal[V, Z](sources: _*)(zero)(f)
+
+  /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
+    * The new signal's value will be `true` if both parent signals values are `true` - or `false` otherwise.
+    *
+    * @todo All boolean logic methods work now on `zip` + map`. They can be refactore to use `combine` instead..
+    *
+    * @param a The first parent signal of the type `Boolean`.
+    * @param b The second parent signal of the type `Boolean`.
+    * @return A new signal of `Boolean`.
+    */
+  inline def and(a: Signal[Boolean], b: Signal[Boolean]): Signal[Boolean] = zip(a, b).map(_ && _)
+
+  /** Creates a `Signal[Boolean]` of an arbitrary number of parent signals of `Boolean`.
+    * The new signal's value will be `true` only if *all* parent signals values are `true`, and `false` if even one of them
+    * changes its value to `false`.
+    *
+    * @param sources  A variable arguments list of parent signals of the type `Boolean`.
+    * @return A new signal of `Boolean`.
+    */
+  inline def and(sources: Signal[Boolean]*): Signal[Boolean] = foldLeft[Boolean, Boolean](sources: _*)(true)(_ && _)
+
+  /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
+    * The new signal's value will be `true` if any of the parent signals values is `true` - or `false` otherwise.
+    *
+    * @param a The first parent signal of the type `Boolean`.
+    * @param b The second parent signal of the type `Boolean`.
+    * @return A new signal of `Boolean`.
+    */
+  inline def or(a: Signal[Boolean], b: Signal[Boolean]): Signal[Boolean] = zip(a, b).map(_ || _)
+
+  /** Creates a `Signal[Boolean]` of an arbitrary number of parent signals of `Boolean`.
+    * The new signal's value will be `true` if *any* of the parent signals values is `true`, and `false` only if all one of them
+    * change its value to `false`.
+    *
+    * @param sources  A variable arguments list of parent signals of the type `Boolean`.
+    * @return A new signal of `Boolean`.
+    */
+  inline def or(sources: Signal[Boolean]*): Signal[Boolean] = foldLeft[Boolean, Boolean](sources: _*)(false)(_ || _)
+
+  /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
+    * The new signal's value will be `true` if both parent signals values are `true` or if both are `false`.
+    * If only one of them is true, the result value will be `true`.
+    *
+    * @param a The first parent signal of the type `Boolean`.
+    * @param b The second parent signal of the type `Boolean`.
+    * @return A new signal of `Boolean`.
+    */
+  inline def xor(a: Signal[Boolean], b: Signal[Boolean]): Signal[Boolean] =
+    zip(a, b).map {
+      case (a, b) if a == b => false
+      case _                => true
+    }
+
+  /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
+    * The new signal's value will be `true` if any of the parent signals values is `false` - or `true` otherwise.
+    * This is a slightly faster version of `or(a, b).not`.
+    *
+    * @param a The first parent signal of the type `Boolean`.
+    * @param b The second parent signal of the type `Boolean`.
+    * @return A new signal of `Boolean`.
+    */
+  inline def nor(a: Signal[Boolean], b: Signal[Boolean]): Signal[Boolean] =
+    zip(a, b).map {
+      case (false, false) => true
+      case _              => false
+    }
+
+  /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
+    * The new signal's value will be `false` if both parent signals values are `true` - or `false` otherwise.
+    * This is a slightly faster version of `and(a, b).not`.
+    *
+    * @param a The first parent signal of the type `Boolean`.
+    * @param b The second parent signal of the type `Boolean`.
+    * @return A new signal of `Boolean`.
+    */
+  inline def nand(a: Signal[Boolean], b: Signal[Boolean]): Signal[Boolean] =
+    zip(a, b).map {
+      case (true, true) => false
+      case _            => true
+    }
+
+  /** Creates a signal of an arbitrary number of parent signals of the same value.
+    * The value of the new signal is the sequence of values of all parent signals in the same order.
+    * You can actually think of it as an analogous method to `Stream.zip`.
+    * 
+    * @see [[Stream]] `.zip` method
+    *
+    * @param sources A variable arguments list of parent signals of the same type.
+    * @tparam V The type of the values in the parent signals.
+    * @return A new signal with its value being a sequence of current values of the parent signals.
+    */
+  inline def sequence[V](sources: Signal[V]*): Signal[Seq[V]] = new SequenceSignal[V](sources: _*)
+
+  /** Creates a new signal from a future.
+    * The signal will start uninitialized and initialize to its only, never again changing value if the future finishes with success.
+    * If the future fails, the signal will stay empty. The subscriber functions registered in this signal will be called in
+    * the given execution context if they don't explicitly specify the execution context they should be called in.
+    *
+    * Please note that in the typical case the subscriber functions probably will have it specified in what execution context
+    * they should be called, as this allows for better control about what code is called in what e.c. The e.c. specified here
+    * does *not* take precedent over the one specified in the subscription. Therefore, usually, it makes sense to use the overloaded
+    * version of this method which uses the default execution context.
+    *
+    * @see [[Threading]]
+    *
+    * @param future The future producing the first and only value for the signal.
+    * @param executionContext The execution context in which the subscriber functions will be called if not specified otherwise.
+    * @tparam V The type of the value produced by the future.
+    * @return A new signal which will hold the value produced by the future.
+    */
+  def from[V](future: Future[V], executionContext: ExecutionContext): Signal[V] =
+    new Signal[V]().tap { signal =>
+      future.foreach {
+        res => signal.set(Option(res), Some(executionContext))
+      }(executionContext)
+    }
+
+  /** A version of `from` using the default execution context as its second argument. */
+  inline def from[V](future: Future[V]): Signal[V] = from(future, Threading.defaultContext)
+
+  /** Creates a new signal from a stream and an initial value.
+    * The signal will be initialized to the initial value on its creation, and subscribe to the stream.
+    * Subsequently, it will update the value as new events are published in the parent stream.
+    *
+    * @param initial The initial value of the signal.
+    * @param source The parent stream.
+    * @tparam V The type of both the initial value and the events in the parent stream.
+    * @return A new signal with the value of the type `V`.
+    */
+  inline def from[V](initial: V, source: Stream[V]): Signal[V] = new StreamSignal[V](source, Option(initial))
+
+  /** Creates a new signal from a stream.
+    * The signal will start uninitialized and subscribe to the parent stream. Subsequently, it will update its value
+    * as new events are published in the parent stream.
+    *
+    * @param source The parent stream.
+    * @tparam V The type of the events in the parent stream.
+    * @return A new signal with the value of the type `V`.
+    */
+  inline def from[V](source: Stream[V]): Signal[V] = new StreamSignal[V](source)

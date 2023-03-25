@@ -9,7 +9,7 @@ class AggregatingSignalSpec extends munit.FunSuite:
 
   test("new aggregator, no subscribers") {
     val promise = Promise[Seq[Int]]()
-    val updater = EventStream[String]()
+    val updater = Stream[String]()
 
     val as = new AggregatingSignal[String, Seq[Int]](
       () => promise.future,
@@ -27,7 +27,7 @@ class AggregatingSignalSpec extends munit.FunSuite:
 
   test("one subscriber") {
     val promise = Promise[Seq[Int]]()
-    val updater = EventStream[String]()
+    val updater = Stream[String]()
 
     val as = new AggregatingSignal[String, Seq[Int]](
       () => promise.future,
@@ -64,7 +64,7 @@ class AggregatingSignalSpec extends munit.FunSuite:
   test("events while subscribed but still loading") {
     val promise = Promise[Seq[Int]]()
     def loader() = promise.future
-    val updater = EventStream[String]()
+    val updater = Stream[String]()
 
     val as = new AggregatingSignal[String, Seq[Int]](
       loader _,
@@ -97,7 +97,7 @@ class AggregatingSignalSpec extends munit.FunSuite:
   test("reload on re-wire"){
     var promise = Promise[Seq[Int]]()
     def loader() = promise.future
-    val updater = EventStream[String]()
+    val updater = Stream[String]()
 
     val as = new AggregatingSignal[String, Seq[Int]](
       loader _,
