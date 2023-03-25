@@ -86,7 +86,7 @@ object Signal:
     * @tparam V The type of the value.
     * @return A new const signal initialized to the given value.
     */
-  def const[V](v: V): Signal[V] = new ConstSignal[V](Some(v))
+  inline def const[V](v: V): Signal[V] = new ConstSignal[V](Some(v))
 
   /** Creates a new signal by joining together the original signals of two different types of values, `A` and `B`.
     * The resulting signal will hold a tuple of the original values and update every time one of them changes.
