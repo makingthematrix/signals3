@@ -33,17 +33,25 @@ import scala.concurrent.duration.FiniteDuration
   * @param ec       The execution context in which the generator works.
   * @tparam E       The type of the generated event.
   */
+<<<<<<< Updated upstream
 final class GeneratorStream[E](generate: () => E,
                                interval: Either[FiniteDuration, () => Long],
                                paused  : () => Boolean)
                               (using ec: ExecutionContext)
   extends EventStream[E] with NoAutowiring:
+=======
+class GeneratorStream[E](generate: () => E,
+                         interval: FiniteDuration | (() => Long),
+                         paused  : () => Boolean)
+                        (using ec: ExecutionContext)
+  extends EventStream[E] with Closeable with NoAutowiring:
+>>>>>>> Stashed changes
   private var closed = false
 
   private val beat =
     (interval match
-       case Left(intv)          => CancellableFuture.repeat(intv)
-       case Right(calcInterval) => CancellableFuture.repeatWithMod(calcInterval)
+       case intv: FiniteDuration       => CancellableFuture.repeat(intv)
+       case calcInterval: (() => Long) => CancellableFuture.repeatWithMod(calcInterval)
     ) {
       if !paused() then publish(generate())
     }.onCancel {
@@ -83,7 +91,7 @@ object GeneratorStream:
                interval: FiniteDuration,
                paused  : () => Boolean = () => false)
               (using ec: ExecutionContext = Threading.defaultContext): GeneratorStream[E] =
-    new GeneratorStream[E](generate, Left(interval), paused)
+    new GeneratorStream[E](generate, interval, paused)
 
   /**
     * Creates an event stream which generates a new event every `interval` by calling the `generate` function which
@@ -101,7 +109,7 @@ object GeneratorStream:
     */
   inline def generate[E](interval: FiniteDuration)(body: => E)
                         (using ec: ExecutionContext = Threading.defaultContext): GeneratorStream[E] =
-    new GeneratorStream[E](() => body, Left(interval), () => false)
+    new GeneratorStream[E](() => body, interval, () => false)
 
 
   /**
@@ -121,7 +129,7 @@ object GeneratorStream:
     */
   inline def generateWithMod[E](interval: () => Long)(body: => E)
                                (using ec: ExecutionContext = Threading.defaultContext): GeneratorStream[E] =
-    new GeneratorStream[E](() => body, Right(interval), () => false)
+    new GeneratorStream[E](() => body, interval, () => false)
 
   /**
     * Creates an event stream which publishes the same event every `interval`.
@@ -136,7 +144,7 @@ object GeneratorStream:
     */
   inline def repeat[E](event: E, interval: FiniteDuration)
                       (using ec: ExecutionContext = Threading.defaultContext): GeneratorStream[E] =
-    new GeneratorStream[E](() => event, Left(interval), () => false)
+    new GeneratorStream[E](() => event, interval, () => false)
 
   /**
     * Creates an event stream which publishes the same event every given `interval`. In contrast to the simpler
@@ -152,7 +160,7 @@ object GeneratorStream:
     */
   inline def repeatWithMod[E](event: E, interval: () => Long)
                              (using ec: ExecutionContext = Threading.defaultContext): GeneratorStream[E] =
-    new GeneratorStream[E](() => event, Right(interval), () => false)
+    new GeneratorStream[E](() => event, interval, () => false)
 
   /**
     * A utility method that creates an event stream which publishes `Unit` every given `interval`.
