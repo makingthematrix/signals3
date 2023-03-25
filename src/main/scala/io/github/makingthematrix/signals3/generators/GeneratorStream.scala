@@ -33,25 +33,18 @@ import scala.concurrent.duration.FiniteDuration
   * @param ec       The execution context in which the generator works.
   * @tparam E       The type of the generated event.
   */
-<<<<<<< Updated upstream
+
 final class GeneratorStream[E](generate: () => E,
-                               interval: Either[FiniteDuration, () => Long],
-                               paused  : () => Boolean)
-                              (using ec: ExecutionContext)
-  extends EventStream[E] with NoAutowiring:
-=======
-class GeneratorStream[E](generate: () => E,
                          interval: FiniteDuration | (() => Long),
                          paused  : () => Boolean)
                         (using ec: ExecutionContext)
-  extends EventStream[E] with Closeable with NoAutowiring:
->>>>>>> Stashed changes
+  extends EventStream[E] with NoAutowiring:
   private var closed = false
 
   private val beat =
     (interval match
-       case intv: FiniteDuration       => CancellableFuture.repeat(intv)
-       case calcInterval: (() => Long) => CancellableFuture.repeatWithMod(calcInterval)
+       case intv: FiniteDuration => CancellableFuture.repeat(intv)
+       case intv: (() => Long)   => CancellableFuture.repeatWithMod(intv)
     ) {
       if !paused() then publish(generate())
     }.onCancel {
