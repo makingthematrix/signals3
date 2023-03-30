@@ -513,7 +513,10 @@ object CloseableFuture:
       last = now
       intervalMillis - (error / 2L) - 1L
 
-    repeatVariant(calcInterval)(body)
+    if intervalMillis <= 0L then
+      successful(Try(body))
+    else
+      repeatVariant(calcInterval)(body)
 
   /** Creates an empty closeable future which will repeat the mapped computation until closed. At creation,
     * and then after each execution, the c.f. will call the `interval` function to get the `FiniteDuration` after which
@@ -522,32 +525,26 @@ object CloseableFuture:
     * will start as scheduled, but the old one will continue. The ability to close the old one will be lost,
     * as the reference will from now on point to the new execution.
     *
-    * @todo The logic for interval <= 0L is wrong. This version, with one call to `successful` must be moved to `repeat`
-    *       with constant interval. In case of variable interval, it's possible that one interval <= 0L will occur.
-    *       The task should be then performed immediately, and then another interval should be computer.
-    *
     * @param interval The function returning the delay to the first and then to each next execution.
     * @param body A task repeated every `interval`. If `body` throws an exception, the method will ignore it and
     *             call `body` again, after `interval`.
     * @return A closeable future representing the whole process.
     */
   final def repeatVariant(interval: () => Long)(body: => Unit)(using ec: ExecutionContext = Threading.defaultContext): CloseableFuture[Unit] =
-    val intv = interval()
-    if intv <= 0L then successful(Try(body))
-    else
-      new ActuallyCloseable(Promise[Unit]()):
-        inline def sched(t: Long): TimerTask = schedule(() => { Try(body); startNewTimeoutLoop() }, t)
-        @volatile private var closed: Boolean = false
-        @volatile private var task: TimerTask = sched(intv)
+    new ActuallyCloseable(Promise[Unit]()):
+      inline def sched(t: Long): TimerTask = schedule(() => { Try(body); startNewTimeoutLoop() }, t)
 
-        private def startNewTimeoutLoop(): Unit =
-          if !closed then
-            task = sched(interval())
+      @volatile private var closed: Boolean = false
+      @volatile private var task: TimerTask = sched(interval())
 
-        override def closeAndCheck(): Boolean =
-          task.cancel()
-          closed = true
-          super.closeAndCheck()
+      private def startNewTimeoutLoop(): Unit =
+        if !closed then
+          task = sched(interval())
+
+      override def closeAndCheck(): Boolean =
+        task.cancel()
+        closed = true
+        super.closeAndCheck()
 
   private val timer: Timer = new Timer()
 
@@ -555,7 +552,7 @@ object CloseableFuture:
     new TimerTask {
       override def run(): Unit = f()
     }.tap {
-      timer.schedule(_, delay)
+      timer.schedule(_, if delay > 0L then delay else 1L)
     }
 
   /** A utility method that combines `delay` with `map`.
