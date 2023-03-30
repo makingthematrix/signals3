@@ -35,21 +35,17 @@ object Transformers:
     */
   trait Closeability(sources: Closeable*) extends Closeable:
     private[this] var callOnClose: List[() => Unit] = Nil
-    @volatile private[this] var inClosing = false
+    @volatile private[this] var open = sources.length
 
     sources.foreach(_.onClose {
-      if !inClosing && isClosed then callOnClose.foreach(_())
+      synchronized {
+        open -= 1
+        if open == 0 then callOnClose.foreach(_())
+      }
     })
 
     final override def closeAndCheck(): Boolean =
-      inClosing = true
-      try
-        sources.map(_.closeAndCheck()).forall(p => p).tap {
-          case true  => callOnClose.foreach(_())
-          case false =>
-        }
-      finally
-        inClosing = false
+      sources.map(_.closeAndCheck()).forall(p => p)
 
     final override def isClosed: Boolean = sources.forall(_.isClosed)
 

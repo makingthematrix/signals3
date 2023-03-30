@@ -426,3 +426,113 @@ class TransformersSpec extends munit.FunSuite:
     assert(signal.isClosed)
     assert(cFuture.isClosed)
   }
+
+  test("Transformed stream calls onClose exactly once") {
+    val original = GeneratorStream.heartbeat(200.millis)
+    val mapped = Transformers.map(original)(_ => "foo")
+
+    val isClosed = Signal(0)
+    mapped.onClose { isClosed.mutate(_ + 1)  }
+
+    mapped.close()
+    awaitAllTasks
+    waitForResult(isClosed, 1)
+  }
+
+  test("Original stream calls onClose exactly once") {
+    val original = GeneratorStream.heartbeat(200.millis)
+    val mapped = Transformers.map(original)(_ => "foo")
+
+    val isClosed = Signal(0)
+    original.onClose { isClosed.mutate(_ + 1) }
+
+    mapped.close()
+
+    awaitAllTasks
+    waitForResult(isClosed, 1)
+  }
+
+  test("Closing the original stream calls onClose on the transformed one") {
+    val original = GeneratorStream.heartbeat(200.millis)
+    val mapped = Transformers.map(original)(_ => "foo")
+
+    val isClosed = Signal(0)
+    mapped.onClose { isClosed.mutate(_ + 1) }
+
+    original.close()
+
+    awaitAllTasks
+    waitForResult(isClosed, 1)
+    assert(original.isClosed)
+    assert(mapped.isClosed)
+  }
+
+  test("In a zipped stream, closing the transformed one closes all originals") {
+    val original1 = GeneratorStream.heartbeat(200.millis)
+    val original2 = GeneratorStream.heartbeat(300.millis)
+    val zipped = Transformers.zip(original1, original2)
+
+    zipped.close()
+
+    awaitAllTasks
+    assert(zipped.isClosed)
+    assert(original1.isClosed)
+    assert(original2.isClosed)
+  }
+
+  test("In a zipped stream, closing the transformed one closes all originals") {
+    val original1 = GeneratorStream.heartbeat(200.millis)
+    val original2 = GeneratorStream.heartbeat(300.millis)
+    val zipped = Transformers.zip(original1, original2)
+
+    zipped.close()
+
+    awaitAllTasks
+    assert(zipped.isClosed)
+    assert(original1.isClosed)
+    assert(original2.isClosed)
+  }
+
+  test("In a zipped stream, closing the transformed one calls all onClose") {
+    val isClosed = Signal(0)
+    val original1 = GeneratorStream.heartbeat(200.millis)
+    original1.onClose { isClosed.mutate(_ + 1) }
+    val original2 = GeneratorStream.heartbeat(300.millis)
+    original2.onClose { isClosed.mutate(_ + 1) }
+    val zipped = Transformers.zip(original1, original2)
+    zipped.onClose { isClosed.mutate(_ + 1) }
+
+    zipped.close()
+
+    awaitAllTasks
+    waitForResult(isClosed, 3)
+    assert(zipped.isClosed)
+    assert(original1.isClosed)
+    assert(original2.isClosed)
+  }
+
+  test("In a zipped stream, closing the original ones closes the transformed ones too") {
+    val isClosed = Signal(0)
+    val original1 = GeneratorStream.heartbeat(200.millis)
+    original1.onClose { isClosed.mutate(_ + 1) }
+    val original2 = GeneratorStream.heartbeat(300.millis)
+    original2.onClose { isClosed.mutate(_ + 1) }
+    val zipped = Transformers.zip(original1, original2)
+    zipped.onClose { isClosed.mutate(_ + 1) }
+
+    original1.close()
+
+    awaitAllTasks
+    waitForResult(isClosed, 1)
+    assert(original1.isClosed)
+    assert(!original2.isClosed)
+    assert(!zipped.isClosed)
+
+    original2.close()
+
+    awaitAllTasks
+    waitForResult(isClosed, 3)
+    assert(original1.isClosed)
+    assert(original2.isClosed)
+    assert(zipped.isClosed)
+  }
