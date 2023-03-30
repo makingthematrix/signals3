@@ -23,19 +23,33 @@ import scala.util.chaining.scalaUtilChainingOps
   * which you pass to the transformer as the first argument.
   *
   * @note These methods create closeable streams and signals that are meant to replace the original ones. If you keep
-  *       references to both the original stream/signal and the transformed one, and you will e.g. close the original
-  *       stream/signal, but not the transformed one, it may cause unintended behaviour.
+  *       references to both the original stream/signal/c-future and the transformed one, and you will e.g. close
+  *       the original, but not the transformed, it may cause unintended behaviour.
   *
   * @see For an example how `Transformers` can be used, see `GeneratorSignal.unfold`.
   */
 object Transformers:
+  /**
+    * Encapsulates logic for closing original streams/signals/c-futures, checking if they are closed, and calling
+    * the registered `onClose` code (but only once, not once per the original source).
+    */
   trait Closeability(sources: Closeable*) extends Closeable:
     private[this] var callOnClose: List[() => Unit] = Nil
+    @volatile private[this] var inClosing = false
 
-    final override def closeAndCheck(): Boolean = sources.map(_.closeAndCheck()).forall(p => p).tap {
-      case true  => callOnClose.foreach(_())
-      case false =>
-    }
+    sources.foreach(_.onClose {
+      if !inClosing && isClosed then callOnClose.foreach(_())
+    })
+
+    final override def closeAndCheck(): Boolean =
+      inClosing = true
+      try
+        sources.map(_.closeAndCheck()).forall(p => p).tap {
+          case true  => callOnClose.foreach(_())
+          case false =>
+        }
+      finally
+        inClosing = false
 
     final override def isClosed: Boolean = sources.forall(_.isClosed)
 
@@ -179,26 +193,26 @@ object Transformers:
 
   /** A version of the `.zip` method joining four closeable signals of different value types. */
   inline def zip[A, B, C, D](a: CloseableSignal[A],
-                      b: CloseableSignal[B],
-                      c: CloseableSignal[C],
-                      d: CloseableSignal[D]): CloseableSignal[(A, B, C, D)] =
+                             b: CloseableSignal[B],
+                             c: CloseableSignal[C],
+                             d: CloseableSignal[D]): CloseableSignal[(A, B, C, D)] =
     new Zip4Signal[A, B, C, D](a, b, c, d) with Closeability(a, b, c, d)
 
   /** A version of the `.zip` method joining five closeable signals of different value types. */
   inline def zip[A, B, C, D, E](a: CloseableSignal[A],
-                         b: CloseableSignal[B],
-                         c: CloseableSignal[C],
-                         d: CloseableSignal[D],
-                         e: CloseableSignal[E]): CloseableSignal[(A, B, C, D, E)] =
+                                b: CloseableSignal[B],
+                                c: CloseableSignal[C],
+                                d: CloseableSignal[D],
+                                e: CloseableSignal[E]): CloseableSignal[(A, B, C, D, E)] =
     new Zip5Signal[A, B, C, D, E](a, b, c, d, e) with Closeability(a, b, c, d, e)
 
   /** A version of the `.zip` method joining six closeable signals of different value types. */
   inline def zip[A, B, C, D, E, F](a: CloseableSignal[A],
-                            b: CloseableSignal[B],
-                            c: CloseableSignal[C],
-                            d: CloseableSignal[D],
-                            e: CloseableSignal[E],
-                            f: CloseableSignal[F]): CloseableSignal[(A, B, C, D, E, F)] =
+                                   b: CloseableSignal[B],
+                                   c: CloseableSignal[C],
+                                   d: CloseableSignal[D],
+                                   e: CloseableSignal[E],
+                                   f: CloseableSignal[F]): CloseableSignal[(A, B, C, D, E, F)] =
     new Zip6Signal[A, B, C, D, E, F](a, b, c, d, e, f) with Closeability(a, b, c, d, e, f)
 
   /**
@@ -264,22 +278,6 @@ object Transformers:
     new Signal[V]() with Closeability(cFuture).tap { signal =>
       cFuture.foreach { res => signal.set(Option(res), Some(ec)) }
     }
-
-    /**
-      * Creates a new closeable signal from a closeable future and an initial value.
-      *
-      * @param initial The initial value of the signal.
-      * @param cFuture A closeable future that will eventually produce a value of the type `V`.
-      * @param ec      The execution context in which the closeable future works. Optional.
-      *                By default it's `Threading.defaultContext`.
-      * @tparam V The type of the value produced by the closeable future.
-      * @return A new closeable signal which starts empty and will update at most only once.
-      */
-    inline def signalFromFuture[V](initial: V, cFuture: CloseableFuture[V])
-                                  (using ec: ExecutionContext = Threading.defaultContext): CloseableSignal[V] =
-      new Signal[V](Some(initial)) with Closeability(cFuture).tap { signal =>
-        cFuture.foreach { res => signal.set(Option(res), Some(ec)) }
-      }
 
   /** Creates a new closeable signal from a closeable stream and an initial value.
     * The signal will be initialized to the initial value on its creation, and subscribe to the stream.
