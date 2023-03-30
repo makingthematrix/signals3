@@ -51,13 +51,12 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext = Threading.defaul
     * @param body The callback code
     * @return The reference to itself
     */
-  def onClose(body: => Unit): CloseableFuture[T] =
+  override def onClose(body: => Unit): Unit =
     if isCloseable then
       future.onComplete {
         case Failure(Closed) => body
         case _ =>
       }
-    this
 
   /** If the future is actually closeable, adds a timeout after which this future will be closed.
     * In theory, it's possible to add more than one timeout - the shortest one will close all others.
@@ -485,7 +484,7 @@ object CloseableFuture:
     else
       val p = Promise[Unit]()
       val task = schedule(() => p.trySuccess(()), duration.toMillis)
-      new ActuallyCloseable(p).onClose(task.cancel())
+      new ActuallyCloseable(p).tap { _ .onClose(task.cancel()) }
 
   /** Creates an empty closeable future which will repeat the mapped computation every given `interval` until
     * closed. The first computation is executed with `interval` delay. If the executed operation takes longer

@@ -6,6 +6,7 @@ import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, ProxySign
 import io.github.makingthematrix.signals3.Closeable.{CloseableSignal, CloseableStream}
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.chaining.scalaUtilChainingOps
 
 /**
   * An object which provides transformations for creating complex [[GeneratorStream]]s and [[GeneratorSignal]]s.
@@ -21,9 +22,26 @@ import scala.concurrent.{ExecutionContext, Future}
   * methods, but they return a [[Closeable]] stream or signal - closing it will close also the original generator,
   * which you pass to the transformer as the first argument.
   *
+  * @note These methods create closeable streams and signals that are meant to replace the original ones. If you keep
+  *       references to both the original stream/signal and the transformed one, and you will e.g. close the original
+  *       stream/signal, but not the transformed one, it may cause unintended behaviour.
+  *
   * @see For an example how `Transformers` can be used, see `GeneratorSignal.unfold`.
   */
 object Transformers:
+  trait Closeability(sources: Closeable*) extends Closeable:
+    private[this] var callOnClose: List[() => Unit] = Nil
+
+    final override def closeAndCheck(): Boolean = sources.map(_.closeAndCheck()).forall(p => p).tap {
+      case true  => callOnClose.foreach(_())
+      case false =>
+    }
+
+    final override def isClosed: Boolean = sources.forall(_.isClosed)
+
+    final override def onClose(body: => Unit): Unit =
+      callOnClose = (() => body) :: callOnClose
+
   /**
     * Creates a new `CloseableStream[V]` by mapping events of the type `E` emitted by the original generator or
     * another closeable stream.
@@ -34,11 +52,8 @@ object Transformers:
     * @tparam V     The type of the resulting event.
     * @return       A new closeable stream of type `V`.
     */
-  def map[E, V](stream: CloseableStream[E])(f: E => V): CloseableStream[V] =
-    new MapStream[E, V](stream, f) with Closeable:
-      override def closeAndCheck(): Boolean = stream.closeAndCheck()
-      override def isClosed: Boolean = stream.isClosed
-
+  inline def map[E, V](stream: CloseableStream[E])(f: E => V): CloseableStream[V] =
+    new MapStream[E, V](stream, f) with Closeability(stream)
   /**
     * Creates a new `CloseableSignal[Z]` bby mapping the value of the type V of the original generator or
     * another closeable stream.
@@ -49,10 +64,8 @@ object Transformers:
     * @tparam Z     The type of the resulting value.
     * @return       A new closeable signal of type `Z`.
     */
-  def map[V, Z](signal: CloseableSignal[V])(f: V => Z): CloseableSignal[Z] =
-    new MapSignal[V, Z](signal, f) with Closeable:
-      override def closeAndCheck(): Boolean = signal.closeAndCheck()
-      override def isClosed: Boolean = signal.isClosed
+  inline def map[V, Z](signal: CloseableSignal[V])(f: V => Z): CloseableSignal[Z] =
+    new MapSignal[V, Z](signal, f) with Closeability(signal)
 
   /**
     * Creates a new `CloseableStream[V]` by mapping events of the type `E` emitted by the original generator or
@@ -67,10 +80,8 @@ object Transformers:
     * @tparam V     The type of the resulting event.
     * @return       A new closeable stream of type `V`.
     */
-  def mapSync[E, V](stream: CloseableStream[E])(f: E => Future[V]): CloseableStream[V] =
-    new FutureStream[E, V](stream, f) with Closeable:
-      override def closeAndCheck(): Boolean = stream.closeAndCheck()
-      override def isClosed: Boolean = stream.isClosed
+  inline def mapSync[E, V](stream: CloseableStream[E])(f: E => Future[V]): CloseableStream[V] =
+    new FutureStream[E, V](stream, f) with Closeability(stream)
 
   /**
     * Creates a new `CloaseableStream[E]` by filtering events emitted by the original one.
@@ -81,10 +92,8 @@ object Transformers:
     * @tparam E        The type of the emitted event.
     * @return          A new closeable stream emitting only filtered events.
     */
-  def filter[E](stream: CloseableStream[E])(predicate: E => Boolean): CloseableStream[E] =
-    new FilterStream[E](stream, predicate) with Closeable:
-      override def closeAndCheck(): Boolean = stream.closeAndCheck()
-      override def isClosed: Boolean = stream.isClosed
+  inline def filter[E](stream: CloseableStream[E])(predicate: E => Boolean): CloseableStream[E] =
+    new FilterStream[E](stream, predicate) with Closeability(stream)
 
   /**
     * Creates a new `CloseableSignal[V]` which updates its value only if the new value of the original closeable signal
@@ -96,10 +105,8 @@ object Transformers:
     * @tparam V        The type of the value.
     * @return          A new closeable signal of the same value type.
     */
-  def filter[V](signal: CloseableSignal[V])(predicate: V => Boolean): CloseableSignal[V] =
-    new FilterSignal[V](signal, predicate) with Closeable:
-      override def closeAndCheck(): Boolean = signal.closeAndCheck()
-      override def isClosed: Boolean = signal.isClosed
+  inline def filter[V](signal: CloseableSignal[V])(predicate: V => Boolean): CloseableSignal[V] =
+    new FilterSignal[V](signal, predicate) with Closeability(signal)
 
   /**
     * Creates a new closeable stream of events of type `V` by applying a partial function which maps the original event
@@ -112,10 +119,8 @@ object Transformers:
     * @tparam V     The type of the resulting event.
     * @return       A new closeable stream of type `V`.
     */
-  def collect[E, V](stream: CloseableStream[E])(pf: PartialFunction[E, V]): CloseableStream[V] =
-    new CollectStream[E, V](stream, pf) with Closeable:
-      override def closeAndCheck(): Boolean = stream.closeAndCheck()
-      override def isClosed: Boolean = stream.isClosed
+  inline def collect[E, V](stream: CloseableStream[E])(pf: PartialFunction[E, V]): CloseableStream[V] =
+    new CollectStream[E, V](stream, pf) with Closeability(stream)
 
   /**
     * Creates a new closeable signal of values of the type `Z` by applying a partial function which maps the original
@@ -128,10 +133,8 @@ object Transformers:
     * @tparam Z     The type of the resulting value.
     * @return       A new closeable signal of type `Z`.
     */
-  def collect[V, Z](signal: CloseableSignal[V])(pf: PartialFunction[V, Z]): CloseableSignal[Z] =
-    new CollectSignal[V, Z](signal, pf) with Closeable:
-      override def closeAndCheck(): Boolean = signal.closeAndCheck()
-      override def isClosed: Boolean = signal.isClosed
+  inline def collect[V, Z](signal: CloseableSignal[V])(pf: PartialFunction[V, Z]): CloseableSignal[Z] =
+    new CollectSignal[V, Z](signal, pf) with Closeability(signal)
 
   /**
     * Creates a new closeable stream by merging the original closeable streams of the same type.
@@ -146,10 +149,8 @@ object Transformers:
     * @tparam E      The type of the event.
     * @return        A new closeable stream, emitting events from all original streams.
     */
-  def zip[E](streams: CloseableStream[E]*): CloseableStream[E] =
-    new ZipStream[E](streams: _*) with Closeable:
-      override def closeAndCheck(): Boolean = streams.map(_.closeAndCheck()).forall(p => p)
-      override def isClosed: Boolean = streams.forall(_.isClosed)
+  inline def zip[E](streams: CloseableStream[E]*): CloseableStream[E] =
+    new ZipStream[E](streams: _*) with Closeability(streams: _*)
 
   /**
     * Creates a new closeable signal by joining together the original signals of two different types of values,
@@ -169,51 +170,36 @@ object Transformers:
     * @tparam B The type of the value of the second of parent closeable signals.
     * @return   A new signal its the value constructed as a tuple of values form the parent closeable signals.
     */
-  def zip[A, B](a: CloseableSignal[A], b: CloseableSignal[B]): CloseableSignal[(A, B)] =
-    new Zip2Signal[A, B](a, b) with Closeable:
-      private[this] lazy val seq = Seq(a, b)
-      override def closeAndCheck(): Boolean = seq.map(_.closeAndCheck()).forall(p => p)
-      override def isClosed: Boolean = seq.forall(_.isClosed)
+  inline def zip[A, B](a: CloseableSignal[A], b: CloseableSignal[B]): CloseableSignal[(A, B)] =
+    new Zip2Signal[A, B](a, b) with Closeability(a, b)
 
   /** A version of the `.zip` method joining three closeable signals of different value types. */
-  def zip[A, B, C](a: CloseableSignal[A], b: CloseableSignal[B], c: CloseableSignal[C]): CloseableSignal[(A, B, C)] =
-    new Zip3Signal[A, B, C](a, b, c) with Closeable:
-      private[this] lazy val seq = Seq(a, b, c)
-      override def closeAndCheck(): Boolean = seq.map(_.closeAndCheck()).forall(p => p)
-      override def isClosed: Boolean = seq.forall(_.isClosed)
+  inline def zip[A, B, C](a: CloseableSignal[A], b: CloseableSignal[B], c: CloseableSignal[C]): CloseableSignal[(A, B, C)] =
+    new Zip3Signal[A, B, C](a, b, c) with Closeability(a, b, c)
 
   /** A version of the `.zip` method joining four closeable signals of different value types. */
-  def zip[A, B, C, D](a: CloseableSignal[A],
+  inline def zip[A, B, C, D](a: CloseableSignal[A],
                       b: CloseableSignal[B],
                       c: CloseableSignal[C],
                       d: CloseableSignal[D]): CloseableSignal[(A, B, C, D)] =
-    new Zip4Signal[A, B, C, D](a, b, c, d) with Closeable:
-      private[this] lazy val seq = Seq(a, b, c, d)
-      override def closeAndCheck(): Boolean = seq.map(_.closeAndCheck()).forall(p => p)
-      override def isClosed: Boolean = seq.forall(_.isClosed)
+    new Zip4Signal[A, B, C, D](a, b, c, d) with Closeability(a, b, c, d)
 
   /** A version of the `.zip` method joining five closeable signals of different value types. */
-  def zip[A, B, C, D, E](a: CloseableSignal[A],
+  inline def zip[A, B, C, D, E](a: CloseableSignal[A],
                          b: CloseableSignal[B],
                          c: CloseableSignal[C],
                          d: CloseableSignal[D],
                          e: CloseableSignal[E]): CloseableSignal[(A, B, C, D, E)] =
-    new Zip5Signal[A, B, C, D, E](a, b, c, d, e) with Closeable:
-      private[this] lazy val seq = Seq(a, b, c, d, e)
-      override def closeAndCheck(): Boolean = seq.map(_.closeAndCheck()).forall(p => p)
-      override def isClosed: Boolean = seq.forall(_.isClosed)
+    new Zip5Signal[A, B, C, D, E](a, b, c, d, e) with Closeability(a, b, c, d, e)
 
   /** A version of the `.zip` method joining six closeable signals of different value types. */
-  def zip[A, B, C, D, E, F](a: CloseableSignal[A],
+  inline def zip[A, B, C, D, E, F](a: CloseableSignal[A],
                             b: CloseableSignal[B],
                             c: CloseableSignal[C],
                             d: CloseableSignal[D],
                             e: CloseableSignal[E],
                             f: CloseableSignal[F]): CloseableSignal[(A, B, C, D, E, F)] =
-    new Zip6Signal[A, B, C, D, E, F](a, b, c, d, e, f) with Closeable:
-      private[this] lazy val seq = Seq(a, b, c, d, e, f)
-      override def closeAndCheck(): Boolean = seq.map(_.closeAndCheck()).forall(p => p)
-      override def isClosed: Boolean = seq.forall(_.isClosed)
+    new Zip6Signal[A, B, C, D, E, F](a, b, c, d, e, f) with Closeability(a, b, c, d, e, f)
 
   /**
     * Creates a closeable signal of an arbitrary number of parent signals of the same value.
@@ -228,10 +214,8 @@ object Transformers:
     * @tparam V      The type of the values in the parent closeable signals.
     * @return        A new closeable signal with its value being a sequence of current values of the parent signals.
     */
-  def sequence[V](signals: CloseableSignal[V]*): CloseableSignal[Seq[V]] =
-    new SequenceSignal[V](signals: _*) with Closeable:
-      override def closeAndCheck(): Boolean = signals.map(_.closeAndCheck()).forall(p => p)
-      override def isClosed: Boolean = signals.forall(_.isClosed)
+  inline  def sequence[V](signals: CloseableSignal[V]*): CloseableSignal[Seq[V]] =
+    new SequenceSignal[V](signals: _*) with Closeability(signals: _*)
 
   /**
     * Combines the current values of this and another closeable signal of the same or different types `V` and `Z`
@@ -246,11 +230,10 @@ object Transformers:
     * @tparam Y      The value type of the new closeable signal.
     * @return        A new closeable signal with the values of the type `Y`.
     */
-  def combine[V, Z, Y](vSignal: CloseableSignal[V], zSignal: CloseableSignal[Z])(f: (V, Z) => Y): CloseableSignal[Y] =
-    new CombineSignal[V, Z, Y](vSignal, zSignal, f) with Closeable:
-      private[this] lazy val seq = Seq(vSignal, zSignal)
-      override def closeAndCheck(): Boolean = seq.map(_.closeAndCheck()).forall(p => p)
-      override def isClosed: Boolean = seq.forall(_.isClosed)
+  inline def combine[V, Z, Y](vSignal: CloseableSignal[V],
+                              zSignal: CloseableSignal[Z])
+                             (f: (V, Z) => Y): CloseableSignal[Y] =
+    new CombineSignal[V, Z, Y](vSignal, zSignal, f) with Closeability(vSignal, zSignal)
 
   /**
     * Creates a new closeable stream from a closeable future.
@@ -261,13 +244,11 @@ object Transformers:
     * @tparam E      The type of the event produced by the closeable future.
     * @return        A new closeable stream which will emit at most only one event of the type `E`.
     */
-  def streamFromFuture[E](cFuture: CloseableFuture[E])
-                         (using ec: ExecutionContext = Threading.defaultContext): CloseableStream[E] =
-    val stream = new Stream[E]() with Closeable:
-      override def closeAndCheck(): Boolean = cFuture.closeAndCheck()
-      override def isClosed: Boolean = cFuture.isClosed
-    cFuture.foreach { stream.dispatch(_, Some(ec)) }
-    stream
+  inline def streamFromFuture[E](cFuture: CloseableFuture[E])
+                                (using ec: ExecutionContext = Threading.defaultContext): CloseableStream[E] =
+    new Stream[E]() with Closeability(cFuture).tap { stream =>
+      cFuture.foreach { stream.dispatch(_, Some(ec)) }
+    }
 
   /**
     * Creates a new closeable signal from a closeable future.
@@ -278,13 +259,27 @@ object Transformers:
     * @tparam V      The type of the value produced by the closeable future.
     * @return        A new closeable signal which starts empty and will update at most only once.
     */
-  def signalFromFuture[V](cFuture: CloseableFuture[V])
-                         (using ec: ExecutionContext = Threading.defaultContext): CloseableSignal[V] =
-    val signal = new Signal[V]() with Closeable:
-      override def closeAndCheck(): Boolean = cFuture.closeAndCheck()
-      override def isClosed: Boolean = cFuture.isClosed
-    cFuture.foreach { res => signal.set(Option(res), Some(ec)) }
-    signal
+  inline def signalFromFuture[V](cFuture: CloseableFuture[V])
+                                (using ec: ExecutionContext = Threading.defaultContext): CloseableSignal[V] =
+    new Signal[V]() with Closeability(cFuture).tap { signal =>
+      cFuture.foreach { res => signal.set(Option(res), Some(ec)) }
+    }
+
+    /**
+      * Creates a new closeable signal from a closeable future and an initial value.
+      *
+      * @param initial The initial value of the signal.
+      * @param cFuture A closeable future that will eventually produce a value of the type `V`.
+      * @param ec      The execution context in which the closeable future works. Optional.
+      *                By default it's `Threading.defaultContext`.
+      * @tparam V The type of the value produced by the closeable future.
+      * @return A new closeable signal which starts empty and will update at most only once.
+      */
+    inline def signalFromFuture[V](initial: V, cFuture: CloseableFuture[V])
+                                  (using ec: ExecutionContext = Threading.defaultContext): CloseableSignal[V] =
+      new Signal[V](Some(initial)) with Closeability(cFuture).tap { signal =>
+        cFuture.foreach { res => signal.set(Option(res), Some(ec)) }
+      }
 
   /** Creates a new closeable signal from a closeable stream and an initial value.
     * The signal will be initialized to the initial value on its creation, and subscribe to the stream.
@@ -296,9 +291,7 @@ object Transformers:
     * @return        A new signal with the value of the type `V`.
     */
   inline def signalFromStream[V](initial: V, source: CloseableStream[V]): CloseableSignal[V] =
-    new StreamSignal[V](source, Option(initial)) with Closeable:
-      override def closeAndCheck(): Boolean = source.closeAndCheck()
-      override def isClosed: Boolean = source.isClosed
+    new StreamSignal[V](source, Option(initial)) with Closeability(source)
 
   /** Creates a new closeable signal from a closeable stream.
     * The signal will start uninitialized and subscribe to the parent stream. Subsequently, it will update its value
@@ -309,6 +302,4 @@ object Transformers:
     * @return       A new signal with the value of the type `V`.
     */
   inline def signalFromStream[V](source: CloseableStream[V]): CloseableSignal[V] =
-    new StreamSignal[V](source, None) with Closeable:
-      override def closeAndCheck(): Boolean = source.closeAndCheck()
-      override def isClosed: Boolean = source.isClosed
+    new StreamSignal[V](source, None) with Closeability(source)

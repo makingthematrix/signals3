@@ -3,6 +3,7 @@ package io.github.makingthematrix.signals3
 import CloseableFuture.Closed
 import CloseableFuture.toFuture
 import scala.language.implicitConversions
+import scala.util.chaining.scalaUtilChainingOps
 
 import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration.*
@@ -65,7 +66,7 @@ class CloseableFutureSpec extends munit.FunSuite:
     val f = p.future
     f.foreach { res = _ }
 
-    val cf = CloseableFuture.from(p).onClose { res = -1 }
+    val cf = CloseableFuture.from(p).tap { _.onClose { res = -1 } }
 
     p.success(1)
     assertEquals(result(f), 1)
@@ -83,7 +84,7 @@ class CloseableFutureSpec extends munit.FunSuite:
     val f = p.future
     f.foreach { res ! _ }
 
-    val cf = CloseableFuture.from(p).onClose { res ! -1 }
+    val cf = CloseableFuture.from(p).tap { _.onClose { res ! -1 } }
 
     assert(cf.closeAndCheck())
     await(cf)
@@ -99,7 +100,7 @@ class CloseableFutureSpec extends munit.FunSuite:
     val f = p.future
     f.foreach { res ! _ }
 
-    val cf = CloseableFuture.from(p).onClose { res ! -1 }
+    val cf = CloseableFuture.from(p).tap { _.onClose { res ! -1 } }
 
     assert(cf.closeAndCheck())
     await(cf)
@@ -251,7 +252,7 @@ class CloseableFutureSpec extends munit.FunSuite:
     val cf3 = CloseableFuture.delayed(500.millis) { timestamps :+= (System.currentTimeMillis - offset) }
     val cf4 = CloseableFuture.delayed(600.millis) { timestamps :+= (System.currentTimeMillis - offset) }
 
-    val cfSeq = CloseableFuture.sequence(Seq(cf1, cf2, cf3, cf4)).onClose { onClose ! true }
+    val cfSeq = CloseableFuture.sequence(Seq(cf1, cf2, cf3, cf4)).tap { _.onClose { onClose ! true } }
     Thread.sleep(50)
     cfSeq.close()
     waitForResult(onClose, true)
@@ -388,7 +389,7 @@ class CloseableFutureSpec extends munit.FunSuite:
 
     val s = Signal(0)
 
-    val cf = CloseableFuture { Thread.sleep(200); s ! 1 }.onClose { s ! 2 }
+    val cf = CloseableFuture { Thread.sleep(200); s ! 1 }.tap { _.onClose { s ! 2 } }
     assert(cf.isCloseable)
 
     CloseableFuture.delayed(50.millis) { assert(cf.closeAndCheck()) }
@@ -403,7 +404,7 @@ class CloseableFutureSpec extends munit.FunSuite:
 
     val s = Signal(0)
 
-    val cf = CloseableFuture.delayed(200.millis){ s ! 1 }.onClose { s ! 2 }
+    val cf = CloseableFuture.delayed(200.millis){ s ! 1 }.tap { _.onClose { s ! 2 } }
     assert(cf.isCloseable)
 
     CloseableFuture.delayed(50.millis) { assert(cf.closeAndCheck()) }
@@ -417,7 +418,7 @@ class CloseableFutureSpec extends munit.FunSuite:
     import Threading.defaultContext
     var res = 0
 
-    val cf: CloseableFuture[Unit] = CloseableFuture { Thread.sleep(500); res = 1 }.onClose { res = 2 }
+    val cf: CloseableFuture[Unit] = CloseableFuture { Thread.sleep(500); res = 1 }.tap { _.onClose { res = 2 } }
 
     assertEquals(res, 0)
     case object FailureException extends Throwable
@@ -477,7 +478,7 @@ class CloseableFutureSpec extends munit.FunSuite:
 
     val s = Signal("")
 
-    val cf1 = CloseableFuture { Thread.sleep(500); s ! "foo"; "foo" }.onClose { s ! "bar" }
+    val cf1 = CloseableFuture { Thread.sleep(500); s ! "foo"; "foo" }.tap { _.onClose { s ! "bar" } }
     val cf2 = cf1.map(_.toUpperCase)
 
     assert(cf2.closeAndCheck())
@@ -502,7 +503,7 @@ class CloseableFutureSpec extends munit.FunSuite:
 
     val s = Signal("")
 
-    val cf1 = CloseableFuture { Thread.sleep(500); s ! "foo"; "foo" }.onClose { s ! "bar" }
+    val cf1 = CloseableFuture { Thread.sleep(500); s ! "foo"; "foo" }.tap { _.onClose { s ! "bar" } }
     val cf2 = cf1.flatMap {
       case ""    => CloseableFuture.successful("boo")
       case other => CloseableFuture { Thread.sleep(500); other.toUpperCase }

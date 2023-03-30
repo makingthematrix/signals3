@@ -55,6 +55,8 @@ final class GeneratorSignal[V](init    : V,
     */
   override inline def isClosed: Boolean = beat.isClosed
 
+  override inline def onClose(body: => Unit): Unit = beat.onClose(body)
+
 object GeneratorSignal:
   /**
     * Creates a signal which updates its value every `interval` by calling the `update` function which takes the current

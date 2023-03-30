@@ -60,6 +60,8 @@ final class GeneratorStream[E](generate: () => E,
     */
   override inline def isClosed: Boolean = beat.isClosed
 
+  override inline def onClose(body: => Unit): Unit = beat.onClose(body)
+
 object GeneratorStream:
   /**
     * Creates a stream which generates a new event every `interval` by calling the `generate` function which

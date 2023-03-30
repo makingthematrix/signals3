@@ -23,10 +23,10 @@ trait Closeable extends java.lang.AutoCloseable:
     *         the result can be unreliable.
     */
   def isClosed: Boolean
-  
-  override final def close(): Unit = closeAndCheck()
 
-  // @todo: Should `onClose` be a part of `Closeable`? Or maybe only generators?
+  def onClose(body: => Unit): Unit
+
+  override final def close(): Unit = closeAndCheck()
 
 object Closeable:
   /**
