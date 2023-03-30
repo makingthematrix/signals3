@@ -287,7 +287,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     * @tparam Y The value type of the new signal.
     * @return A new signal with the value of the type `Y`.
     */
-  inline final def combine[Z, Y](other: Signal[Z])(f: (V, Z) => Y): Signal[Y] = new CombineSignal[V, Z, Y](this, other, f)
+  inline final def combine[Z, Y](other: Signal[Z])(f: (V, Z) => Y): Signal[Y] = Signal.combine(this, other)(f)
 
   /** Creates a throttled version of this signal which updates no more often than once during the given time interval.
     * If changes to the value of the parent signal happen more often, some of them will be ignored.
@@ -431,7 +431,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     * @param other The other signal used in comparison
     * @return A new boolean signal
     */
-  final inline def sameAs[Z](other: Signal[Z]): Signal[Boolean] = zip(other).map(_ == _)
+  final inline def sameAs[Z](other: Signal[Z]): Signal[Boolean] = combine(other)(_ == _)
 
   /** An alias for `sameAs` */
   final inline def ===[Z](other: Signal[Z]): Signal[Boolean] = sameAs(other)
@@ -666,18 +666,33 @@ object Signal:
     * @tparam Z The type of the initial and result value of the new signal.
     * @return A new signal of values of the type `Z`.
     */
-  inline def foldLeft[V, Z](sources: Signal[V]*)(zero: Z)(f: (Z, V) => Z): Signal[Z] = new FoldLeftSignal[V, Z](sources: _*)(zero)(f)
+  inline def foldLeft[V, Z](sources: Signal[V]*)(zero: Z)(f: (Z, V) => Z): Signal[Z] =
+    new FoldLeftSignal[V, Z](sources: _*)(zero)(f)
+
+  /**
+    * Combines the current values of two signals of the same or different types `V` and `Z` to produce a signal with
+    * the value of yet another type `Y`. Basically, zip + map.
+    *
+    * @param vSignal A signal with the value type `V`.
+    * @param zSignal A signal with the value type `Z`.
+    * @param f       The function which combines the current values of both parent signals to produce the value of
+    *                the new signal.
+    * @tparam V      The value type of the first signal.
+    * @tparam Z      The value type of the secondsignal.
+    * @tparam Y      The value type of the new signal.
+    * @return        A new signal with the value of the type `Y`.
+    */
+  inline def combine[V, Z, Y](vSignal: Signal[V], zSignal: Signal[Z])(f: (V, Z) => Y): Signal[Y] =
+    new CombineSignal[V, Z, Y](vSignal, zSignal, f)
 
   /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
     * The new signal's value will be `true` if both parent signals values are `true` - or `false` otherwise.
-    *
-    * @todo All boolean logic methods work now on `zip` + map`. They can be refactore to use `combine` instead..
     *
     * @param a The first parent signal of the type `Boolean`.
     * @param b The second parent signal of the type `Boolean`.
     * @return A new signal of `Boolean`.
     */
-  inline def and(a: Signal[Boolean], b: Signal[Boolean]): Signal[Boolean] = zip(a, b).map(_ && _)
+  inline def and(a: Signal[Boolean], b: Signal[Boolean]): Signal[Boolean] = combine(a, b)(_ && _)
 
   /** Creates a `Signal[Boolean]` of an arbitrary number of parent signals of `Boolean`.
     * The new signal's value will be `true` only if *all* parent signals values are `true`, and `false` if even one of them
@@ -686,7 +701,8 @@ object Signal:
     * @param sources  A variable arguments list of parent signals of the type `Boolean`.
     * @return A new signal of `Boolean`.
     */
-  inline def and(sources: Signal[Boolean]*): Signal[Boolean] = foldLeft[Boolean, Boolean](sources: _*)(true)(_ && _)
+  inline def and(sources: Signal[Boolean]*): Signal[Boolean] =
+    foldLeft[Boolean, Boolean](sources: _*)(true)(_ && _)
 
   /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
     * The new signal's value will be `true` if any of the parent signals values is `true` - or `false` otherwise.
@@ -695,7 +711,7 @@ object Signal:
     * @param b The second parent signal of the type `Boolean`.
     * @return A new signal of `Boolean`.
     */
-  inline def or(a: Signal[Boolean], b: Signal[Boolean]): Signal[Boolean] = zip(a, b).map(_ || _)
+  inline def or(a: Signal[Boolean], b: Signal[Boolean]): Signal[Boolean] = combine(a, b)(_ || _)
 
   /** Creates a `Signal[Boolean]` of an arbitrary number of parent signals of `Boolean`.
     * The new signal's value will be `true` if *any* of the parent signals values is `true`, and `false` only if all one of them
@@ -715,7 +731,7 @@ object Signal:
     * @return A new signal of `Boolean`.
     */
   inline def xor(a: Signal[Boolean], b: Signal[Boolean]): Signal[Boolean] =
-    zip(a, b).map {
+    combine(a, b) {
       case (a, b) if a == b => false
       case _                => true
     }
@@ -729,7 +745,7 @@ object Signal:
     * @return A new signal of `Boolean`.
     */
   inline def nor(a: Signal[Boolean], b: Signal[Boolean]): Signal[Boolean] =
-    zip(a, b).map {
+    combine(a, b) {
       case (false, false) => true
       case _              => false
     }
@@ -743,7 +759,7 @@ object Signal:
     * @return A new signal of `Boolean`.
     */
   inline def nand(a: Signal[Boolean], b: Signal[Boolean]): Signal[Boolean] =
-    zip(a, b).map {
+    combine(a, b) {
       case (true, true) => false
       case _            => true
     }
