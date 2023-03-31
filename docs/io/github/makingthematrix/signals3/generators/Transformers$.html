@@ -1,0 +1,1252 @@
+<html data-pathToRoot="../../../../../"><head><meta charset="utf-8"></meta><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"></meta><title>Transformers</title><link rel="shortcut icon" type="image/x-icon" href="../../../../../favicon.ico"></link><script type="text/javascript" src="../../../../../scripts/theme.js"></script><script type="text/javascript" src="../../../../../scripts/searchData.js" defer="true"></script><script type="text/javascript" src="../../../../../scripts/scastieConfiguration.js" defer="true"></script><link rel="stylesheet" href="../../../../../styles/theme/bundle.css"></link><link rel="stylesheet" href="../../../../../styles/theme/components/bundle.css"></link><link rel="stylesheet" href="../../../../../styles/theme/components/button/bundle.css"></link><link rel="stylesheet" href="../../../../../styles/theme/layout/bundle.css"></link><link rel="stylesheet" href="../../../../../styles/nord-light.css"></link><link rel="stylesheet" href="../../../../../styles/dotty-icons.css"></link><link rel="stylesheet" href="../../../../../styles/filter-bar.css"></link><link rel="stylesheet" href="../../../../../styles/code-snippets.css"></link><link rel="stylesheet" href="../../../../../styles/searchbar.css"></link><link rel="stylesheet" href="../../../../../styles/social-links.css"></link><link rel="stylesheet" href="../../../../../styles/versions-dropdown.css"></link><link rel="stylesheet" href="../../../../../styles/content-contributors.css"></link><link rel="stylesheet" href="../../../../../styles/fontawesome.css"></link><script type="text/javascript" src="../../../../../hljs/highlight.pack.js" defer="true"></script><script type="text/javascript" src="../../../../../scripts/hljs-scala3.js" defer="true"></script><script type="text/javascript" src="../../../../../scripts/ux.js" defer="true"></script><script type="text/javascript" src="../../../../../scripts/common/component.js" defer="true"></script><script type="text/javascript" src="../../../../../scripts/common/utils.js" defer="true"></script><script type="text/javascript" src="../../../../../scripts/components/FilterBar.js" defer="true"></script><script type="text/javascript" src="../../../../../scripts/components/DocumentableList.js" defer="true"></script><script type="text/javascript" src="../../../../../scripts/components/Input.js" defer="true"></script><script type="text/javascript" src="../../../../../scripts/components/FilterGroup.js" defer="true"></script><script type="text/javascript" src="../../../../../scripts/components/Filter.js" defer="true"></script><script type="text/javascript" src="../../../../../scripts/scaladoc-scalajs.js" defer="true"></script><script type="text/javascript" src="../../../../../scripts/contributors.js" defer="true"></script><script type="text/javascript" src="https://code.jquery.com/jquery-3.5.1.min.js" defer="true"></script><script type="text/javascript" src="https://d3js.org/d3.v6.min.js" defer="true"></script><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/graphlib-dot@0.6.2/dist/graphlib-dot.min.js" defer="true"></script><script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dagre-d3/0.6.1/dagre-d3.min.js" defer="true"></script><script type="text/javascript" src="https://scastie.scala-lang.org/embedded.js" defer="true"></script><script type="text/javascript" src="../../../../../scripts/data.js" defer="true"></script><link rel="stylesheet" href="../../../../../styles/apistyles.css"></link><script>var pathToRoot = "../../../../../";</script></head><body><div id=""><div id="header" class="body-small"><div class="header-container-left"><a href="../../../../../" class="logo-container"><span class="project-name h300">signals3</span></a><span onclick="dropdownHandler(event)" class="text-button with-arrow" id="dropdown-trigger"><a></a></span><div id="version-dropdown" class="dropdown-menu"></div></div><div class="header-container-right"><button id="search-toggle" class="icon-button"></button><span id="theme-toggle" class="icon-button"></span><span id="mobile-menu-toggle" class="icon-button hamburger"></span></div></div><div id="mobile-menu"><div class="mobile-menu-header body-small"><span class="mobile-menu-logo"><span class="project-name h300">signals3</span></span><button id="mobile-menu-close" class="icon-button close"></button></div><div class="mobile-menu-container body-medium"><input id="mobile-scaladoc-searchbar-input" class="scaladoc-searchbar-input" type="search" placeholder="Find anything"></input><span id="mobile-theme-toggle" class="mobile-menu-item mode"></span></div></div><span id="mobile-sidebar-toggle" class="floating-button"></span><div id="leftColumn" class="body-small"><div class="switcher-container"><a id="api-nav-button" class="switcher h100 selected" href="../../../../../index.html">API</a></div><nav id="api-nav" class="side-menu"><div class="ni n0 expanded"><span class="nh h100 expanded cs"><button class="ar icon-button expanded"></button><a href="../../signals3.html"><span class="micon pa"></span><span>io.github.makingthematrix.signals3</span></a></span><div class="ni n1 expanded"><span class="nh h100 expanded cs"><button class="ar icon-button expanded"></button><a href="../generators.html"><span class="micon pa"></span><span>generators</span></a></span><div class="ni n2 "><span class="nh "><a href="GeneratorSignal.html"><span class="micon cl"></span><span>GeneratorSignal</span></a></span></div><div class="ni n2 "><span class="nh "><a href="GeneratorSignal$.html"><span class="micon ob"></span><span>GeneratorSignal</span></a></span></div><div class="ni n2 "><span class="nh "><a href="GeneratorStream.html"><span class="micon cl"></span><span>GeneratorStream</span></a></span></div><div class="ni n2 "><span class="nh "><a href="GeneratorStream$.html"><span class="micon ob"></span><span>GeneratorStream</span></a></span></div><div class="ni n2 expanded"><span class="nh h100 selected"><button class="ar icon-button expanded"></button><a href="#"><span class="micon ob"></span><span>Transformers</span></a></span><div class="ni n3 "><span class="nh "><a href="Transformers$$Closeability.html"><span class="micon tr"></span><span>Closeability</span></a></span></div></div></div><div class="ni n1"><span class="nh "><button class="ar icon-button "></button><a href="../ui.html"><span class="micon pa"></span><span>ui</span></a></span><div class="ni n2 "><span class="nh "><a href="../ui/UiDispatchQueue.html"><span class="micon cl"></span><span>UiDispatchQueue</span></a></span></div><div class="ni n2"><span class="nh "><button class="ar icon-button "></button><a href="../ui/UiDispatchQueue$.html"><span class="micon ob"></span><span>UiDispatchQueue</span></a></span><div class="ni n3 "><span class="nh "><a href="../ui/UiDispatchQueue$$Implicits$.html"><span class="micon ob"></span><span>Implicits</span></a></span></div></div></div><div class="ni n1 "><span class="nh "><a href="../AggregatingSignal$.html"><span class="micon ob"></span><span>AggregatingSignal</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../AggregatingSignal.html"><span class="micon cl"></span><span>AggregatingSignal</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../BaseEventContext.html"><span class="micon cl"></span><span>BaseEventContext</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../BaseSubscription.html"><span class="micon cl"></span><span>BaseSubscription</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../Closeable.html"><span class="micon tr"></span><span>Closeable</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../Closeable$.html"><span class="micon ob"></span><span>Closeable</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../CloseableFuture.html"><span class="micon cl"></span><span>CloseableFuture</span></a></span></div><div class="ni n1"><span class="nh "><button class="ar icon-button "></button><a href="../CloseableFuture$.html"><span class="micon ob"></span><span>CloseableFuture</span></a></span><div class="ni n2 "><span class="nh "><a href="../CloseableFuture$$Closed$.html"><span class="micon ob"></span><span>Closed</span></a></span></div></div><div class="ni n1 "><span class="nh "><a href="../DispatchQueue.html"><span class="micon tr"></span><span>DispatchQueue</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../DispatchQueue$.html"><span class="micon ob"></span><span>DispatchQueue</span></a></span></div><div class="ni n1"><span class="nh "><button class="ar icon-button "></button><a href="../EventContext$.html"><span class="micon ob"></span><span>EventContext</span></a></span><div class="ni n2 "><span class="nh "><a href="../EventContext$$Global$.html"><span class="micon ob"></span><span>Global</span></a></span></div><div class="ni n2 "><span class="nh "><a href="../EventContext$$Implicits$.html"><span class="micon ob"></span><span>Implicits</span></a></span></div></div><div class="ni n1 "><span class="nh "><a href="../EventContext.html"><span class="micon tr"></span><span>EventContext</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../EventSource.html"><span class="micon cl"></span><span>EventSource</span></a></span></div><div class="ni n1"><span class="nh "><button class="ar icon-button "></button><a href="../EventSource$.html"><span class="micon ob"></span><span>EventSource</span></a></span><div class="ni n2 "><span class="nh "><a href="../EventSource$$NoAutowiring.html"><span class="micon tr"></span><span>NoAutowiring</span></a></span></div></div><div class="ni n1 "><span class="nh "><a href="../LimitedDispatchQueue.html"><span class="micon cl"></span><span>LimitedDispatchQueue</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../LimitedDispatchQueue$.html"><span class="micon ob"></span><span>LimitedDispatchQueue</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../RefreshingSignal.html"><span class="micon cl"></span><span>RefreshingSignal</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../RefreshingSignal$.html"><span class="micon ob"></span><span>RefreshingSignal</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../SerialDispatchQueue.html"><span class="micon cl"></span><span>SerialDispatchQueue</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../SerialDispatchQueue$.html"><span class="micon ob"></span><span>SerialDispatchQueue</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../Serialized$.html"><span class="micon ob"></span><span>Serialized</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../Signal.html"><span class="micon cl"></span><span>Signal</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../Signal$.html"><span class="micon ob"></span><span>Signal</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../SourceSignal.html"><span class="micon cl"></span><span>SourceSignal</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../SourceSignal$.html"><span class="micon ob"></span><span>SourceSignal</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../SourceStream.html"><span class="micon cl"></span><span>SourceStream</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../Stream.html"><span class="micon cl"></span><span>Stream</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../Stream$.html"><span class="micon ob"></span><span>Stream</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../StreamWithAuxSignal.html"><span class="micon cl"></span><span>StreamWithAuxSignal</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../StreamWithAuxSignal$.html"><span class="micon ob"></span><span>StreamWithAuxSignal</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../Subscription.html"><span class="micon tr"></span><span>Subscription</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../Threading$.html"><span class="micon ob"></span><span>Threading</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../ThrottledSignal.html"><span class="micon cl"></span><span>ThrottledSignal</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../ThrottledSignal$.html"><span class="micon ob"></span><span>ThrottledSignal</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../UnlimitedDispatchQueue.html"><span class="micon cl"></span><span>UnlimitedDispatchQueue</span></a></span></div><div class="ni n1 "><span class="nh "><a href="../UnlimitedDispatchQueue$.html"><span class="micon ob"></span><span>UnlimitedDispatchQueue</span></a></span></div></div></nav></div><div id="footer" class="body-small"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div><div id="scaladoc-searchBar"></div><div id="main"><div class="breadcrumbs container"><a href="../../../../../index.html">signals3</a>/<a href="../../signals3.html">io.github.makingthematrix.signals3</a>/<a href="../generators.html">io.github.makingthematrix.signals3.generators</a>/<a href="Transformers$.html">Transformers</a></div><div id="content" class="body-medium"><div><div class="cover-header">
+ <span class="icon"><span class="micon ob"></span></span>
+ <h1 class="h600 single">Transformers</h1>
+</div>
+<div class="fqname body-large">
+ <span>io.github.makingthematrix.signals3.generators.Transformers$</span>
+</div>
+<div class="main-signature mono-small-block">
+ <div class="signature">
+  <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="Transformers$.html" t="n" class="documentableName ">Transformers</a>
+ </div>
+</div>
+<div class="cover">
+ <div class="doc">
+  <p>An object which provides transformations for creating complex <a href="GeneratorStream.html">GeneratorStream</a>s and <a href="GeneratorSignal.html">GeneratorSignal</a>s.</p> 
+  <p><code>GeneratorStream</code> and <code>GeneratorSignal</code> inherit their own set of transformation methods from <span data-unresolved-link="">Stream</span> and <a href="../Signal.html">Signal</a>, respectively, but results of those transformations are just streams and signals. Which is fine, in many cases. The proposed way to use a generator is to keep a reference to it, as well as to the results of its transformations. The resulting streams and signals can be used throughout the program, while the reference to the original generator can be used to stop it eventually, when it's no longer needed.</p> 
+  <p>But it may happen that you want to create a more complex generator in the first place, and this is where the methods from <code>generators.Transformers</code> can be of help. They work in a similar way to standard transformation methods, but they return a <a href="../Closeable.html">Closeable</a> stream or signal - closing it will close also the original generator, which you pass to the transformer as the first argument.</p> 
+ </div>
+ <section id="attributes">
+  <h2 class="h500">Attributes</h2>
+  <dl class="attributes">
+   <dt class="body-small">
+    See also
+   </dt>
+   <dd class="body-medium">
+    <div>
+     <div>
+      <p>For an example how <code>Transformers</code> can be used, see <code>GeneratorSignal.unfold</code>.</p> 
+     </div>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Note
+   </dt>
+   <dd class="body-medium">
+    <div>
+     <div>
+      <p>These methods create closeable streams and signals that are meant to replace the original ones. If you keep references to both the original stream/signal/c-future and the transformed one, and you will e.g. close the original, but not the transformed, it may cause unintended behaviour.</p> 
+     </div>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Graph
+   </dt>
+   <dd class="body-medium">
+    <div id="inheritance-diagram" class="diagram-class showGraph">
+     <button type="button" class="label-only-button" onclick="zoomOut()">Reset zoom</button><button type="button" class="label-only-button" onclick="hideGraph()">Hide graph</button><button type="button" class="label-only-button" onclick="showGraph()">Show graph</button>
+     <svg id="graph"></svg>
+     <script type="text/dot" id="dot"> digraph g {
+ node0 [id=node0, label="<span style=\"color: #FFFFFF;\">object <a href=\"Transformers$.html\" t=\"n\">Transformers</a>.type</span>", class="object vertex"];
+node1 [id=node1, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Object</span></span>", class="class vertex"];
+node2 [id=node2, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Any</span></span>", class="class vertex"];
+node3 [id=node3, label="<span style=\"color: #FFFFFF;\">trait <span data-unresolved-link=\"\" t=\"n\">Matchable</span></span>", class="trait vertex"];
+
+
+ node0 -> node1;
+node1 -> node2;
+node1 -> node3;
+node3 -> node2;
+
+}
+</script>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Supertypes
+   </dt>
+   <dd class="body-medium">
+    <div class="mono-small-block supertypes">
+     <div>
+      class <span data-unresolved-link="" t="n">Object</span>
+     </div>
+     <div>
+      trait <span data-unresolved-link="" t="n">Matchable</span>
+     </div>
+     <div>
+      class <span data-unresolved-link="" t="n">Any</span>
+     </div><span></span>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Self type
+   </dt>
+   <dd class="body-medium">
+    <div class="mono-small-block supertypes">
+     <span></span>
+     <div>
+      <a href="Transformers$.html" t="n">Transformers</a>.type
+     </div>
+    </div>
+   </dd>
+  </dl>
+ </section>
+</div>
+<section id="members-list">
+ <h2 class="h500">Members list</h2>
+ <div class="documentableFilter">
+  <div class="filtersContainer"></div>
+  <input class="filterableInput" placeholder="Filter by any phrase" data-test-id="filterBarInput" type="search"><button class="clearButton label-only-button" data-test-id="filterBarClearButton">Clear all</button>
+ </div>
+ <div class="membersList expand">
+  <div class="tabs">
+   <div class="contents">
+    <section id="Type-members">
+     <div data-togglable="Type members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Type members" class="h400">Type members</h3>
+      </div>
+      <section id="Classlikes">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Classlikes</h4>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="Transformers$$Closeability.html" t="n" class="documentableName ">Closeability</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">sources</span>: <a href="../Closeable.html" t="t">Closeable</a>*)<span t="k"> extends </span><a href="../Closeable.html" t="t">Closeable</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Encapsulates logic for closing original streams/signals/c-futures, checking if they are closed, and calling the registered <code>onClose</code> code (but only once, not once per the original source).</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Encapsulates logic for closing original streams/signals/c-futures, checking if they are closed, and calling the registered <code>onClose</code> code (but only once, not once per the original source).</p> 
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="../Closeable.html" t="n">Closeable</a>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">AutoCloseable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+    <section id="Value-members">
+     <div data-togglable="Value members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Value members" class="h400">Value members</h3>
+      </div>
+      <section id="Concrete-methods">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Concrete methods</h4>
+        </div>
+        <div class="documentableElement" id="collect-fffff5f5" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#collect-fffff5f5" t="n" class="documentableName ">collect</a>[<span t="k"></span><span data-unresolved-link="" t="t">E</span>, <span t="k"></span><span data-unresolved-link="" t="t">V</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">stream</span>: <a href="../Closeable$.html#CloseableStream-0" t="t">CloseableStream</a>[<span t="t">E</span>])(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">pf</span>: <span data-unresolved-link="" t="t">PartialFunction</span>[<span t="t">E</span>, <span t="t">V</span>]): <a href="../Closeable$.html#CloseableStream-0" t="t">CloseableStream</a>[<span data-unresolved-link="" t="t">V</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Creates a new closeable stream of events of type <code>V</code> by applying a partial function which maps the original event of type <code>E</code> to an event of type <code>V</code>. If the partial function doesn't work for the emitted event, nothing will be emitted in the new stream. Basically, it's filter + map.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Creates a new closeable stream of events of type <code>V</code> by applying a partial function which maps the original event of type <code>E</code> to an event of type <code>V</code>. If the partial function doesn't work for the emitted event, nothing will be emitted in the new stream. Basically, it's filter + map.</p> 
+             </div>
+             <h2 class="h200">Type parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               E
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the original event.</p> 
+              </dd>
+              <dt class="body-small">
+               V
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the resulting event.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               pf
+              </dt>
+              <dd class="body-medium">
+               <p>A partial function which for an original event of type <code>E</code> may produce an event of type <code>V</code>.</p> 
+              </dd>
+              <dt class="body-small">
+               stream
+              </dt>
+              <dd class="body-medium">
+               <p>The original closeable stream.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>A new closeable stream of type <code>V</code>.</p> 
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="collect-fffffe45" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#collect-fffffe45" t="n" class="documentableName ">collect</a>[<span t="k"></span><span data-unresolved-link="" t="t">V</span>, <span t="k"></span><span data-unresolved-link="" t="t">Z</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">signal</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">V</span>])(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">pf</span>: <span data-unresolved-link="" t="t">PartialFunction</span>[<span t="t">V</span>, <span t="t">Z</span>]): <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span data-unresolved-link="" t="t">Z</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Creates a new closeable signal of values of the type <code>Z</code> by applying a partial function which maps the original value of the type <code>V</code> to a value of the type <code>Z</code>. If the partial function doesn't work for the current value, the new signal will become empty until the next update. Basically, it's filter + map.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Creates a new closeable signal of values of the type <code>Z</code> by applying a partial function which maps the original value of the type <code>V</code> to a value of the type <code>Z</code>. If the partial function doesn't work for the current value, the new signal will become empty until the next update. Basically, it's filter + map.</p> 
+             </div>
+             <h2 class="h200">Type parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               V
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the original value.</p> 
+              </dd>
+              <dt class="body-small">
+               Z
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the resulting value.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               pf
+              </dt>
+              <dd class="body-medium">
+               <p>A partial function which for the original value of the type <code>V</code> may produce a value of the type <code>Z</code>.</p> 
+              </dd>
+              <dt class="body-small">
+               signal
+              </dt>
+              <dd class="body-medium">
+               <p>The original closeable signal.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>A new closeable signal of type <code>Z</code>.</p> 
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="combine-fffff5c5" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#combine-fffff5c5" t="n" class="documentableName ">combine</a>[<span t="k"></span><span data-unresolved-link="" t="t">V</span>, <span t="k"></span><span data-unresolved-link="" t="t">Z</span>, <span t="k"></span><span data-unresolved-link="" t="t">Y</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">vSignal</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">V</span>], <span t="k"></span><span data-unresolved-link="" t="n">zSignal</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">Z</span>])(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">f</span>: (<span t="t">V</span>, <span t="t">Z</span>)<span t="k"> =&gt; </span><span t="t">Y</span>): <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span data-unresolved-link="" t="t">Y</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Combines the current values of this and another closeable signal of the same or different types <code>V</code> and <code>Z</code> to produce a closeable signal with the value of yet another type <code>Y</code>. Basically, zip + map.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Combines the current values of this and another closeable signal of the same or different types <code>V</code> and <code>Z</code> to produce a closeable signal with the value of yet another type <code>Y</code>. Basically, zip + map.</p> 
+             </div>
+             <h2 class="h200">Type parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               V
+              </dt>
+              <dd class="body-medium">
+               <p>The value type of the first closeable signal.</p> 
+              </dd>
+              <dt class="body-small">
+               Y
+              </dt>
+              <dd class="body-medium">
+               <p>The value type of the new closeable signal.</p> 
+              </dd>
+              <dt class="body-small">
+               Z
+              </dt>
+              <dd class="body-medium">
+               <p>The value type of the second closeable signal.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               f
+              </dt>
+              <dd class="body-medium">
+               <p>The function which combines the current values of both parent signals to produce the value of the new closeable signal with values of the type <code>Y</code>.</p> 
+              </dd>
+              <dt class="body-small">
+               vSignal
+              </dt>
+              <dd class="body-medium">
+               <p>The first closeable signal, with values of the type <code>V</code>.</p> 
+              </dd>
+              <dt class="body-small">
+               zSignal
+              </dt>
+              <dd class="body-medium">
+               <p>The second closeable signal with values of the type <code>Z</code>.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>A new closeable signal with the values of the type <code>Y</code>.</p> 
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="filter-476" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#filter-476" t="n" class="documentableName ">filter</a>[<span t="k"></span><span data-unresolved-link="" t="t">E</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">stream</span>: <a href="../Closeable$.html#CloseableStream-0" t="t">CloseableStream</a>[<span t="t">E</span>])(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">predicate</span>: <span t="t">E</span><span t="k"> =&gt; </span><span data-unresolved-link="" t="t">Boolean</span>): <a href="../Closeable$.html#CloseableStream-0" t="t">CloseableStream</a>[<span data-unresolved-link="" t="t">E</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Creates a new <code>CloaseableStream[E]</code> by filtering events emitted by the original one.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Creates a new <code>CloaseableStream[E]</code> by filtering events emitted by the original one.</p> 
+             </div>
+             <h2 class="h200">Type parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               E
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the emitted event.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               predicate
+              </dt>
+              <dd class="body-medium">
+               <p>A filtering function which for each event emitted by the original stream returns true or false. Only events for which <code>predicate(event)</code> returns true will be emitted in the resulting stream.</p> 
+              </dd>
+              <dt class="body-small">
+               stream
+              </dt>
+              <dd class="body-medium">
+               <p>The original closeable stream.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>A new closeable stream emitting only filtered events.</p> 
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="filter-fffffac6" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#filter-fffffac6" t="n" class="documentableName ">filter</a>[<span t="k"></span><span data-unresolved-link="" t="t">V</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">signal</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">V</span>])(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">predicate</span>: <span t="t">V</span><span t="k"> =&gt; </span><span data-unresolved-link="" t="t">Boolean</span>): <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span data-unresolved-link="" t="t">V</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Creates a new <code>CloseableSignal[V]</code> which updates its value only if the new value of the original closeable signal satisfies the filter, and changes to empty otherwise. Also, if the initial value of the original signal does not satisfy the filter, the new signal will start empty.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Creates a new <code>CloseableSignal[V]</code> which updates its value only if the new value of the original closeable signal satisfies the filter, and changes to empty otherwise. Also, if the initial value of the original signal does not satisfy the filter, the new signal will start empty.</p> 
+             </div>
+             <h2 class="h200">Type parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               V
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the value.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               predicate
+              </dt>
+              <dd class="body-medium">
+               <p>A filtering function which for any value of the original signal returns true or false.</p> 
+              </dd>
+              <dt class="body-small">
+               signal
+              </dt>
+              <dd class="body-medium">
+               <p>The original closeable signal.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>A new closeable signal of the same value type.</p> 
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="map-95" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#map-95" t="n" class="documentableName ">map</a>[<span t="k"></span><span data-unresolved-link="" t="t">E</span>, <span t="k"></span><span data-unresolved-link="" t="t">V</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">stream</span>: <a href="../Closeable$.html#CloseableStream-0" t="t">CloseableStream</a>[<span t="t">E</span>])(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">f</span>: <span t="t">E</span><span t="k"> =&gt; </span><span t="t">V</span>): <a href="../Closeable$.html#CloseableStream-0" t="t">CloseableStream</a>[<span data-unresolved-link="" t="t">V</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Creates a new <code>CloseableStream[V]</code> by mapping events of the type <code>E</code> emitted by the original generator or another closeable stream.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Creates a new <code>CloseableStream[V]</code> by mapping events of the type <code>E</code> emitted by the original generator or another closeable stream.</p> 
+             </div>
+             <h2 class="h200">Type parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               E
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the original event.</p> 
+              </dd>
+              <dt class="body-small">
+               V
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the resulting event.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               f
+              </dt>
+              <dd class="body-medium">
+               <p>The function mapping each event of type <code>E</code> into exactly one event of type <code>V</code>.</p> 
+              </dd>
+              <dt class="body-small">
+               stream
+              </dt>
+              <dd class="body-medium">
+               <p>The original closeable stream.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>A new closeable stream of type <code>V</code>.</p> 
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="map-6e5" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#map-6e5" t="n" class="documentableName ">map</a>[<span t="k"></span><span data-unresolved-link="" t="t">V</span>, <span t="k"></span><span data-unresolved-link="" t="t">Z</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">signal</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">V</span>])(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">f</span>: <span t="t">V</span><span t="k"> =&gt; </span><span t="t">Z</span>): <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span data-unresolved-link="" t="t">Z</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Creates a new <code>CloseableSignal[Z]</code> bby mapping the value of the type V of the original generator or another closeable stream.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Creates a new <code>CloseableSignal[Z]</code> bby mapping the value of the type V of the original generator or another closeable stream.</p> 
+             </div>
+             <h2 class="h200">Type parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               V
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the original value.</p> 
+              </dd>
+              <dt class="body-small">
+               Z
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the resulting value.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               f
+              </dt>
+              <dd class="body-medium">
+               <p>The function mapping the original value of type <code>V</code> into a new value of the type <code>Z</code>.</p> 
+              </dd>
+              <dt class="body-small">
+               signal
+              </dt>
+              <dd class="body-medium">
+               <p>The original closeable signal.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>A new closeable signal of type <code>Z</code>.</p> 
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="mapSync-95" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#mapSync-95" t="n" class="documentableName ">mapSync</a>[<span t="k"></span><span data-unresolved-link="" t="t">E</span>, <span t="k"></span><span data-unresolved-link="" t="t">V</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">stream</span>: <a href="../Closeable$.html#CloseableStream-0" t="t">CloseableStream</a>[<span t="t">E</span>])(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">f</span>: <span t="t">E</span><span t="k"> =&gt; </span><span data-unresolved-link="" t="t">Future</span>[<span t="t">V</span>]): <a href="../Closeable$.html#CloseableStream-0" t="t">CloseableStream</a>[<span data-unresolved-link="" t="t">V</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Creates a new <code>CloseableStream[V]</code> by mapping events of the type <code>E</code> emitted by the original generator or another closeable stream.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Creates a new <code>CloseableStream[V]</code> by mapping events of the type <code>E</code> emitted by the original generator or another closeable stream.</p> 
+             </div>
+             <h2 class="h200">Type parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               E
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the original event.</p> 
+              </dd>
+              <dt class="body-small">
+               V
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the resulting event.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               f
+              </dt>
+              <dd class="body-medium">
+               <p>A function which for a given event of the type <code>E</code> will return a future of the type <code>V</code>. If the future finishes with success, the resulting event of the type <code>V</code> will be emitted by the new stream. Two events, coming one after another, are guaranteed to be mapped in the same order even if the processing for the second event finishes before the processing for the first one.</p> 
+              </dd>
+              <dt class="body-small">
+               stream
+              </dt>
+              <dd class="body-medium">
+               <p>The original closeable stream.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>A new closeable stream of type <code>V</code>.</p> 
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="sequence-a08" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#sequence-a08" t="n" class="documentableName ">sequence</a>[<span t="k"></span><span data-unresolved-link="" t="t">V</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">signals</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">V</span>]*): <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span data-unresolved-link="" t="t">Seq</span>[<span data-unresolved-link="" t="t">V</span>]]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Creates a closeable signal of an arbitrary number of parent signals of the same value. The value of the new signal is the sequence of values of all parent signals in the same order. You can actually think of it as an analogous method to <code>Stream.zip</code>. Closing the resulting signal will close all the original ones. The <code>.isClosed</code> method will return <code>true</code> only if all original signals confirm that they are closed.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Creates a closeable signal of an arbitrary number of parent signals of the same value. The value of the new signal is the sequence of values of all parent signals in the same order. You can actually think of it as an analogous method to <code>Stream.zip</code>. Closing the resulting signal will close all the original ones. The <code>.isClosed</code> method will return <code>true</code> only if all original signals confirm that they are closed.</p> 
+             </div>
+             <h2 class="h200">Type parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               V
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the values in the parent closeable signals.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               signals
+              </dt>
+              <dd class="body-medium">
+               <p>A variable arguments list of parent closeable signals of the same type.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>A new closeable signal with its value being a sequence of current values of the parent signals.</p> 
+              </dd>
+              <dt class="body-small">
+               See also
+              </dt>
+              <dd class="body-medium">
+               <div>
+                <div>
+                 <p><code>.zip</code> method for <span data-unresolved-link="" title="Problem linking CloseableStream: No DRI found for query">CloseableStream</span></p> 
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="signalFromFuture-bc8" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#signalFromFuture-bc8" t="n" class="documentableName ">signalFromFuture</a>[<span t="k"></span><span data-unresolved-link="" t="t">V</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">cFuture</span>: <a href="../CloseableFuture.html" t="t">CloseableFuture</a>[<span t="t">V</span>])(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">ec</span>: <span data-unresolved-link="" t="t">ExecutionContext</span>): <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span data-unresolved-link="" t="t">V</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Creates a new closeable signal from a closeable future.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Creates a new closeable signal from a closeable future.</p> 
+             </div>
+             <h2 class="h200">Type parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               V
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the value produced by the closeable future.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               cFuture
+              </dt>
+              <dd class="body-medium">
+               <p>A closeable future that will eventually produce a value of the type <code>V</code>.</p> 
+              </dd>
+              <dt class="body-small">
+               ec
+              </dt>
+              <dd class="body-medium">
+               <p>The execution context in which the closeable future works. Optional. By default it's <code>Threading.defaultContext</code>.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>A new closeable signal which starts empty and will update at most only once.</p> 
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="signalFromStream-fffff96c" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#signalFromStream-fffff96c" t="n" class="documentableName ">signalFromStream</a>[<span t="k"></span><span data-unresolved-link="" t="t">V</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">initial</span>: <span t="t">V</span>, <span t="k"></span><span data-unresolved-link="" t="n">source</span>: <a href="../Closeable$.html#CloseableStream-0" t="t">CloseableStream</a>[<span t="t">V</span>]): <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span data-unresolved-link="" t="t">V</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Creates a new closeable signal from a closeable stream and an initial value. The signal will be initialized to the initial value on its creation, and subscribe to the stream. Subsequently, it will update the value as new events are published in the parent stream.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Creates a new closeable signal from a closeable stream and an initial value. The signal will be initialized to the initial value on its creation, and subscribe to the stream. Subsequently, it will update the value as new events are published in the parent stream.</p> 
+             </div>
+             <h2 class="h200">Type parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               V
+              </dt>
+              <dd class="body-medium">
+               <p>The type of both the initial value and the events in the parent stream.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               initial
+              </dt>
+              <dd class="body-medium">
+               <p>The initial value of the signal.</p> 
+              </dd>
+              <dt class="body-small">
+               source
+              </dt>
+              <dd class="body-medium">
+               <p>The parent stream.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>A new signal with the value of the type <code>V</code>.</p> 
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="signalFromStream-899" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#signalFromStream-899" t="n" class="documentableName ">signalFromStream</a>[<span t="k"></span><span data-unresolved-link="" t="t">V</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">source</span>: <a href="../Closeable$.html#CloseableStream-0" t="t">CloseableStream</a>[<span t="t">V</span>]): <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span data-unresolved-link="" t="t">V</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Creates a new closeable signal from a closeable stream. The signal will start uninitialized and subscribe to the parent stream. Subsequently, it will update its value as new events are published in the parent stream.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Creates a new closeable signal from a closeable stream. The signal will start uninitialized and subscribe to the parent stream. Subsequently, it will update its value as new events are published in the parent stream.</p> 
+             </div>
+             <h2 class="h200">Type parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               V
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the events in the parent stream.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               source
+              </dt>
+              <dd class="body-medium">
+               <p>The parent stream.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>A new signal with the value of the type <code>V</code>.</p> 
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="streamFromFuture-ca0" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#streamFromFuture-ca0" t="n" class="documentableName ">streamFromFuture</a>[<span t="k"></span><span data-unresolved-link="" t="t">E</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">cFuture</span>: <a href="../CloseableFuture.html" t="t">CloseableFuture</a>[<span t="t">E</span>])(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">ec</span>: <span data-unresolved-link="" t="t">ExecutionContext</span>): <a href="../Closeable$.html#CloseableStream-0" t="t">CloseableStream</a>[<span data-unresolved-link="" t="t">E</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Creates a new closeable stream from a closeable future.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Creates a new closeable stream from a closeable future.</p> 
+             </div>
+             <h2 class="h200">Type parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               E
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the event produced by the closeable future.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               cFuture
+              </dt>
+              <dd class="body-medium">
+               <p>A closeable future that will eventually produce an event of the type <code>E</code>.</p> 
+              </dd>
+              <dt class="body-small">
+               ec
+              </dt>
+              <dd class="body-medium">
+               <p>The execution context in which the closeable future works. Optional. By default it's <code>Threading.defaultContext</code>.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>A new closeable stream which will emit at most only one event of the type <code>E</code>.</p> 
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="zip-ae0" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#zip-ae0" t="n" class="documentableName ">zip</a>[<span t="k"></span><span data-unresolved-link="" t="t">E</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">streams</span>: <a href="../Closeable$.html#CloseableStream-0" t="t">CloseableStream</a>[<span t="t">E</span>]*): <a href="../Closeable$.html#CloseableStream-0" t="t">CloseableStream</a>[<span data-unresolved-link="" t="t">E</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Creates a new closeable stream by merging the original closeable streams of the same type. The resulting stream will emit events coming from all sources. Closing the resulting stream will close all the original ones. The <code>.isClosed</code> method will return <code>true</code> only if all original streams confirm that they are closed.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Creates a new closeable stream by merging the original closeable streams of the same type. The resulting stream will emit events coming from all sources. Closing the resulting stream will close all the original ones. The <code>.isClosed</code> method will return <code>true</code> only if all original streams confirm that they are closed.</p> 
+             </div>
+             <h2 class="h200">Type parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               E
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the event.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               streams
+              </dt>
+              <dd class="body-medium">
+               <p>An argument list of closeable streams of the same type.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>A new closeable stream, emitting events from all original streams.</p> 
+              </dd>
+              <dt class="body-small">
+               Note
+              </dt>
+              <dd class="body-medium">
+               <div>
+                <div>
+                 <p>Note that this is different from <code>.zip</code> methods for <span data-unresolved-link="" title="Problem linking CloseableSignal: No DRI found for query">CloseableSignal</span> and from <code>.sequence</code>. This version of <code>.zip</code> emits single events of type <code>E</code> every time one of the original streams emits them.</p> 
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="zip-fffff932" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#zip-fffff932" t="n" class="documentableName ">zip</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span>, <span t="k"></span><span data-unresolved-link="" t="t">B</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">a</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">A</span>], <span t="k"></span><span data-unresolved-link="" t="n">b</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">B</span>]): <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[(<span data-unresolved-link="" t="t">A</span>, <span data-unresolved-link="" t="t">B</span>)]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Creates a new closeable signal by joining together the original signals of two different types of values, <code>A</code> and <code>B</code>. The resulting closeable signal will hold a tuple of the original values and update every time one of them changes.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Creates a new closeable signal by joining together the original signals of two different types of values, <code>A</code> and <code>B</code>. The resulting closeable signal will hold a tuple of the original values and update every time one of them changes.</p> 
+              <p>Note this is <em>not</em> a method analogous to <code>.zip</code> for <span data-unresolved-link="" title="Problem linking CloseableStream: No DRI found for query">CloseableStream</span>. Here the parent signals can be of different types (<span data-unresolved-link="" title="Problem linking CloseableStream: No DRI found for query">CloseableStream</span> <code>.zip</code> requires all parent streams to be of the same type) but on the other hand we're not able to zip an arbitrary number of signals. Also, the result value is a tuple, not just one event after another.</p> 
+             </div>
+             <h2 class="h200">Type parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               A
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the value of the first of parent closeable signals.</p> 
+              </dd>
+              <dt class="body-small">
+               B
+              </dt>
+              <dd class="body-medium">
+               <p>The type of the value of the second of parent closeable signals.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               a
+              </dt>
+              <dd class="body-medium">
+               <p>The first of the parent closeable signals.</p> 
+              </dd>
+              <dt class="body-small">
+               b
+              </dt>
+              <dd class="body-medium">
+               <p>The second of the parent closeable signals.</p> 
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>A new signal its the value constructed as a tuple of values form the parent closeable signals.</p> 
+              </dd>
+              <dt class="body-small">
+               See also
+              </dt>
+              <dd class="body-medium">
+               <div>
+                <div>
+                 <p>Please see <code>.sequence</code> for a method which resembles <code>.zip</code> for <span data-unresolved-link="" title="Problem linking CloseableStream: No DRI found for query">CloseableStream</span> in a different way.</p> 
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="zip-3b3" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#zip-3b3" t="n" class="documentableName ">zip</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span>, <span t="k"></span><span data-unresolved-link="" t="t">B</span>, <span t="k"></span><span data-unresolved-link="" t="t">C</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">a</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">A</span>], <span t="k"></span><span data-unresolved-link="" t="n">b</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">B</span>], <span t="k"></span><span data-unresolved-link="" t="n">c</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">C</span>]): <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[(<span data-unresolved-link="" t="t">A</span>, <span data-unresolved-link="" t="t">B</span>, <span data-unresolved-link="" t="t">C</span>)]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>A version of the <code>.zip</code> method joining three closeable signals of different value types.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>A version of the <code>.zip</code> method joining three closeable signals of different value types.</p> 
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="zip-c70" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#zip-c70" t="n" class="documentableName ">zip</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span>, <span t="k"></span><span data-unresolved-link="" t="t">B</span>, <span t="k"></span><span data-unresolved-link="" t="t">C</span>, <span t="k"></span><span data-unresolved-link="" t="t">D</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">a</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">A</span>], <span t="k"></span><span data-unresolved-link="" t="n">b</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">B</span>], <span t="k"></span><span data-unresolved-link="" t="n">c</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">C</span>], <span t="k"></span><span data-unresolved-link="" t="n">d</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">D</span>]): <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[(<span data-unresolved-link="" t="t">A</span>, <span data-unresolved-link="" t="t">B</span>, <span data-unresolved-link="" t="t">C</span>, <span data-unresolved-link="" t="t">D</span>)]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>A version of the <code>.zip</code> method joining four closeable signals of different value types.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>A version of the <code>.zip</code> method joining four closeable signals of different value types.</p> 
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="zip-7f5" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#zip-7f5" t="n" class="documentableName ">zip</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span>, <span t="k"></span><span data-unresolved-link="" t="t">B</span>, <span t="k"></span><span data-unresolved-link="" t="t">C</span>, <span t="k"></span><span data-unresolved-link="" t="t">D</span>, <span t="k"></span><span data-unresolved-link="" t="t">E</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">a</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">A</span>], <span t="k"></span><span data-unresolved-link="" t="n">b</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">B</span>], <span t="k"></span><span data-unresolved-link="" t="n">c</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">C</span>], <span t="k"></span><span data-unresolved-link="" t="n">d</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">D</span>], <span t="k"></span><span data-unresolved-link="" t="n">e</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">E</span>]): <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[(<span data-unresolved-link="" t="t">A</span>, <span data-unresolved-link="" t="t">B</span>, <span data-unresolved-link="" t="t">C</span>, <span data-unresolved-link="" t="t">D</span>, <span data-unresolved-link="" t="t">E</span>)]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>A version of the <code>.zip</code> method joining five closeable signals of different value types.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>A version of the <code>.zip</code> method joining five closeable signals of different value types.</p> 
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="zip-fffff8ae" data-f-keywords="inline">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="Transformers$.html#zip-fffff8ae" t="n" class="documentableName ">zip</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span>, <span t="k"></span><span data-unresolved-link="" t="t">B</span>, <span t="k"></span><span data-unresolved-link="" t="t">C</span>, <span t="k"></span><span data-unresolved-link="" t="t">D</span>, <span t="k"></span><span data-unresolved-link="" t="t">E</span>, <span t="k"></span><span data-unresolved-link="" t="t">F</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">a</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">A</span>], <span t="k"></span><span data-unresolved-link="" t="n">b</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">B</span>], <span t="k"></span><span data-unresolved-link="" t="n">c</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">C</span>], <span t="k"></span><span data-unresolved-link="" t="n">d</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">D</span>], <span t="k"></span><span data-unresolved-link="" t="n">e</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">E</span>], <span t="k"></span><span data-unresolved-link="" t="n">f</span>: <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[<span t="t">F</span>]): <a href="../Closeable$.html#CloseableSignal-0" t="t">CloseableSignal</a>[(<span data-unresolved-link="" t="t">A</span>, <span data-unresolved-link="" t="t">B</span>, <span data-unresolved-link="" t="t">C</span>, <span data-unresolved-link="" t="t">D</span>, <span data-unresolved-link="" t="t">E</span>, <span data-unresolved-link="" t="t">F</span>)]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>A version of the <code>.zip</code> method joining six closeable signals of different value types.</p> 
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>A version of the <code>.zip</code> method joining six closeable signals of different value types.</p> 
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+   </div>
+  </div>
+ </div>
+</section></div><div id="toc" class="body-small"><div id="toc-container"><span class="toc-title h200">In this article</span><nav class="toc-nav"><ul class="toc-list"><li><a href="#attributes">Attributes</a></li><li><a href="#members-list">Members list</a><ul><li><a href="#Type-members">Type members</a><ul><li><a href="#Classlikes">Classlikes</a></li></ul></li><li><a href="#Value-members">Value members</a><ul><li><a href="#Concrete-methods">Concrete methods</a></li></ul></li></ul></li></ul></nav></div></div></div><div id="footer" class="body-small mobile-footer"><div class="left-container">Generated with</div><div class="right-container"><a href="https://github.com/lampepfl/dotty"><button class="icon-button gh"></button></a><a href="https://twitter.com/scala_lang"><button class="icon-button twitter"></button></a><a href="https://discord.com/invite/scala"><button class="icon-button discord"></button></a><a href="https://gitter.im/scala/scala"><button class="icon-button gitter"></button></a><div class="text"></div></div><div class="text-mobile"></div></div></div></div></body></html>
