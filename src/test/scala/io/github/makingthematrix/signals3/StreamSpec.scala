@@ -2,33 +2,32 @@ package io.github.makingthematrix.signals3
 
 import testutils.{awaitAllTasks, result, waitForResult}
 
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 import scala.concurrent.{Future, Promise}
 import scala.language.postfixOps
 
-class EventStreamSpec extends munit.FunSuite:
-
+class StreamSpec extends munit.FunSuite:
   import EventContext.Implicits.global
 
   test("unsubscribe from source and current mapped signal on onUnwire") {
-    val a: SourceStream[Int] = EventStream()
-    val b: SourceStream[Int] = EventStream()
+    val a: SourceStream[Int] = Stream()
+    val b: SourceStream[Int] = Stream()
 
     val subscription = a.flatMap(_ => b).onCurrent { _ => }
     a ! 1
 
-    assert(b.hasSubscribers, "mapped event stream should have subscriber after element emitting from source event stream")
+    assert(b.hasSubscribers, "mapped stream should have subscriber after element emitting from source stream")
 
     subscription.unsubscribe()
 
-    assert(!a.hasSubscribers, "source event stream should have no subscribers after onUnwire was called on FlatMapLatestEventStream")
-    assert(!b.hasSubscribers, "mapped event stream should have no subscribers after onUnwire was called on FlatMapLatestEventStream")
+    assert(!a.hasSubscribers, "source stream should have no subscribers after onUnwire was called on FlatMapLatestEventStream")
+    assert(!b.hasSubscribers, "mapped stream should have no subscribers after onUnwire was called on FlatMapLatestEventStream")
   }
 
-  test("discard old mapped event stream when new element emitted from source event stream") {
-    val a: SourceStream[String] = EventStream()
-    val b: SourceStream[String] = EventStream()
-    val c: SourceStream[String] = EventStream()
+  test("discard old mapped stream when new element emitted from source stream") {
+    val a: SourceStream[String] = Stream()
+    val b: SourceStream[String] = Stream()
+    val c: SourceStream[String] = Stream()
 
     var flatMapCalledCount = 0
     var lastReceivedElement: Option[String] = None
@@ -42,22 +41,22 @@ class EventStreamSpec extends munit.FunSuite:
 
     a ! "a"
 
-    assert(b.hasSubscribers, "mapped event stream 'b' should have subscriber after first element emitting from source event stream")
+    assert(b.hasSubscribers, "mapped stream 'b' should have subscriber after first element emitting from source stream")
 
     b ! "b"
 
-    assertEquals(lastReceivedElement, Some("b"), "flatMapLatest event stream should provide events emitted from mapped signal 'b'")
+    assertEquals(lastReceivedElement, Some("b"), "flatMapLatest stream should provide events emitted from mapped signal 'b'")
 
     a ! "a"
 
-    assert(!b.hasSubscribers, "mapped event stream 'b' should have no subscribers after second element emitting from source event stream")
+    assert(!b.hasSubscribers, "mapped stream 'b' should have no subscribers after second element emitting from source stream")
 
-    assert(c.hasSubscribers, "mapped event stream 'c' should have subscriber after second element emitting from source event stream")
+    assert(c.hasSubscribers, "mapped stream 'c' should have subscriber after second element emitting from source stream")
 
     c ! "c"
     b ! "b"
 
-    assertEquals(lastReceivedElement, Some("c")) // flatMapLatest event stream should provide events emitted from mapped signal 'c'
+    assertEquals(lastReceivedElement, Some("c")) // flatMapLatest stream should provide events emitted from mapped signal 'c'
 
     subscription.unsubscribe()
   }
@@ -67,7 +66,7 @@ class EventStreamSpec extends munit.FunSuite:
     val promise = Promise[Int]()
     val resPromise = Promise[Int]()
 
-    EventStream.from(promise.future).onCurrent { event =>
+    Stream.from(promise.future).onCurrent { event =>
       assertEquals(event, 1)
       resPromise.success(event)
     }
@@ -81,27 +80,17 @@ class EventStreamSpec extends munit.FunSuite:
     val promise = Promise[Int]()
     val resPromise = Promise[Int]()
 
-    EventStream.from(promise.future).onCurrent { event => resPromise.success(event) }
+    Stream.from(promise.future).onCurrent { event => resPromise.success(event) }
 
     promise.failure(new IllegalArgumentException)
 
     assert(testutils.tryResult(resPromise.future)(using 1 seconds).isFailure)
   }
 
-  test("emit an event after delay by wrapping a cancellable future") {
-    val promise = Promise[Long]()
-    val t = System.currentTimeMillis()
-    val stream = EventStream.from(CancellableFuture.delay(1 seconds))
-
-    stream.onCurrent { _ => promise.success(System.currentTimeMillis() - t) }
-
-    assert(result(promise.future) >= 1000L)
-  }
-
   test("zip two streams and emit an event coming from either of them") {
-    val stream1 = EventStream[Int]()
-    val stream2 = EventStream[Int]()
-    val zip = EventStream.zip(stream1, stream2)
+    val stream1 = Stream[Int]()
+    val stream2 = Stream[Int]()
+    val zip = Stream.zip(stream1, stream2)
 
     val expected = Signal(0)
     val eventReceived = Signal(false)
@@ -123,8 +112,8 @@ class EventStreamSpec extends munit.FunSuite:
   }
 
   test("zip the first stream with another and emit an event coming from either of them") {
-    val stream1 = EventStream[Int]()
-    val stream2 = EventStream[Int]()
+    val stream1 = Stream[Int]()
+    val stream2 = Stream[Int]()
     val zip = stream1.zip(stream2)
 
     val expected = Signal(0)
@@ -147,8 +136,8 @@ class EventStreamSpec extends munit.FunSuite:
   }
 
   test("pipe events from the first stream to another") {
-    val stream1 = EventStream[Int]()
-    val stream2 = EventStream[Int]()
+    val stream1 = Stream[Int]()
+    val stream2 = Stream[Int]()
 
     val expected = Signal(0)
     val eventReceived = Signal(false)
@@ -171,8 +160,8 @@ class EventStreamSpec extends munit.FunSuite:
   }
 
   test("pipe events with the | operator from the first stream to another") {
-    val stream1 = EventStream[Int]()
-    val stream2 = EventStream[Int]()
+    val stream1 = Stream[Int]()
+    val stream2 = Stream[Int]()
 
     val expected = Signal(0)
     val eventReceived = Signal(false)
@@ -194,9 +183,9 @@ class EventStreamSpec extends munit.FunSuite:
     test(4)
   }
 
-  test("create an event stream from a signal") {
+  test("create a stream from a signal") {
     val signal = Signal[Int]()
-    val stream = EventStream.from(signal)
+    val stream = Stream.from(signal)
 
     val expected = Signal(0)
     val eventReceived = Signal(false)
@@ -217,9 +206,9 @@ class EventStreamSpec extends munit.FunSuite:
     test(4)
   }
 
-  test("create an event stream from a future") {
+  test("create a stream from a future") {
     val promise = Promise[Int]()
-    val stream = EventStream.from(promise.future)
+    val stream = Stream.from(promise.future)
 
     val received = Signal(0)
     stream.foreach { n =>
@@ -230,10 +219,10 @@ class EventStreamSpec extends munit.FunSuite:
     waitForResult(received, 1)
   }
 
-  test("create an event stream from a future on a separate execution context") {
+  test("create a stream from a future on a separate execution context") {
     given dq: DispatchQueue = SerialDispatchQueue()
     val promise = Promise[Int]()
-    val stream = EventStream.from(promise.future, dq)
+    val stream = Stream.from(promise.future, dq)
 
     val received = Signal(0)
     stream.foreach { n =>
@@ -247,7 +236,7 @@ class EventStreamSpec extends munit.FunSuite:
   test("ensure mapSync maintains the order of mapped events") {
     given dq: DispatchQueue = UnlimitedDispatchQueue()
 
-    val source = EventStream[Int]()
+    val source = Stream[Int]()
 
     val mappedSync = source.mapSync { n =>
       if n % 2 == 0 then Future {
@@ -277,7 +266,7 @@ class EventStreamSpec extends munit.FunSuite:
 
     val numbers = Seq(1, 2, 3, 4, 5, 6, 7, 8, 9)
 
-    val source = EventStream[Int]()
+    val source = Stream[Int]()
     val evenEvents = source.filter(_ % 2 == 0)
     val oddEvents = source.filter(_ % 2 != 0)
 
@@ -305,7 +294,7 @@ class EventStreamSpec extends munit.FunSuite:
 
     val numbers = Seq(1, 2, 3, 4, 5, 6, 7, 8, 9)
 
-    val source = EventStream[Int]()
+    val source = Stream[Int]()
     val oddEvents = source.collect { case n if n % 2 != 0 => n + 100 }
 
     var oddResults = List[Int]()
@@ -328,7 +317,7 @@ class EventStreamSpec extends munit.FunSuite:
 
     val numbers = Seq(1, 2, 3, 4, 5, 6, 7, 8, 9)
 
-    val source = EventStream[Int]()
+    val source = Stream[Int]()
     val scanned = source.scan(1)(_ * _)
 
     var oddResults = List[Int]()
@@ -346,10 +335,10 @@ class EventStreamSpec extends munit.FunSuite:
     assertEquals(oddResults, List(1, 2, 6, 24, 120, 720, 5040, 40320, 362880))
   }
 
-  test("Take the next event in the event stream as a cancellable future") {
+  test("Take the next event in the stream as a closeable future") {
     given dq: DispatchQueue = SerialDispatchQueue()
 
-    val source = EventStream[Int]()
+    val source = Stream[Int]()
     var results = List[Int]()
 
     var intercepted = -1
@@ -372,12 +361,12 @@ class EventStreamSpec extends munit.FunSuite:
     assertEquals(results, List(1, 2, 3))
   }
 
-  test("Turn an event stream of booleans to an event stream of units") {
+  test("Turn a stream of booleans to a stream of units") {
     given dq: DispatchQueue = SerialDispatchQueue()
 
     val booleans = List(true, false, true, false, true)
 
-    val source = EventStream[Boolean]()
+    val source = Stream[Boolean]()
     var howMuchTrue = 0
     var howMuchFalse = 0
 
@@ -389,4 +378,25 @@ class EventStreamSpec extends munit.FunSuite:
 
     assertEquals(howMuchTrue, 3)
     assertEquals(howMuchFalse, 2)
+  }
+
+  test("Flip the boolean stream with the .not method") {
+    given dq: DispatchQueue = SerialDispatchQueue()
+
+    val booleans = List(true, false, true, false, true)
+
+    val source = Stream[Boolean]()
+    val flipped = source.not
+    
+    var howMuchTrue = 0
+    var howMuchFalse = 0
+
+    flipped.ifTrue.foreach { _ => howMuchTrue += 1 }
+    flipped.ifFalse.foreach { _ => howMuchFalse += 1 }
+
+    booleans.foreach(source ! _)
+    awaitAllTasks
+
+    assertEquals(howMuchTrue, 2)
+    assertEquals(howMuchFalse, 3)
   }

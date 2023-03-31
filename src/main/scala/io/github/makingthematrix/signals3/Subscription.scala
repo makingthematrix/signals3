@@ -2,7 +2,7 @@ package io.github.makingthematrix.signals3
 
 import scala.ref.WeakReference
 
-/** When you add a new subscriber to your [[EventStream]] or [[Signal]], in return you get a [[Subscription]].
+/** When you add a new subscriber to your [[Stream]] or [[Signal]], in return you get a [[Subscription]].
   * A subscription can then be used to inform the source about changes in the condition of the connection:
   * should it be enabled or disabled, should the subscriber be subscribed or (temporarily) unsubscribed,
   * or should the subscription be permanently destroyed.
@@ -15,7 +15,7 @@ import scala.ref.WeakReference
   *
   * Implement this trait together with writing a new event source if you want to change how your event source
   * reacts to the aforementioned events. For an example of how to do it on a small scale, please
-  * @see [[CancellableFuture.withAutoCanceling]]
+  * @see [[CloseableFuture.withAutoClosing]]
   */
 trait Subscription:
   /** You can think of `enable()`/`disable()` as of `subscribe()`/`unsubscribe()` on a higher level.
@@ -68,7 +68,7 @@ trait Subscription:
   * For examples:
  *
   * @see [[Signal]]
-  * @see [[EventStream]]
+  * @see [[Stream]]
   * @param context A weak reference to the event context within which the subscription lives.
   */
 abstract class BaseSubscription(context: WeakReference[EventContext]) extends Subscription:

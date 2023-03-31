@@ -2,15 +2,15 @@ package io.github.makingthematrix.signals3
 
 import testutils.{awaitAllTasks, waitForResult}
 
-class FlatMapEventStreamSpec extends munit.FunSuite:
+class FlatMapStreamSpec extends munit.FunSuite:
   test("Normal flatmapping") {
     given dispatchQueue: DispatchQueue = SerialDispatchQueue()
     val received = Signal(Seq.empty[Int])
     val capture: Int => Unit = { value => received.mutate(_ :+ value) }
 
-    val switch = EventStream[Boolean]()
-    val source1 = EventStream[Int]()
-    val source2 = EventStream[Int]()
+    val switch = Stream[Boolean]()
+    val source1 = Stream[Int]()
+    val source2 = Stream[Int]()
 
     val result = switch.flatMap {
       case true  => source1
@@ -58,11 +58,11 @@ class FlatMapEventStreamSpec extends munit.FunSuite:
     val received = Signal(Seq.empty[Int])
     val capture: Int => Unit = { value => received.mutate(_ :+ value) }
 
-    val switch  = EventStream[Boolean]()
-    val switch1 = EventStream[Boolean]()
-    val switch2 = EventStream[Boolean]()
-    val source1 = EventStream[Int]()
-    val source2 = EventStream[Int]()
+    val switch  = Stream[Boolean]()
+    val switch1 = Stream[Boolean]()
+    val switch2 = Stream[Boolean]()
+    val source1 = Stream[Int]()
+    val source2 = Stream[Int]()
 
     val result = for
       b1  <- switch
@@ -101,9 +101,9 @@ class FlatMapEventStreamSpec extends munit.FunSuite:
     val received = Signal(Seq.empty[Int])
     val capture: Int => Unit = { value => received.mutate(_ :+ value) }
 
-    val switch = EventStream[Boolean]()
-    val source1 = EventStream[Int]()
-    val source2 = EventStream[Int]()
+    val switch = Stream[Boolean]()
+    val source1 = Stream[Int]()
+    val source2 = Stream[Int]()
 
     val result = switch.flatMap {
       case true  => source1
@@ -146,8 +146,8 @@ class FlatMapEventStreamSpec extends munit.FunSuite:
 
 
   test("wire and un-wire both source event streams") {
-    val es1 = EventStream[String]()
-    val es2 = EventStream[Int]()
+    val es1 = Stream[String]()
+    val es2 = Stream[Int]()
     val res = es1.flatMap { _ => es2 }
 
     assert(!es1.wired)
