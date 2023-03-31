@@ -34,6 +34,17 @@ Maven:
     <version>1.1.0</version>
 </dependency>
 ```
+
+Mill:
+```
+ivy"io.github.makingthematrix::signals3:1.1.0"
+```
+
+Gradle:
+```
+compile group: 'io.github.makingthematrix', name: 'signals3_3', version: '1.1.0'
+```
+
 #### Syntax
 
 In short, you can create a `SourceSignal` somewhere in the code:
