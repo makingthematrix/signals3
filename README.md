@@ -10,25 +10,30 @@ Wire Signals was used extensively in the Wire Android client app - the biggest S
 [fetching and decoding data from another device](https://github.com/wireapp/wire-android-sync-engine/blob/develop/zmessaging/src/main/scala/com/waz/service/push/PushService.scala) 
 to [updating the list of messages displayed in a conversation](https://github.com/wireapp/wire-android/blob/develop/app/src/main/scala/com/waz/zclient/messages/MessagesController.scala).
 
-This new version of Wire Signals starts as a humble copy, just rewritten in Scala 3, but I have some plans for it.
-
 ### Main features
 
 * Event streams
-* Signals - event streams with internal values
+* Signals: event streams with internal values
 * Abstractions for easy data transfer between execution contexts
 * An implementation of (sometimes) closeable futures
 * Methods to work with event streams and signals in a way similar to standard Scala collections
+* Generators: streams that can generate events and signals that can compute their new updates in regular (or variable) intervals. 
 
 ### How to use
 
-Signals3 works with Scala 3.* . For Scala 2.*, try [wire-signals](https://github.com/wireapp/wire-signals).
-
-If you use sbt, just add this to your library dependencies:
+SBT:
 ```sbt
-  libraryDependencies += "io.github.makingthematrix" %% "signals3" % "1.0.0"
+  libraryDependencies += "io.github.makingthematrix" %% "signals3" % "1.1.0"
 ```
 
+Maven:
+```xml
+<dependency>
+    <groupId>io.github.makingthematrix</groupId>
+    <artifactId>signals3_3</artifactId>
+    <version>1.1.0</version>
+</dependency>
+```
 #### Syntax
 
 In short, you can create a `SourceSignal` somewhere in the code:
