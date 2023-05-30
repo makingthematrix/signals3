@@ -126,3 +126,35 @@ class GeneratorSignalSpec extends munit.FunSuite:
     assert(timePassed2 - timePassed1 >= 200, timePassed2)
     assert(pausedOn > 0L)
   }
+
+  test("Close the generator signal automatically") {
+    import scala.util.Using
+    val arr = mutable.ArrayBuilder.make[Int]
+    Using(GeneratorSignal.counter(200.millis)) { sig =>
+      sig.foreach(n => arr.addOne(n))
+      Thread.sleep(500L)
+    }
+    val res1 = arr.result().toSeq
+    assert(res1.nonEmpty)
+    // the generator itself is not available here anymore (as it should be)
+    // so to check if it's closed we wait a little and see if a new value was generated (it shouldn't be)
+    Thread.sleep(500L)
+    val res2 = arr.result().toSeq
+    assertEquals(res1, res2)
+  }
+
+  test("Close the generator stream automatically") {
+    import scala.util.Using
+    val arr = mutable.ArrayBuilder.make[Int]
+    Using(GeneratorStream.repeat(1, 200.millis)) { stream =>
+      stream.foreach(n => arr.addOne(n))
+      Thread.sleep(500L)
+    }
+    val res1 = arr.result().toSeq
+    assert(res1.nonEmpty)
+    // the generator itself is not available here anymore (as it should be)
+    // so to check if it's closed we wait a little and see if a new value was generated (it shouldn't be)
+    Thread.sleep(500L)
+    val res2 = arr.result().toSeq
+    assertEquals(res1, res2)
+  }
