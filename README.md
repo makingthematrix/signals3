@@ -24,7 +24,7 @@ In new apps, it can be of use for the same tasks, as well as - if you write an A
 
 SBT:
 ```sbt
-  libraryDependencies += "io.github.makingthematrix" %% "signals3" % "1.1.0"
+  libraryDependencies += "io.github.makingthematrix" %% "signals3" % "1.1.1"
 ```
 
 Maven:
@@ -32,18 +32,18 @@ Maven:
 <dependency>
     <groupId>io.github.makingthematrix</groupId>
     <artifactId>signals3_3</artifactId>
-    <version>1.1.0</version>
+    <version>1.110</version>
 </dependency>
 ```
 
 Mill:
 ```
-ivy"io.github.makingthematrix::signals3:1.1.0"
+ivy"io.github.makingthematrix::signals3:1.1.1"
 ```
 
 Gradle:
 ```
-compile group: 'io.github.makingthematrix', name: 'signals3_3', version: '1.1.0'
+compile group: 'io.github.makingthematrix', name: 'signals3_3', version: '1.1.1'
 ```
 
 ### Syntax
