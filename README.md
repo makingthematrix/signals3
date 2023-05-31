@@ -22,12 +22,12 @@ In new apps, it can be of use for the same tasks, as well as - if you write an A
 
 ## How to use
 
-SBT:
+**sbt**:
 ```sbt
   libraryDependencies += "io.github.makingthematrix" %% "signals3" % "1.1.1"
 ```
 
-Maven:
+**Maven**:
 ```xml
 <dependency>
     <groupId>io.github.makingthematrix</groupId>
@@ -36,12 +36,12 @@ Maven:
 </dependency>
 ```
 
-Mill:
+**Mill**:
 ```
 ivy"io.github.makingthematrix::signals3:1.1.1"
 ```
 
-Gradle:
+**Gradle**:
 ```
 compile group: 'io.github.makingthematrix', name: 'signals3_3', version: '1.1.1'
 ```
@@ -98,7 +98,7 @@ your GUI platform execution context.
 
 ```scala
 import android.os.{Handler, Looper}
-import io.github.makingthematrix.signal3.ui.UiDispatchQueue
+import io.github.makingthematrix.signals3.ui.UiDispatchQueue
 
 val handler = new Handler(Looper.getMainLooper)
 UiDispatchQueue.setUi(handler.post)
@@ -108,7 +108,7 @@ UiDispatchQueue.setUi(handler.post)
 
 ```scala
 import javafx.application.Platform
-import io.github.makingthematrix.signal3.ui.UiDispatchQueue
+import io.github.makingthematrix.signals3.ui.UiDispatchQueue
 
 UiDispatchQueue.setUi(Platform.runLater)
 ```
@@ -116,7 +116,7 @@ UiDispatchQueue.setUi(Platform.runLater)
 #### Usage in all cases:
 
 ```scala
-import io.github.makingthematrix.signal3.ui.UiDispatchQueue.*
+import io.github.makingthematrix.signals3.ui.UiDispatchQueue.*
 
 val signal = Signal(false) // create a new source signal
 ...
