@@ -32,7 +32,7 @@ Maven:
 <dependency>
     <groupId>io.github.makingthematrix</groupId>
     <artifactId>signals3_3</artifactId>
-    <version>1.110</version>
+    <version>1.1.1</version>
 </dependency>
 ```
 
