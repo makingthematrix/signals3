@@ -56,8 +56,8 @@ val strSignal = Signal[String]() // initially empty SourceSignal[String]
 
 and subscribe it in another place:
 ```scala
-intSignal.foreach { number => println("number: $number") }
-strSignal.foreach { str => println("str: $str") }
+intSignal.foreach { number => println(s"number: $number") }
+strSignal.foreach { str => println(s"str: $str") }
 ```
 
 Now every time you publish something to the signals, the functions you provided above will be executed, just as in case of a regular stream...
@@ -67,7 +67,7 @@ number: 2
 ```
 ... but if you happen to subscribe to a signal after an event was published, the subscriber will still have access to that event. On the moment of subscription the provided function will be executed with the last event in the signal if there is one. So at this point in the example subscribing to `intSignal` will result in the number being displayed:
 ```scala
-> intSignal.foreach { number => println("number: $number") }
+> intSignal.foreach { number => println(s"number: $number") }
 number: 2
 ```
 but subscribing to `strSignal` will not display anything, because `strSignal` is still empty. Or, if you simply don't need that functionality, you can use a standard `Stream` instead.
