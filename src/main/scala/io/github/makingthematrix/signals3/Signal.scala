@@ -114,7 +114,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
       val subscriber = new SignalSubscriber:
         override def changed(ec: Option[ExecutionContext]): Unit = value.foreach(p.trySuccess)
       subscribe(subscriber)
-      p.future.onComplete(_ => unsubscribe(subscriber))(Threading.defaultContext)
+      p.future.onComplete(_ => unsubscribe(subscriber))(using Threading.defaultContext)
       value.foreach(p.trySuccess)
       p.future
 
@@ -128,7 +128,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     * @return a future of boolean: true if the signal contains the given value, false otherwise
     */
   final def contains(value: V)(using ec: ExecutionContext): Future[Boolean] =
-    if empty then Future.successful(false) else future.map(_ == value)(ec)
+    if empty then Future.successful(false) else future.map(_ == value)(using ec)
 
   /** A shortcut that checks if the current value (or the first value after initialization) fulfills the given condition.
     *
@@ -137,7 +137,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     * @return a future of boolean: true if the signal's value fulfills the given condition, false otherwise
     */
   final def exists(f: V => Boolean)(using ec: ExecutionContext): Future[Boolean] =
-    if empty then Future.successful(false) else future.map(f)(ec)
+    if empty then Future.successful(false) else future.map(f)(using ec)
 
   /** a stream where each event is a tuple of the old and the new value of the signal.
     * Every time the value of the signal changes - actually changes to another value - the new value will be published in this stream,
@@ -221,7 +221,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     *
     * @return A new future which finishes either immediately or as soon as the value of the original signal is true.
     */
-  inline final def onTrue(using V <:< Boolean): Future[Unit] = collect { case true => () }.future
+  final def onTrue(using V <:< Boolean): Future[Unit] = collect { case true => () }.future
 
   /** Assuming that the value of the signal can be interpreted as a boolean, this method returns a future
     * of type `Unit` which will finish with success when the value of the original signal is false.
@@ -233,7 +233,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     *
     * @return A new future which finishes either immediately or as soon as the value of the original signal is false.
     */
-  inline final def onFalse(using V <:< Boolean): Future[Unit] = collect { case false => () }.future
+  final def onFalse(using V <:< Boolean): Future[Unit] = collect { case false => () }.future
 
   /** Creates a new signal of values of the type `Z` by applying a partial function which maps the original value of the type `V`
     * to a value of the type `Z`. If the partial function doesn't work for the current value, the new signal will become empty
@@ -518,7 +518,7 @@ object Signal:
       source.value.foreach { event =>
         if subscribed then
           executionContext match
-            case Some(ec) if !currentContext.contains(ec) => Future(if subscribed then Try(f(event)))(ec)
+            case Some(ec) if !currentContext.contains(ec) => Future(if subscribed then Try(f(event)))(using ec)
             case _ => f(event)
       }
     }
@@ -667,7 +667,7 @@ object Signal:
     * @return A new signal of values of the type `Z`.
     */
   inline def foldLeft[V, Z](sources: Signal[V]*)(zero: Z)(f: (Z, V) => Z): Signal[Z] =
-    new FoldLeftSignal[V, Z](sources: _*)(zero)(f)
+    new FoldLeftSignal[V, Z](sources*)(zero)(f)
 
   /**
     * Combines the current values of two signals of the same or different types `V` and `Z` to produce a signal with
@@ -702,7 +702,7 @@ object Signal:
     * @return A new signal of `Boolean`.
     */
   inline def and(sources: Signal[Boolean]*): Signal[Boolean] =
-    foldLeft[Boolean, Boolean](sources: _*)(true)(_ && _)
+    foldLeft[Boolean, Boolean](sources*)(true)(_ && _)
 
   /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
     * The new signal's value will be `true` if any of the parent signals values is `true` - or `false` otherwise.
@@ -720,7 +720,7 @@ object Signal:
     * @param sources  A variable arguments list of parent signals of the type `Boolean`.
     * @return A new signal of `Boolean`.
     */
-  inline def or(sources: Signal[Boolean]*): Signal[Boolean] = foldLeft[Boolean, Boolean](sources: _*)(false)(_ || _)
+  inline def or(sources: Signal[Boolean]*): Signal[Boolean] = foldLeft[Boolean, Boolean](sources*)(false)(_ || _)
 
   /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
     * The new signal's value will be `true` if both parent signals values are `true` or if both are `false`.
@@ -774,7 +774,7 @@ object Signal:
     * @tparam V The type of the values in the parent signals.
     * @return A new signal with its value being a sequence of current values of the parent signals.
     */
-  inline def sequence[V](sources: Signal[V]*): Signal[Seq[V]] = new SequenceSignal[V](sources: _*)
+  inline def sequence[V](sources: Signal[V]*): Signal[Seq[V]] = new SequenceSignal[V](sources*)
 
   /** Creates a new signal from a future.
     * The signal will start uninitialized and initialize to its only, never again changing value if the future finishes with success.
@@ -797,7 +797,7 @@ object Signal:
     new Signal[V]().tap { signal =>
       future.foreach {
         res => signal.set(Option(res), Some(executionContext))
-      }(executionContext)
+      }(using executionContext)
     }
 
   /** A version of `from` using the default execution context as its second argument. */

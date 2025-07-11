@@ -312,7 +312,7 @@ class SignalSpec extends munit.FunSuite:
         if received.incrementAndGet() == dispatches + 1 then p.trySuccess({})
       }
 
-      (1 to dispatches).foreach(n => Future(f(signal, n))(actualExecutionContext))
+      (1 to dispatches).foreach(n => Future(f(signal, n))(using actualExecutionContext))
 
       result(p.future)
 
@@ -926,7 +926,7 @@ class SignalSpec extends munit.FunSuite:
     val s2 = Signal[Boolean]()
     assert(s2.empty)
 
-    val res: Signal[Boolean] = s1 nor s2
+    val res: Signal[Boolean] = s1 `nor` s2
     assert(res.empty)
 
     s1 ! true
@@ -960,7 +960,7 @@ class SignalSpec extends munit.FunSuite:
     val s2 = Signal[Boolean]()
     assert(s2.empty)
 
-    val res: Signal[Boolean] = s1 nand s2
+    val res: Signal[Boolean] = s1 `nand` s2
     assert(res.empty)
 
     s1 ! true

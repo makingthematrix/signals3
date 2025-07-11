@@ -80,7 +80,7 @@ final class AggregatingSignal[E, V](loader: () => Future[V], sourceStream: Strea
     }
     case Failure(_) if loadId.intValue() == id => valueMonitor.synchronized { self.stash = Vector.empty } // load failed
     case _ => // delegate is no longer the current one, discarding loaded value
-  }(ec)
+  }(using ec)
 
   override def onWire(): Unit =
     stash = Vector.empty

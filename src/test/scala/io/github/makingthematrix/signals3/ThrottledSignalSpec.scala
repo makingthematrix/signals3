@@ -12,7 +12,7 @@ import java.lang.Thread.sleep
 class ThrottledSignalSpec extends munit.FunSuite:
 
   test("throttle serial events") {
-    100 times spying { spy =>
+    100 `times` spying { spy =>
       val s = Signal(1)
       val m = s.throttle(2.millis)
       m.onCurrent(spy.capture)

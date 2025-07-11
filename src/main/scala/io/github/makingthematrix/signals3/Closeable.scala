@@ -41,9 +41,9 @@ object Closeable:
     * A type alias for a closeable stream.
     * @tparam E The event type of the stream.
     */
-  type CloseableStream[E] = Stream[E] with Closeable
+  type CloseableStream[E] = Stream[E] & Closeable
   /**
     * A type alias for a closeable signal.
     * @tparam V The value type of the signal.
     */
-  type CloseableSignal[V] = Signal[V] with Closeable
+  type CloseableSignal[V] = Signal[V] & Closeable
