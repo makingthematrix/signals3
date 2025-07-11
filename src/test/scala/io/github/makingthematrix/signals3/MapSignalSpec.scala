@@ -8,7 +8,7 @@ class MapSignalSpec extends munit.FunSuite:
     val capture: Int => Unit = { value => received.mutate(_ :+ value) }
 
     val s = Signal(1)
-    val m = s map (_ * 2)
+    val m = s.map(_ * 2)
     m.onCurrent(capture)
 
     Seq(2, 3, 1) foreach (s ! _)

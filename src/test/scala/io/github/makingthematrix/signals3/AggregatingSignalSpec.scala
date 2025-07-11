@@ -67,7 +67,7 @@ class AggregatingSignalSpec extends munit.FunSuite:
     val updater = Stream[String]()
 
     val as = new AggregatingSignal[String, Seq[Int]](
-      loader _,
+      () => loader(),
       updater,
       (b, a) => b :+ a.length
     )
@@ -100,7 +100,7 @@ class AggregatingSignalSpec extends munit.FunSuite:
     val updater = Stream[String]()
 
     val as = new AggregatingSignal[String, Seq[Int]](
-      loader _,
+      () => loader(),
       updater,
       (b, a) => b :+ a.length
     )

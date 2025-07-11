@@ -87,7 +87,7 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext = Threading.defaul
     *                 of this future
     * @tparam U The result type of `f`
     */
-  inline final def onComplete[U](f: Try[T] => U)(using executor: ExecutionContext = ec): Unit = future.onComplete(f)(executor)
+  inline final def onComplete[U](f: Try[T] => U)(using executor: ExecutionContext = ec): Unit = future.onComplete(f)(using executor)
 
   /** Same as `Future.foreach`.
     * @see `Future`
@@ -97,7 +97,7 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext = Threading.defaul
     *                 of this future
     * @tparam U The result type of `pf`
     */
-  inline final def foreach[U](pf: T => U)(using executor: ExecutionContext = ec): Unit = future.foreach(pf)(executor)
+  inline final def foreach[U](pf: T => U)(using executor: ExecutionContext = ec): Unit = future.foreach(pf)(using executor)
 
   /** Creates a new closeable future by applying the `f` function to the successful result
     * of this one. If this future is completed with an exception then the new future will
@@ -116,12 +116,12 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext = Threading.defaul
     */
   final def map[U](f: T => U)(using executor: ExecutionContext = ec): CloseableFuture[U] =
     val p = Promise[U]()
-    @volatile var closeSelf: Option[() => Unit] = Some(() => Future(self.close())(executor))
+    @volatile var closeSelf: Option[() => Unit] = Some(() => Future(self.close())(using executor))
 
     future.onComplete { v =>
       closeSelf = None
       p.tryComplete(v.flatMap(res => Try(f(res))))
-    }(executor)
+    }(using executor)
 
     new ActuallyCloseable(p):
       override def closeAndCheck(): Boolean =
@@ -205,7 +205,7 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext = Threading.defaul
     new ActuallyCloseable(p):
       override def closeAndCheck(): Boolean =
         if super.closeAndCheck() then
-          Future(closeSelf.foreach(_ ()))(executor)
+          Future(closeSelf.foreach(_ ()))(using executor)
           true
         else false
 
@@ -226,7 +226,7 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext = Threading.defaul
     * @return A new closeable future that will finish with success only if the partial function is applied
     */
   inline final def recover[U >: T](pf: PartialFunction[Throwable, U])(using executor: ExecutionContext = ec): CloseableFuture[U] =
-    recoverWith(pf.andThen(CloseableFuture.successful(_)))
+    recoverWith(pf.andThen(CloseableFuture.successful))
 
   /** Creates a new closeable future that will handle any matching throwable that the current one might contain by
     * assigning it a value of another future. Works also if the current future is closed. If there is no match,
@@ -267,7 +267,7 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext = Threading.defaul
     new ActuallyCloseable(p):
       override def closeAndCheck(): Boolean =
         if super.closeAndCheck() then
-          Future(closeSelf.foreach(_ ()))(executor)
+          Future(closeSelf.foreach(_ ()))(using executor)
           true
         else false
 
@@ -689,7 +689,7 @@ object CloseableFuture:
     new ActuallyCloseable(p):
       override def closeAndCheck(): Boolean =
         if super.closeAndCheck() then
-          Future { f1.close(); f2.close() }(ec)
+          Future { f1.close(); f2.close() }(using ec)
           true
         else false
 

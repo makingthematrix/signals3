@@ -6,8 +6,8 @@ import scala.collection.immutable.Set
 abstract class EventSource[E, S]:
   private object subscribersMonitor
 
-  private[this] var autowiring = true
-  @volatile private[this] var subscribers = Set.empty[S]
+  private var autowiring = true
+  @volatile private var subscribers = Set.empty[S]
 
   /** This method will be called on creating the first subscription or on `disableAutoWiring`.
     * If the implementing class stashes intermediate computation, this should trigger their execution.
@@ -118,5 +118,5 @@ object EventSource:
     * @see [[EventSource]]
     */
   trait NoAutowiring:
-    self: EventSource[_, _] =>
+    self: EventSource[?, ?] =>
     self.disableAutowiring()

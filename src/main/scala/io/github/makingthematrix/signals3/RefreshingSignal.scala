@@ -22,7 +22,7 @@ import scala.util.{Failure, Success}
   * @param ec The execution context in which the `loader` is executed.
   * @tparam V The value type of the signal and the result of the `loader` closeable future.
   */
-final class RefreshingSignal[V](loader: () => CloseableFuture[V], refreshStream: Stream[_])
+final class RefreshingSignal[V](loader: () => CloseableFuture[V], refreshStream: Stream[?])
                                (using ec: ExecutionContext = Threading.defaultContext)
   extends Signal[V]:
   @volatile private var loadFuture = CloseableFuture.closed[Unit]()
@@ -47,7 +47,7 @@ final class RefreshingSignal[V](loader: () => CloseableFuture[V], refreshStream:
     Future {
       subscription = Some(refreshStream.on(ec)(_ => reload())(using EventContext.Global))
       reload()
-    }(ec)
+    }(using ec)
 
   override protected def onUnwire(): Unit =
     super.onUnwire()
@@ -56,7 +56,7 @@ final class RefreshingSignal[V](loader: () => CloseableFuture[V], refreshStream:
       subscription = None
       loadFuture.close()
       value = None
-    }(ec)
+    }(using ec)
 
 
 object RefreshingSignal:
@@ -76,13 +76,13 @@ object RefreshingSignal:
     * @tparam V The value type of the signal and the result of the `loader` closeable future.
     * @return A new refreshing signal with the value of the type `V`.
     */
-  def apply[V](loader: () => CloseableFuture[V], refreshStream: Stream[_])
+  def apply[V](loader: () => CloseableFuture[V], refreshStream: Stream[?])
               (using ec: ExecutionContext = Threading.defaultContext): RefreshingSignal[V] =
     new RefreshingSignal(loader, refreshStream)
 
   /** A version of the `apply` method where the loader is a regular Scala future. It will be wrapped in a closeable future
     * on the first execution.
     */
-  inline def from[V](loader: => Future[V], refreshStream: Stream[_])
+  inline def from[V](loader: => Future[V], refreshStream: Stream[?])
                     (using ec: ExecutionContext = Threading.defaultContext): RefreshingSignal[V] =
     new RefreshingSignal(() => CloseableFuture.lift(loader), refreshStream)

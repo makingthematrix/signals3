@@ -21,7 +21,7 @@ import scala.util.chaining.scalaUtilChainingOps
   *
   * @see `ExecutionContext`
   */
-class Stream[E]() extends EventSource[E, EventSubscriber[E]]:
+class Stream[E] extends EventSource[E, EventSubscriber[E]]:
 
   /** Dispatches the event to all subscribers.
     *
@@ -188,14 +188,14 @@ class Stream[E]() extends EventSource[E, EventSubscriber[E]]:
     *
     * @return A new stream of units.
     */
-  inline final def ifTrue(using E <:< Boolean): Stream[Unit] = collect { case true => () }
+  final def ifTrue(using E <:< Boolean): Stream[Unit] = collect { case true => () }
 
   /** Assuming that the event emitted by the stream can be interpreted as a boolean, this method creates a new stream
     * of type `Unit` which emits unit events for each original event which is interpreted as false.
     *
     * @return A new stream of units.
     */
-  inline final def ifFalse(using E <:< Boolean): Stream[Unit] = collect { case false => () }
+  final def ifFalse(using E <:< Boolean): Stream[Unit] = collect { case false => () }
 
   /** Assuming that the event emitted by the stream can be interpreted as a boolean, this method creates a new stream
     * of type `Boolean` where each event is the opposite of the original event.
@@ -224,7 +224,7 @@ object Stream:
     override def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
       if subscribed then
         executionContext match
-          case Some(ec) if !currentContext.contains(ec) => Future(if subscribed then Try(f(event)))(ec)
+          case Some(ec) if !currentContext.contains(ec) => Future(if subscribed then Try(f(event)))(using ec)
           case _ => f(event)
 
     override protected[signals3] def onSubscribe(): Unit = source.subscribe(this)
@@ -248,7 +248,7 @@ object Stream:
     * @tparam E The event type.
     * @return A new stream of events of type `E`.
     */
-  inline def zip[E](streams: Stream[E]*): Stream[E] = new ZipStream(streams: _*)
+  inline def zip[E](streams: Stream[E]*): Stream[E] = new ZipStream(streams*)
 
   /** Creates a new event source from a signal of the same type of events.
     * The event source will publish a new event every time the value of the signal changes or its set of subscribers changes.
@@ -271,7 +271,7 @@ object Stream:
     */
   inline def from[E](future: Future[E], executionContext: ExecutionContext): Stream[E] =
     new Stream[E]().tap { stream =>
-      future.foreach { stream.dispatch(_, Some(executionContext)) }(executionContext)
+      future.foreach { stream.dispatch(_, Some(executionContext)) }(using executionContext)
     }
 
   /** A shorthand for creating a stream from a future in the default execution context.

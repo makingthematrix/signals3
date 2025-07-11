@@ -21,7 +21,7 @@ val standardOptions = Seq(
 
 val scala3Options = Seq(
   "-explain",
-  "-Ysafe-init",
+  "-Wsafe-init",
   "-Ycheck-all-patmat",
   "-Wunused:imports"
 )
@@ -64,7 +64,7 @@ lazy val root = (project in file("."))
     name := "signals3",
     libraryDependencies ++= Seq(
       //Test dependencies
-      "org.scalameta" %% "munit" % "0.7.29" % "test"
+      "org.scalameta" %% "munit" % "1.1.1" % "test"
     ),
     scalacOptions ++= standardOptions ++ scala3Options
   )

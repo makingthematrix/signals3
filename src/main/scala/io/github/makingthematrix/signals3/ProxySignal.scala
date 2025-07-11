@@ -3,7 +3,7 @@ package io.github.makingthematrix.signals3
 import scala.concurrent.ExecutionContext
 import Signal.SignalSubscriber
 
-abstract private[signals3] class ProxySignal[V](sources: Signal[_]*) extends Signal[V] with SignalSubscriber:
+abstract private[signals3] class ProxySignal[V](sources: Signal[?]*) extends Signal[V] with SignalSubscriber:
   override def onWire(): Unit =
     sources.foreach(_.subscribe(this))
     value = computeValue(value)
@@ -79,7 +79,7 @@ private[signals3] object ProxySignal:
       f <- f.value
     yield (a, b, c, d, e, f)
 
-  final class FoldLeftSignal[V, Z](sources: Signal[V]*)(v: Z)(f: (Z, V) => Z) extends ProxySignal[Z](sources: _*):
+  final class FoldLeftSignal[V, Z](sources: Signal[V]*)(v: Z)(f: (Z, V) => Z) extends ProxySignal[Z](sources*):
     override protected def computeValue(current: Option[Z]): Option[Z] =
       sources.foldLeft(Option(v))((mv, signal) => for a <- mv; b <- signal.value yield f(a, b))
 
@@ -100,11 +100,11 @@ private[signals3] object ProxySignal:
     override protected def computeValue(current: Option[V]): Option[V] = source.value
 
   class StreamSignal[V](source: Stream[V], v: Option[V] = None) extends Signal[V](v):
-    private[this] lazy val subscription = source.onCurrent(publish)(using EventContext.Global)
+    private lazy val subscription = source.onCurrent(publish)(using EventContext.Global)
     override protected def onWire(): Unit = subscription.enable()
     override protected def onUnwire(): Unit = subscription.disable()
 
-  class SequenceSignal[V](sources: Signal[V]*) extends ProxySignal[Seq[V]](sources: _*):
+  class SequenceSignal[V](sources: Signal[V]*) extends ProxySignal[Seq[V]](sources*):
     override protected def computeValue(current: Option[Seq[V]]): Option[Seq[V]] =
       val res = sources.map(_.value)
       if res.exists(_.isEmpty) then None else Some(res.flatten)

@@ -15,7 +15,7 @@ import scala.collection.immutable.Map
 object Serialized:
   private given dispatcher: DispatchQueue = SerialDispatchQueue("Serialized")
 
-  private var locks = Map[String, Future[_]]()
+  private var locks = Map[String, Future[?]]()
 
   /** Serializes a closeable future.
     * Please note that if a new future is added to one which is not yet completed, and that one will be cancelled

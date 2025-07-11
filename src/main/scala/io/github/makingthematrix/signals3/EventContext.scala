@@ -80,9 +80,9 @@ trait EventContext:
 class BaseEventContext extends EventContext:
   private object lock
 
-  private[this] var started = true
-  private[this] var destroyed = false
-  private[this] var subscriptions = Set.empty[Subscription]
+  private var started = true
+  private var destroyed = false
+  private var subscriptions = Set.empty[Subscription]
 
   override def start(): Unit = lock.synchronized {
     if !started then

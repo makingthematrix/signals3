@@ -35,7 +35,7 @@ private[signals3] object ProxyStream:
         case Success(v)                         => dispatch(v, sourceContext)
         case Failure(_: NoSuchElementException) => // do nothing to allow Future.filter/collect
         case Failure(_)                         =>
-      }(sourceContext.getOrElse(Threading.defaultContext))
+      }(using sourceContext.getOrElse(Threading.defaultContext))
   
   class CollectStream[E, V](source: Stream[E], pf: PartialFunction[E, V])
     extends ProxyStream[E, V](source):
@@ -48,7 +48,7 @@ private[signals3] object ProxyStream:
       if predicate(event) then dispatch(event, sourceContext)
   
   class ZipStream[E](sources: Stream[E]*)
-    extends ProxyStream[E, E](sources: _*):
+    extends ProxyStream[E, E](sources*):
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       dispatch(event, sourceContext)
   
