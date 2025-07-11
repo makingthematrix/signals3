@@ -1,8 +1,7 @@
 package io.github.makingthematrix.signals3
 
-import java.util.concurrent.{ConcurrentLinkedQueue, ExecutorService}
+import java.util.concurrent.{ConcurrentLinkedQueue, ExecutorService, Executors}
 import java.util.concurrent.atomic.AtomicInteger
-
 import DispatchQueue.{Serial, nextInt}
 
 import scala.annotation.tailrec
@@ -45,14 +44,15 @@ trait DispatchQueue extends ExecutionContext:
   def hasRemainingTasks: Boolean = false
 
 object DispatchQueue:
-  /** Used in place on the `concurrentTasks` parameter in one of the `DispatchQueue.apply` method,
-    * `UNLIMITED` indicates that the queue should be an unlimited one. But take a look on `UnlimitedDispatchQueue.apply`
-    * before you decide to use it.
+
+  final val Virtual: Int = -1
+  /** Used in place of the `concurrentTasks` parameter in one of the `DispatchQueue.apply` method,
+    * `Virtual` indicates that the queue should be an unlimited one that uses virtual threads.
     *
-    * @see [[UnlimitedDispatchQueue]]
+    * @see [[VirtualDispatchQueue]]
     */
   final val Unlimited: Int = 0
-  /** Used in place on the `concurrentTasks` parameter in one of the `DispatchQueue.apply` method,
+  /** Used in place of the `concurrentTasks` parameter in one of the `DispatchQueue.apply` method,
     * `SERIAL` indicates that the queue should be a serial one. But take a look on `SerialDispatchQueue.apply`
     * before you decide to use it.
     *
@@ -66,6 +66,7 @@ object DispatchQueue:
 
   private def createDispatchQueue(concurrentTasks: Int, executor: ExecutionContext, name: Option[String]): DispatchQueue =
     concurrentTasks match
+      case Virtual   => new VirtualDispatchQueue(name)
       case Unlimited => new UnlimitedDispatchQueue(executor, name)
       case Serial    => new SerialDispatchQueue(executor, name)
       case _         => new LimitedDispatchQueue(concurrentTasks, executor, name)
@@ -154,6 +155,38 @@ object UnlimitedDispatchQueue:
     * @return a new unlimited dispatch queue
     */
   def apply(name: String): DispatchQueue = new UnlimitedDispatchQueue(Threading.defaultContext, Some(name))
+
+/**
+ * An unlimited dispatch queue that uses virtual threads available in JDK 21+.
+ */
+final class VirtualDispatchQueue private[signals3] (private val _name: Option[String])
+  extends DispatchQueue:
+  override val name: String = _name.getOrElse(s"virtual_${nextInt()}")
+  private lazy val executor = Executors.newVirtualThreadPerTaskExecutor()
+  inline override def execute(runnable: Runnable): Unit = executor.execute(runnable)
+  override def hasRemainingTasks: Boolean = false
+
+object VirtualDispatchQueue:
+  /** Creates an unlimited dispatch queue with a generated name that uses virtual threads. Works only on JDK 21+.
+   * Don't use it to create a dispatch queue which you would later want to set as the default one, as this will
+   * initialize the default one first (if it's not already initialized), so basically you could just do nothing
+   * and have the same effect.
+   *
+   * @see [[Threading]]
+   * @return a new virtual dispatch queue
+   */
+  def apply(): DispatchQueue = new VirtualDispatchQueue(None)
+
+  /** Creates an unlimited dispatch queue with the given name that uses virtual threads. Works only on JDK 21+.
+   * Don't use it to create a dispatch queue which you would later want to set as the default one, as this will
+   * initialize the default one first (if it's not already initialized), so basically you could just do nothing
+   * and have the same effect.
+   *
+   * @see [[Threading]]
+   * @param name - the name of the queue; might be later used e.g. in logging.
+   * @return a new virtual dispatch queue
+   */
+  def apply(name: String): DispatchQueue = new VirtualDispatchQueue(Some(name))
 
 /** A dispatch queue limiting number of concurrently executing tasks.
   * All tasks are executed on parent execution context, but only up to the `concurrencyLimit`.
