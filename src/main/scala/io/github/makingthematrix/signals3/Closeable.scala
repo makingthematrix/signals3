@@ -28,7 +28,7 @@ trait Closeable extends java.lang.AutoCloseable:
     * Registers a block of code that should be called exactly once when the closeable is being closed.
     * @param body
     */
-  def onClose(body: => Unit): Unit
+  def onClose(body: => Unit): Unit = {}
 
   /**
     * A version of `closeAndCheck()` which ignores the boolean result.

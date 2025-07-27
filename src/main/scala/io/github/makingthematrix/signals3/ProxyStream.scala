@@ -59,7 +59,35 @@ private[signals3] object ProxyStream:
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       value = f(value, event)
       dispatch(value, sourceContext)
-  
+
+  final class IndexedStream[E](source: Stream[E])
+    extends ProxyStream[E, E](source) with Indexed[E]:
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+      inc()
+      dispatch(event, sourceContext)
+
+  final class DropStream[E](source: Stream[E], drop: Int)
+    extends ProxyStream[E, E](source) with Indexed[E]:
+
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+      inc()
+      if counter > drop then dispatch(event, sourceContext)
+
+  final class TakeStream[E](source: Stream[E], take: Int)
+    extends ProxyStream[E, E](source) with Indexed[E] with Closeable:
+    @volatile private var forceClose = false
+
+    override def closeAndCheck(): Boolean =
+      forceClose = true
+      true
+
+    override def isClosed: Boolean = forceClose || counter >= take
+
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+      if !isClosed then
+        inc()
+        dispatch(event, sourceContext)
+
   final class FlatMapStream[E, V](source: Stream[E], f: E => Stream[V])
     extends Stream[V] with EventSubscriber[E]:
     @volatile private var mapped: Option[Stream[V]] = None

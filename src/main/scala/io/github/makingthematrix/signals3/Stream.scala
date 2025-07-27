@@ -22,7 +22,6 @@ import scala.util.chaining.scalaUtilChainingOps
   * @see `ExecutionContext`
   */
 class Stream[E] extends EventSource[E, EventSubscriber[E]]:
-
   /** Dispatches the event to all subscribers.
     *
     * @param event The event to be dispatched.
@@ -163,6 +162,10 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]]:
   inline final def |(sourceStream: SourceStream[E])(using ec: EventContext = EventContext.Global): Subscription = 
     pipeTo(sourceStream)
 
+  inline final def indexed: IndexedStream[E] = new IndexedStream[E](this)
+  inline final def drop(n: Int): DropStream[E] = new DropStream[E](this, n)
+  inline final def take(n: Int): TakeStream[E] = new TakeStream[E](this, n)
+  
   /** Produces a [[CloseableFuture]] which will finish when the next event is emitted in the parent stream.
     *
     * @param context Internally, the method creates a subscription to the stream, and an [[EventContext]] can be provided
