@@ -189,6 +189,8 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]]:
 
   /** An alias to the `future` method. */
   inline final def head: Future[E] = future
+  
+  inline final def tail: Stream[E] = drop(1)
 
   /** Assuming that the event emitted by the stream can be interpreted as a boolean, this method creates a new stream
     * of type `Unit` which emits unit events for each original event which is interpreted as true.
@@ -291,3 +293,5 @@ object Stream:
     */
   inline def from[E](future: Future[E]): Stream[E] = from(future, Threading.defaultContext)
 
+  object `::`:
+    def unapply[E](stream: Stream[E]): (Future[E], Stream[E]) = (stream.head, stream.tail)
