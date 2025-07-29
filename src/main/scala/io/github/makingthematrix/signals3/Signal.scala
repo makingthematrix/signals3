@@ -503,6 +503,14 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
   final inline def nand[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] =
     Signal.nand(this.asInstanceOf[Signal[Boolean]], other.asInstanceOf[Signal[Boolean]])
 
+  final inline def indexed: IndexedSignal[V] = this match
+    case that: IndexedSignal[V] => that
+    case _ => new IndexedSignal[V](this)
+  
+  final inline def closeable: CloseableSignal[V] = this match
+    case that: CloseableSignal[V] => that
+    case _ => new CloseableSignal[V](this)
+
 object Signal:
   private[signals3] trait SignalSubscriber:
     // 'currentContext' is the context this method IS run in, NOT the context any subsequent methods SHOULD run in

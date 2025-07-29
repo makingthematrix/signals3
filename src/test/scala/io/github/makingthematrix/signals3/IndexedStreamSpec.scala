@@ -104,6 +104,34 @@ class IndexedStreamSpec extends munit.FunSuite:
     assertEquals(seq, Seq(1, 2))
   }
 
+  test("Close a stream manually") {
+    given DispatchQueue = SerialDispatchQueue()
+
+    val a: SourceStream[Int] = Stream()
+    val b: CloseableStream[Int] = a.closeable
+
+    val buffer = mutable.ArrayBuilder.make[Int]
+    b.foreach { n =>
+      buffer.addOne(n)
+    }
+
+    a ! 1
+    awaitAllTasks
+    a ! 2
+    awaitAllTasks
+
+    b.close()
+    assert(b.isClosed)
+
+    a ! 3
+    awaitAllTasks
+    a ! 4
+    awaitAllTasks
+
+    val seq = buffer.result().toSeq
+    assertEquals(seq, Seq(1, 2))
+  }
+
   test("Drop and take") {
     given DispatchQueue = SerialDispatchQueue()
 

@@ -60,21 +60,29 @@ private[signals3] object ProxyStream:
       value = f(value, event)
       dispatch(value, sourceContext)
 
-  final class IndexedStream[E](source: Stream[E])
-    extends ProxyStream[E, E](source) with Indexed[E]:
+  class IndexedStream[E](source: Stream[E]) extends ProxyStream[E, E](source) with Indexed[E]:
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       inc()
       dispatch(event, sourceContext)
 
-  final class DropStream[E](source: Stream[E], drop: Int)
-    extends ProxyStream[E, E](source) with Indexed[E]:
-
+  final class DropStream[E](source: Stream[E], drop: Int) extends IndexedStream[E](source):
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       inc()
       if counter > drop then dispatch(event, sourceContext)
 
-  final class TakeStream[E](source: Stream[E], take: Int)
-    extends ProxyStream[E, E](source) with Indexed[E] with Closeable:
+  final class CloseableStream[E](source: Stream[E]) extends ProxyStream[E, E](source) with Closeable:
+    @volatile private var closed = false
+
+    override def closeAndCheck(): Boolean =
+      closed = true
+      true
+
+    override def isClosed: Boolean = closed
+
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+      if !closed then dispatch(event, sourceContext)
+
+  final class TakeStream[E](source: Stream[E], take: Int) extends IndexedStream[E](source) with Closeable:
     @volatile private var forceClose = false
 
     override def closeAndCheck(): Boolean =

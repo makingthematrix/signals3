@@ -16,7 +16,6 @@ abstract private[signals3] class ProxySignal[V](sources: Signal[?]*) extends Sig
 
 private[signals3] object ProxySignal:
   final class ScanSignal[V, Z](source: Signal[V], zero: Z, f: (Z, V) => Z) extends ProxySignal[Z](source):
-    // @todo shouldn't this be in an overridden `onWire`?
     value = Some(zero)
 
     override protected def computeValue(current: Option[Z]): Option[Z] =
@@ -28,6 +27,25 @@ private[signals3] object ProxySignal:
   class MapSignal[V, Z](source: Signal[V], f: V => Z) extends ProxySignal[Z](source):
     override protected def computeValue(current: Option[Z]): Option[Z] = source.value.map(f)
 
+  class IndexedSignal[V](source: Signal[V]) extends ProxySignal[V](source) with Indexed[V]:
+    value = source.value
+
+    override protected def computeValue(current: Option[V]): Option[V] =
+      if source.value != current then inc()
+      source.value
+
+  final class CloseableSignal[V](source: Signal[V]) extends ProxySignal[V](source) with Closeable:
+    @volatile private var closed = false
+
+    override def closeAndCheck(): Boolean =
+      closed = true
+      true
+
+    override def isClosed: Boolean = closed
+
+    override protected def computeValue(current: Option[V]): Option[V] =
+      if !closed then source.value else current
+  
   class CollectSignal[V, Z](source: Signal[V], pf: PartialFunction[V, Z]) extends ProxySignal[Z](source):
     override protected def computeValue(current: Option[Z]): Option[Z] =
       source.value.flatMap { v =>
