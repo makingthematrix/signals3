@@ -47,7 +47,7 @@ private[signals3] object ProxyStream:
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       if predicate(event) then dispatch(event, sourceContext)
   
-  class ZipStream[E](sources: Stream[E]*)
+  class JoinStream[E](sources: Stream[E]*)
     extends ProxyStream[E, E](sources*):
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       dispatch(event, sourceContext)

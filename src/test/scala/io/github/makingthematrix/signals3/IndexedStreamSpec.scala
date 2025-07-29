@@ -15,7 +15,7 @@ class IndexedStreamSpec extends munit.FunSuite:
   }
 
   test("Count events") {
-    given dq: DispatchQueue = SerialDispatchQueue()
+    given DispatchQueue = SerialDispatchQueue()
     val a: SourceStream[Int] = Stream()
     val b: IndexedStream[Int] = a.indexed
     var localCounter = 0
@@ -33,7 +33,7 @@ class IndexedStreamSpec extends munit.FunSuite:
   }
 
   test("Drop an event") {
-    given dq: DispatchQueue = SerialDispatchQueue()
+    given DispatchQueue = SerialDispatchQueue()
     val a: SourceStream[Int] = Stream()
     val b: Stream[Int] = a.drop(1)
 
@@ -54,7 +54,7 @@ class IndexedStreamSpec extends munit.FunSuite:
   }
 
   test("Drop and map") {
-    given dq: DispatchQueue = SerialDispatchQueue()
+    given DispatchQueue = SerialDispatchQueue()
 
     val a: SourceStream[Int] = Stream()
     val b: Stream[String] = a.drop(2).map(_.toString)
@@ -78,7 +78,7 @@ class IndexedStreamSpec extends munit.FunSuite:
   }
 
   test("Close after two events") {
-    given dq: DispatchQueue = SerialDispatchQueue()
+    given DispatchQueue = SerialDispatchQueue()
 
     val a: SourceStream[Int] = Stream()
     val b: CloseableStream[Int] = a.take(2)
@@ -105,7 +105,7 @@ class IndexedStreamSpec extends munit.FunSuite:
   }
 
   test("Drop and take") {
-    given dq: DispatchQueue = SerialDispatchQueue()
+    given DispatchQueue = SerialDispatchQueue()
 
     val a: SourceStream[Int] = Stream()
     val b: CloseableStream[Int] = a.drop(1).take(2)
@@ -129,4 +129,42 @@ class IndexedStreamSpec extends munit.FunSuite:
 
     val seq = buffer.result().toSeq
     assertEquals(seq, Seq(2, 3))
+  }
+
+  test("Take and drop") {
+    given DispatchQueue = SerialDispatchQueue()
+
+    val a: SourceStream[Int] = Stream()
+    val c = a.take(2).drop(1)
+
+    val cBuffer = mutable.ArrayBuilder.make[Int]
+    c.foreach { cBuffer.addOne }
+
+    a ! 1
+    awaitAllTasks
+    a ! 2
+    awaitAllTasks
+    a ! 3
+    awaitAllTasks
+    a ! 4
+    awaitAllTasks
+
+    val cSeq = cBuffer.result().toSeq
+    assertEquals(cSeq, Seq(2))
+  }
+
+  test("foo") {
+    val l = 1 :: List(2)
+    case class Foo(n: Seq[Int])
+    object `::`:
+      def unapply(foo: Foo): Option[(Int, Foo)] =
+        if foo.n.isEmpty then None
+        else Some((foo.n.head, Foo(foo.n.tail)))
+
+    val foo = Foo(Seq(1,2,3))
+    val a = foo match
+      case head :: tail => head
+      case _ => 0
+
+    assertEquals(1, a)
   }
