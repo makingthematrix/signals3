@@ -160,7 +160,7 @@ object Transformers:
     * @return        A new closeable stream, emitting events from all original streams.
     */
   def zip[E](streams: CloseableStream[E]*): CloseableStream[E] =
-    new ZipStream[E](streams*) with Closeability(streams*)
+    new JoinStream[E](streams*) with Closeability(streams*)
 
   /**
     * Creates a new closeable signal by joining together the original signals of two different types of values,

@@ -87,14 +87,14 @@ class StreamSpec extends munit.FunSuite:
     assert(testutils.tryResult(resPromise.future)(using 1 seconds).isFailure)
   }
 
-  test("zip two streams and emit an event coming from either of them") {
+  test("Join two streams and emit an event coming from either of them") {
     val stream1 = Stream[Int]()
     val stream2 = Stream[Int]()
-    val zip = Stream.zip(stream1, stream2)
+    val join = Stream.join(stream1, stream2)
 
     val expected = Signal(0)
     val eventReceived = Signal(false)
-    zip.foreach { n =>
+    join.foreach { n =>
       eventReceived ! true
       waitForResult(expected, n)
     }
@@ -111,14 +111,14 @@ class StreamSpec extends munit.FunSuite:
     test(4, stream2)
   }
 
-  test("zip the first stream with another and emit an event coming from either of them") {
+  test("Join the first stream with another and emit an event coming from either of them") {
     val stream1 = Stream[Int]()
     val stream2 = Stream[Int]()
-    val zip = stream1.zip(stream2)
+    val join = stream1 ::: stream2
 
     val expected = Signal(0)
     val eventReceived = Signal(false)
-    zip.foreach { n =>
+    join.foreach { n =>
       eventReceived ! true
       waitForResult(expected, n)
     }
@@ -133,6 +133,36 @@ class StreamSpec extends munit.FunSuite:
     test(2, stream2)
     test(3, stream1)
     test(4, stream2)
+  }
+
+  test("Join a stream with a future and emit an event coming from either of them") {
+    val stream = Stream[Int]()
+    val promise = Promise[Int]()
+    val future = promise.future
+    val join = future :: stream
+
+    val expected = Signal(0)
+    val eventReceived = Signal(false)
+    join.foreach { n =>
+      eventReceived ! true
+      waitForResult(expected, n)
+    }
+
+    def tests(n: Int, source: SourceStream[Int]): Unit =
+      eventReceived ! false
+      expected ! n
+      source ! n
+      waitForResult(eventReceived, true)
+
+    def testp(n: Int, promise: Promise[Int]): Unit =
+      eventReceived ! false
+      expected ! n
+      promise.success(n)
+      waitForResult(eventReceived, true)
+
+    tests(1, stream)
+    testp(2, promise)
+    tests(3, stream)
   }
 
   test("pipe events from the first stream to another") {

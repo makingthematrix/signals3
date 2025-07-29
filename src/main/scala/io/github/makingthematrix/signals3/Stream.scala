@@ -136,14 +136,18 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]]:
 
   /** Creates a new stream by merging the original stream with another one of the same type. The resulting stream
     * will emit events coming from both sources.
-    * 
-    * @note Note that this is different from `.zip` and `.sequence` methods for [[Signal]]. This version
-    * of `.zip` emits single events of type `E` every time one of the original streams emits them.
     *
     * @param stream The other stream of the same type of events.
     * @return A new stream, emitting events from both original streams.
     */
-  inline final def zip(stream: Stream[E]): Stream[E] = new ZipStream[E](this, stream)
+  inline final def join(stream: Stream[E]): Stream[E] = new JoinStream[E](this, stream)
+
+  /** An alias for `join`. */
+  inline final def :::(stream: Stream[E]): Stream[E] = join(stream)
+  
+  inline final def join(future: Future[E]): Stream[E] = join(Stream.from(future))
+  
+  inline final def ::(future: Future[E]): Stream[E] = join(future)
 
   /** A shorthand for registering a subscriber function in this stream which only purpose is to publish events emitted
     * by this stream in a given [[SourceStream]]. The subscriber function will be called in the execution context of the
@@ -251,7 +255,7 @@ object Stream:
     * @tparam E The event type.
     * @return A new stream of events of type `E`.
     */
-  inline def zip[E](streams: Stream[E]*): Stream[E] = new ZipStream(streams*)
+  inline def join[E](streams: Stream[E]*): Stream[E] = new JoinStream(streams*)
 
   /** Creates a new event source from a signal of the same type of events.
     * The event source will publish a new event every time the value of the signal changes or its set of subscribers changes.
