@@ -166,9 +166,17 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]]:
   inline final def |(sourceStream: SourceStream[E])(using ec: EventContext = EventContext.Global): Subscription = 
     pipeTo(sourceStream)
 
-  inline final def indexed: IndexedStream[E] = new IndexedStream[E](this)
+  inline final def indexed: IndexedStream[E] = this match
+    case that: IndexedStream[E] => that
+    case _ => new IndexedStream[E](this)
+
   inline final def drop(n: Int): DropStream[E] = new DropStream[E](this, n)
   inline final def take(n: Int): TakeStream[E] = new TakeStream[E](this, n)
+
+  // TODO: Maybe let's make every stream Closeable?
+  inline final def closeable: CloseableStream[E] = this match
+    case that: CloseableStream[E] => that
+    case _ => new CloseableStream[E](this)
   
   /** Produces a [[CloseableFuture]] which will finish when the next event is emitted in the parent stream.
     *

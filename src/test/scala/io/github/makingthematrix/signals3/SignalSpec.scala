@@ -447,6 +447,41 @@ class SignalSpec extends munit.FunSuite:
     assert(waitForResult(mapped, "number: 1"))
   }
 
+  test("Index a signal") {
+    val a = Signal(0)
+    val b = a.indexed
+
+    assertEquals(b.counter, 0)
+
+    a ! -1
+    assert(waitForResult(b, -1))
+    assertEquals(b.counter, 1)
+
+
+    a ! -2
+    assert(waitForResult(b, -2))
+    assertEquals(b.counter, 2)
+  }
+
+  test("Only real changes are counted") {
+    val a = Signal(0)
+    val b = a.indexed
+
+    assertEquals(b.counter, 0)
+
+    a ! 0
+    assert(waitForResult(b, 0))
+    assertEquals(b.counter, 0)
+
+    a ! 1
+    assert(waitForResult(b, 1))
+    assertEquals(b.counter, 1)
+
+    a ! 1
+    assert(waitForResult(b, 1))
+    assertEquals(b.counter, 1)
+  }
+
   test("A signal mapped from an empty signal stays empty") {
     val s1 = Signal.empty[Int]
     val mapped = s1.map(n => s"number: $n")
@@ -1030,3 +1065,17 @@ class SignalSpec extends munit.FunSuite:
     assert(testutils.tryResult(resPromise.future)(using 1 seconds).isFailure)
   }
 
+  test("Don't send updates through a closed signal") {
+    val received = Signal(Seq.empty[Int])
+    val capture: Int => Unit = { value => received.mutate(_ :+ value) }
+
+    val s = Signal(1)
+    val c = s.closeable
+    c.foreach(capture)
+    Seq(1, 2, 0, 1).foreach { n =>
+      if n == 0 then c.close()
+      s ! n
+      waitForResult(s, n)
+    }
+    waitForResult(received, Seq(1, 2))
+  }
