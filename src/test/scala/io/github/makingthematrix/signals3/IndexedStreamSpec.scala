@@ -153,18 +153,30 @@ class IndexedStreamSpec extends munit.FunSuite:
     assertEquals(cSeq, Seq(2))
   }
 
-  test("foo") {
-    val l = 1 :: List(2)
-    case class Foo(n: Seq[Int])
-    object `::`:
-      def unapply(foo: Foo): Option[(Int, Foo)] =
-        if foo.n.isEmpty then None
-        else Some((foo.n.head, Foo(foo.n.tail)))
+  test("Split a stream into a head future and tail stream") {
+    given DispatchQueue = SerialDispatchQueue()
+    import Stream.`::`
+    val a: SourceStream[Int] = Stream()
+    val (head, tail) = a match
+      case head :: tail => (head, tail)
 
-    val foo = Foo(Seq(1,2,3))
-    val a = foo match
-      case head :: tail => head
-      case _ => 0
+    var hn = 0
+    head.foreach(n => hn = n)
 
-    assertEquals(1, a)
+    val buffer = mutable.ArrayBuilder.make[Int]
+    tail.foreach { n =>
+      buffer.addOne(n)
+    }
+
+    a ! 1
+    awaitAllTasks
+    a ! 2
+    awaitAllTasks
+    a ! 3
+    awaitAllTasks
+
+    assertEquals(hn, 1)
+
+    val seq = buffer.result().toSeq
+    assertEquals(seq, Seq(2, 3))
   }
