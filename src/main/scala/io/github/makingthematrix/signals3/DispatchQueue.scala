@@ -162,7 +162,8 @@ object UnlimitedDispatchQueue:
 final class VirtualDispatchQueue private[signals3] (private val _name: Option[String])
   extends DispatchQueue:
   override val name: String = _name.getOrElse(s"virtual_${nextInt()}")
-  private lazy val executor = Executors.newVirtualThreadPerTaskExecutor()
+  private lazy val executor: ExecutorService =
+    classOf[Executors].getMethod("newVirtualThreadPerTaskExecutor").invoke(null).asInstanceOf[ExecutorService]
   inline override def execute(runnable: Runnable): Unit = executor.execute(runnable)
   override def hasRemainingTasks: Boolean = false
 
