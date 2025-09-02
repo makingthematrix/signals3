@@ -34,6 +34,11 @@ private[signals3] object ProxySignal:
       if source.value != current then inc()
       source.value
 
+  final class DropSignal[V](source: Signal[V], drop: Int) extends IndexedSignal[V](source):
+    override protected def computeValue(current: Option[V]): Option[V] =
+      if source.value != current then inc()
+      if counter > drop then source.value else current
+    
   final class CloseableSignal[V](source: Signal[V]) extends ProxySignal[V](source) with Closeable:
     @volatile private var closed = false
 
@@ -45,7 +50,22 @@ private[signals3] object ProxySignal:
 
     override protected def computeValue(current: Option[V]): Option[V] =
       if !closed then source.value else current
-  
+
+  final class TakeSignal[V](source: Signal[V], take: Int) extends IndexedSignal[V](source) with Closeable:
+    @volatile private var forceClose = false
+
+    override def closeAndCheck(): Boolean =
+      forceClose = true
+      true
+
+    override def isClosed: Boolean = forceClose || counter >= take
+
+    override protected def computeValue(current: Option[V]): Option[V] =
+      if !isClosed then
+        if source.value != current then inc()
+        source.value
+      else current
+
   class CollectSignal[V, Z](source: Signal[V], pf: PartialFunction[V, Z]) extends ProxySignal[Z](source):
     override protected def computeValue(current: Option[Z]): Option[Z] =
       source.value.flatMap { v =>

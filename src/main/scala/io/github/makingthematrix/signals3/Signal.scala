@@ -120,6 +120,8 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
 
   /** An alias to the `future` method. */
   inline final def head: Future[V] = future
+  
+  inline final def tail: Signal[V] = drop(1)
 
   /** A shortcut that checks if the current value (or the first value after initialization) is the given one.
     *
@@ -511,6 +513,9 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     case that: CloseableSignal[V] => that
     case _ => new CloseableSignal[V](this)
 
+  inline final def drop(n: Int): DropSignal[V] = new DropSignal[V](this, n)
+  inline final def take(n: Int): TakeSignal[V] = new TakeSignal[V](this, n)
+
 object Signal:
   private[signals3] trait SignalSubscriber:
     // 'currentContext' is the context this method IS run in, NOT the context any subsequent methods SHOULD run in
@@ -831,3 +836,6 @@ object Signal:
     * @return A new signal with the value of the type `V`.
     */
   inline def from[V](source: Stream[V]): Signal[V] = new StreamSignal[V](source)
+
+  object `::`:
+    def unapply[V](signal: Signal[V]): (Future[V], Signal[V]) = (signal.head, signal.tail)

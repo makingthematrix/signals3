@@ -8,6 +8,7 @@ import scala.collection.mutable
 
 class IndexedStreamSpec extends munit.FunSuite:
   import EventContext.Implicits.global
+  given DispatchQueue = SerialDispatchQueue()
 
   test("Counter starts at zero") {
     val a: Indexed[Int] = Stream().indexed
@@ -15,7 +16,6 @@ class IndexedStreamSpec extends munit.FunSuite:
   }
 
   test("Count events") {
-    given DispatchQueue = SerialDispatchQueue()
     val a: SourceStream[Int] = Stream()
     val b: IndexedStream[Int] = a.indexed
     var localCounter = 0
@@ -33,7 +33,6 @@ class IndexedStreamSpec extends munit.FunSuite:
   }
 
   test("Drop an event") {
-    given DispatchQueue = SerialDispatchQueue()
     val a: SourceStream[Int] = Stream()
     val b: Stream[Int] = a.drop(1)
 
@@ -54,8 +53,6 @@ class IndexedStreamSpec extends munit.FunSuite:
   }
 
   test("Drop and map") {
-    given DispatchQueue = SerialDispatchQueue()
-
     val a: SourceStream[Int] = Stream()
     val b: Stream[String] = a.drop(2).map(_.toString)
 
@@ -78,8 +75,6 @@ class IndexedStreamSpec extends munit.FunSuite:
   }
 
   test("Close after two events") {
-    given DispatchQueue = SerialDispatchQueue()
-
     val a: SourceStream[Int] = Stream()
     val b: CloseableStream[Int] = a.take(2)
 
@@ -105,8 +100,6 @@ class IndexedStreamSpec extends munit.FunSuite:
   }
 
   test("Close a stream manually") {
-    given DispatchQueue = SerialDispatchQueue()
-
     val a: SourceStream[Int] = Stream()
     val b: CloseableStream[Int] = a.closeable
 
@@ -133,8 +126,6 @@ class IndexedStreamSpec extends munit.FunSuite:
   }
 
   test("Drop and take") {
-    given DispatchQueue = SerialDispatchQueue()
-
     val a: SourceStream[Int] = Stream()
     val b: CloseableStream[Int] = a.drop(1).take(2)
 
@@ -160,8 +151,6 @@ class IndexedStreamSpec extends munit.FunSuite:
   }
 
   test("Take and drop") {
-    given DispatchQueue = SerialDispatchQueue()
-
     val a: SourceStream[Int] = Stream()
     val c = a.take(2).drop(1)
 
@@ -182,7 +171,6 @@ class IndexedStreamSpec extends munit.FunSuite:
   }
 
   test("Split a stream into a head future and tail stream") {
-    given DispatchQueue = SerialDispatchQueue()
     import Stream.`::`
     val a: SourceStream[Int] = Stream()
     val (head, tail) = a match

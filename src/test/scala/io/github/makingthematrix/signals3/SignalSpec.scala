@@ -1,9 +1,13 @@
 package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.Closeable.CloseableSignal
+import io.github.makingthematrix.signals3.ProxySignal.TakeSignal
+
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, CyclicBarrier, TimeUnit}
 import testutils.*
 
+import scala.collection.mutable
 import scala.jdk.CollectionConverters.*
 import scala.concurrent.*
 import scala.concurrent.duration.*
@@ -480,6 +484,196 @@ class SignalSpec extends munit.FunSuite:
     a ! 1
     assert(waitForResult(b, 1))
     assertEquals(b.counter, 1)
+  }
+
+  test("Drop one change") {
+    val a = Signal(0)
+    val b = a.drop(1)
+    assert(waitForResult(a, 0))
+    assert(waitForResult(b, 0))
+
+    a ! 1
+    assert(waitForResult(a, 1))
+    assert(waitForResult(b, 0))
+
+    a ! 2
+    assert(waitForResult(a, 2))
+    assert(waitForResult(b, 2))
+  }
+
+  test("Drop one change when starting from an empty signal") {
+    val a = Signal[Int]()
+    val b = a.drop(1)
+
+    assert(b.empty)
+
+    a ! 1
+    assert(waitForResult(a, 1))
+    assert(b.empty)
+
+    a ! 2
+    assert(waitForResult(a, 2))
+    assert(waitForResult(b, 2))
+  }
+
+  test("Drop and map") {
+    val a = Signal[Int]()
+    val b = a.drop(2).map(_.toString)
+
+    val buffer = mutable.ArrayBuilder.make[String]
+    b.foreach { str =>
+      buffer.addOne(str)
+    }
+
+    a ! 1
+    assert(waitForResult(a, 1))
+    a ! 2
+    assert(waitForResult(a, 2))
+    a ! 3
+    assert(waitForResult(a, 3))
+    a ! 4
+    assert(waitForResult(a, 4))
+
+    val seq = buffer.result().toSeq
+    assertEquals(seq, Seq("3", "4"))
+  }
+
+  test("Close after two changes") {
+    val a = Signal[Int]()
+    val b: TakeSignal[Int] = a.take(2)
+
+    val buffer = mutable.ArrayBuilder.make[Int]
+    b.foreach { n =>
+      buffer.addOne(n)
+    }
+
+    a ! 1
+    assert(waitForResult(a, 1))
+    assert(waitForResult(b, 1))
+
+    a ! 2
+    assert(waitForResult(a, 2))
+    assert(waitForResult(b, 2))
+
+    assert(b.isClosed)
+
+    a ! 3
+    assert(waitForResult(a, 3))
+    assert(waitForResult(b, 2))
+    a ! 4
+    assert(waitForResult(a, 4))
+    assert(waitForResult(b, 2))
+
+    val seq = buffer.result().toSeq
+    assertEquals(seq, Seq(1, 2))
+  }
+
+  test("Close a signal manually") {
+    val a = Signal[Int]()
+    val b: CloseableSignal[Int] = a.closeable
+
+    val buffer = mutable.ArrayBuilder.make[Int]
+    b.foreach { n =>
+      buffer.addOne(n)
+    }
+
+    a ! 1
+    assert(waitForResult(a, 1))
+    a ! 2
+    assert(waitForResult(a, 2))
+
+    b.close()
+    assert(b.isClosed)
+
+    a ! 3
+    assert(waitForResult(a, 3))
+    a ! 4
+    assert(waitForResult(a, 4))
+
+    val seq = buffer.result().toSeq
+    assertEquals(seq, Seq(1, 2))
+  }
+
+  test("Drop and take") {
+    val a = Signal[Int]()
+    val b: TakeSignal[Int] = a.drop(1).take(2)
+
+    val buffer = mutable.ArrayBuilder.make[Int]
+    b.foreach { n =>
+      buffer.addOne(n)
+    }
+
+    a ! 1
+    assert(waitForResult(a, 1))
+    assertEquals(buffer.result().toSeq, Seq.empty)
+
+    a ! 2
+    assert(waitForResult(a, 2))
+    assert(waitForResult(b, 2))
+    assertEquals(buffer.result().toSeq, Seq(2))
+
+    a ! 3
+    assert(waitForResult(a, 3))
+    assert(waitForResult(b, 3))
+    assertEquals(buffer.result().toSeq, Seq(2,3))
+    assert(b.isClosed)
+
+    a ! 4
+    assert(waitForResult(a, 4))
+    assert(waitForResult(b, 3))
+    assertEquals(buffer.result().toSeq, Seq(2,3))
+    assert(b.isClosed)
+  }
+
+  test("Take and drop") {
+    val a = Signal[Int]()
+    val c = a.take(2).drop(1)
+
+    val cBuffer = mutable.ArrayBuilder.make[Int]
+    c.foreach {cBuffer.addOne}
+
+    a ! 1
+    assert(waitForResult(a, 1))
+
+    a ! 2
+    assert(waitForResult(a, 2))
+
+    a ! 3
+    assert(waitForResult(a, 3))
+
+    a ! 4
+    assert(waitForResult(a, 4))
+
+    val cSeq = cBuffer.result().toSeq
+    assertEquals(cSeq, Seq(2))
+  }
+
+  test("Split a signal into a head future and tail stream") {
+    given DispatchQueue = SerialDispatchQueue()
+    import Signal.`::`
+    val a = Signal[Int]()
+    val (head, tail) = a match
+      case head :: tail => (head, tail)
+
+    var hn = 0
+    head.foreach(n => hn = n)
+
+    val buffer = mutable.ArrayBuilder.make[Int]
+    tail.foreach { n =>
+      buffer.addOne(n)
+    }
+
+    a ! 1
+    assert(waitForResult(a, 1))
+    a ! 2
+    assert(waitForResult(a, 2))
+    a ! 3
+    assert(waitForResult(a, 3))
+
+    assertEquals(hn, 1)
+
+    val seq = buffer.result().toSeq
+    assertEquals(seq, Seq(2, 3))
   }
 
   test("A signal mapped from an empty signal stays empty") {
