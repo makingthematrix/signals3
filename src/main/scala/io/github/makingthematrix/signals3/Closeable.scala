@@ -1,6 +1,18 @@
 package io.github.makingthematrix.signals3
 
 /**
+ * A common supertrait for [[CloseableFuture]], and all subtypes of streams and signals that can be closed at some point,
+ * either by the user or by internal logic.
+ */
+trait CanBeClosed:
+  /**
+   * Checks if the stream/signal is already closed.
+   *
+   * @return `true` if the stream/signal is already closed, `false` if it's not. Note that if the stream/signal failed,
+   *         the result can be unreliable.
+   */
+  def isClosed: Boolean
+/**
   * A stream or a signal can be closeable, meaning that it can be closed and after that it will not publish new events
   * anymore. Every [[GeneratorStream]] and [[GeneratorSignal]] is [[Closeable]] which allows for stopping them when
   * they're no longer needed, but you can make any new stream or signal inherit [[Closeable]] and implement the required
@@ -9,20 +21,13 @@ package io.github.makingthematrix.signals3
   * 
   * @see [[ProxyStream]] and [[ProxySignal]] for examples.
   */
-trait Closeable extends java.lang.AutoCloseable:
+trait Closeable extends java.lang.AutoCloseable with CanBeClosed:
   /**
     * Tries to close the stream/signal and returns if it worked.
     * @return Should return `true` if it was possible to close the stream/signal, `false` if it was impossible 
     *         to close it or **if the stream/signal was already closed**.
     */
   def closeAndCheck(): Boolean
-
-  /**
-    * Checks if the stream/signal is already closed.
-    * @return `true` if the stream/signal is already closed, `false` if it's not. Note that if the stream/signal failed,
-    *         the result can be unreliable.
-    */
-  def isClosed: Boolean
 
   /**
     * Registers a block of code that should be called exactly once when the closeable is being closed.
@@ -34,7 +39,7 @@ trait Closeable extends java.lang.AutoCloseable:
     * A version of `closeAndCheck()` which ignores the boolean result.
     * If the closeable is used in try-with-resources, this method will be called automatically.
     */
-  override def close(): Unit = closeAndCheck()
+  override final inline def close(): Unit = closeAndCheck()
 
 object Closeable:
   /**
