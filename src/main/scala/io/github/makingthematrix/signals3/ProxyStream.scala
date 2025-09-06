@@ -2,7 +2,7 @@ package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.Stream.EventSubscriber
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success}
 import scala.util.chaining.scalaUtilChainingOps
 
@@ -60,7 +60,7 @@ private[signals3] object ProxyStream:
       value = f(value, event)
       dispatch(value, sourceContext)
 
-  class IndexedStream[E](source: Stream[E]) extends ProxyStream[E, E](source) with Indexed[E]:
+  class IndexedStream[E](source: Stream[E]) extends ProxyStream[E, E](source) with Indexed:
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       inc()
       dispatch(event, sourceContext)
@@ -82,19 +82,25 @@ private[signals3] object ProxyStream:
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       if !closed then dispatch(event, sourceContext)
 
-  final class TakeStream[E](source: Stream[E], take: Int) extends IndexedStream[E](source) with Closeable:
-    @volatile private var forceClose = false
+  final class TakeStream[E](source: Stream[E], take: Int) 
+    extends IndexedStream[E](source) with Finite[E, Stream[E]]:
+    override def isClosed: Boolean = super.isClosed || counter >= take
 
-    override def closeAndCheck(): Boolean =
-      forceClose = true
-      true
-
-    override def isClosed: Boolean = forceClose || counter >= take
-
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = 
       if !isClosed then
         inc()
         dispatch(event, sourceContext)
+        if !isClosed then initStream.foreach { _ ! event }
+      if isClosed then lastPromise.foreach {
+        case p if !p.isCompleted => p.trySuccess(event)
+        case _ =>
+      }
+
+    private var lastPromise: Option[Promise[E]] = None
+    override lazy val last: Future[E] = Promise[E]().tap { p => lastPromise = Some(p) }.future
+    
+    private var initStream: Option[SourceStream[E]] = None
+    override lazy val init: Stream[E] = SourceStream[E]().tap { s => initStream = Some(s) }
 
   final class FlatMapStream[E, V](source: Stream[E], f: E => Stream[V])
     extends Stream[V] with EventSubscriber[E]:
@@ -114,4 +120,3 @@ private[signals3] object ProxyStream:
       mapped.foreach(_.unsubscribe(subscriber))
       mapped = None
       source.unsubscribe(this)
-  

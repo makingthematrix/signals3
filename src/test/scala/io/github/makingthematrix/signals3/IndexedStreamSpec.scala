@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.Closeable.CloseableStream
-import io.github.makingthematrix.signals3.ProxyStream.IndexedStream
+import io.github.makingthematrix.signals3.ProxyStream.{IndexedStream, TakeStream}
 import io.github.makingthematrix.signals3.testutils.awaitAllTasks
 
 import scala.collection.mutable
@@ -11,7 +11,7 @@ class IndexedStreamSpec extends munit.FunSuite:
   given DispatchQueue = SerialDispatchQueue()
 
   test("Counter starts at zero") {
-    val a: Indexed[Int] = Stream().indexed
+    val a: Indexed = Stream().indexed
     assertEquals(0, a.counter)
   }
 
@@ -76,7 +76,7 @@ class IndexedStreamSpec extends munit.FunSuite:
 
   test("Close after two events") {
     val a: SourceStream[Int] = Stream()
-    val b: CloseableStream[Int] = a.take(2)
+    val b: TakeStream[Int] = a.take(2)
 
     val buffer = mutable.ArrayBuilder.make[Int]
     b.foreach { n =>
@@ -127,7 +127,7 @@ class IndexedStreamSpec extends munit.FunSuite:
 
   test("Drop and take") {
     val a: SourceStream[Int] = Stream()
-    val b: CloseableStream[Int] = a.drop(1).take(2)
+    val b: TakeStream[Int] = a.drop(1).take(2)
 
     val buffer = mutable.ArrayBuilder.make[Int]
     b.foreach { n =>
@@ -195,4 +195,50 @@ class IndexedStreamSpec extends munit.FunSuite:
 
     val seq = buffer.result().toSeq
     assertEquals(seq, Seq(2, 3))
+  }
+
+  test("Take and use .last to get the last of the took elements") {
+    val a: SourceStream[Int] = Stream()
+
+    val c = a.take(2)
+    val cBuffer = mutable.ArrayBuilder.make[Int]
+    c.foreach {cBuffer.addOne}
+
+    val f = c.last
+    var fValue: Int = 0
+    f.foreach(fValue = _)
+
+    a ! 1
+    awaitAllTasks
+    a ! 2
+    awaitAllTasks
+    a ! 3
+    awaitAllTasks
+
+    assertEquals(cBuffer.result().toSeq, Seq(1, 2))
+    assertEquals(fValue, 2)
+  }
+
+  test("Take and use .init to get all but the last element") {
+    val a: SourceStream[Int] = Stream()
+
+    val c = a.take(3)
+    val cBuffer = mutable.ArrayBuilder.make[Int]
+    c.foreach {cBuffer.addOne}
+
+    val init = c.init
+    val initBuffer = mutable.ArrayBuilder.make[Int]
+    init.foreach {initBuffer.addOne}
+
+    a ! 1
+    awaitAllTasks
+    a ! 2
+    awaitAllTasks
+    a ! 3
+    awaitAllTasks
+    a ! 4
+    awaitAllTasks
+
+    assertEquals(cBuffer.result().toSeq, Seq(1, 2, 3))
+    assertEquals(initBuffer.result().toSeq, Seq(1, 2))
   }
