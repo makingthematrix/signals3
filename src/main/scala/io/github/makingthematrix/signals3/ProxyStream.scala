@@ -67,8 +67,13 @@ private[signals3] object ProxyStream:
 
   final class DropStream[E](source: Stream[E], drop: Int) extends IndexedStream[E](source):
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      inc()
-      if counter > drop then dispatch(event, sourceContext)
+      if counter < drop then inc() else dispatch(event, sourceContext)
+
+  final class DropWhileStream[E](source: Stream[E], p: E => Boolean) extends ProxyStream[E, E](source):
+    @volatile private var dropping = true
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+      if dropping then dropping = p(event)
+      if !dropping then dispatch(event, sourceContext)
 
   final class CloseableStream[E](source: Stream[E]) extends ProxyStream[E, E](source) with Closeable:
     @volatile private var closed = false
@@ -82,8 +87,15 @@ private[signals3] object ProxyStream:
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       if !closed then dispatch(event, sourceContext)
 
+  protected trait FiniteStream[E] extends Finite[E, Stream[E]]:
+    protected var lastPromise: Option[Promise[E]] = None
+    override lazy val last: Future[E] = Promise[E]().tap { p => lastPromise = Some(p) }.future
+
+    protected var initStream: Option[SourceStream[E]] = None
+    override lazy val init: Stream[E] = SourceStream[E]().tap { s => initStream = Some(s) }
+
   final class TakeStream[E](source: Stream[E], take: Int) 
-    extends IndexedStream[E](source) with Finite[E, Stream[E]]:
+    extends IndexedStream[E](source) with FiniteStream[E]:
     override def isClosed: Boolean = super.isClosed || counter >= take
 
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = 
@@ -96,11 +108,22 @@ private[signals3] object ProxyStream:
         case _ =>
       }
 
-    private var lastPromise: Option[Promise[E]] = None
-    override lazy val last: Future[E] = Promise[E]().tap { p => lastPromise = Some(p) }.future
-    
-    private var initStream: Option[SourceStream[E]] = None
-    override lazy val init: Stream[E] = SourceStream[E]().tap { s => initStream = Some(s) }
+  final class TakeWhileStream[E](source: Stream[E], p: E => Boolean)
+    extends ProxyStream[E, E](source) with FiniteStream[E]:
+
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+      if !isClosed then
+        if !p(event) then
+          close()
+          lastPromise.foreach {
+            case p if !p.isCompleted => p.trySuccess(event)
+            case _ =>
+          }
+        else
+          dispatch(event, sourceContext)
+          initStream.foreach {_ ! event}
+        end if
+      end if
 
   final class FlatMapStream[E, V](source: Stream[E], f: E => Stream[V])
     extends Stream[V] with EventSubscriber[E]:
