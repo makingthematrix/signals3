@@ -1,6 +1,7 @@
 package io.github.makingthematrix.signals3
 
-import Stream.{EventSubscriber, StreamSubscription}
+import Stream.{EmptyTakeStream, EventSubscriber, StreamSubscription}
+import Finite.FiniteStream
 import ProxyStream.*
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -166,15 +167,25 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]]:
   inline final def |(sourceStream: SourceStream[E])(using ec: EventContext = EventContext.Global): Subscription = 
     pipeTo(sourceStream)
 
-  inline final def indexed: IndexedStream[E] = this match
+  final def indexed: IndexedStream[E] = this match
     case that: IndexedStream[E] => that
     case _ => new IndexedStream[E](this)
 
-  inline final def drop(n: Int): DropStream[E] = new DropStream[E](this, n)
-  inline final def take(n: Int): TakeStream[E] = new TakeStream[E](this, n)
+  final def drop(n: Int): Stream[E] =
+    if n == 0 then this
+    else new DropStream[E](this, n)
 
-  // TODO: Maybe let's make every stream Closeable?
-  inline final def closeable: CloseableStream[E] = this match
+  final def take(n: Int): FiniteStream[E] =
+    if n == 0 then EmptyTakeStream.asInstanceOf[FiniteStream[E]]
+    else new TakeStream[E](this, n)
+
+  inline final def takeWhile(p: E => Boolean): FiniteStream[E] = new TakeWhileStream[E](this, p)
+  inline final def dropWhile(p: E => Boolean): Stream[E] = new DropWhileStream[E](this, p)
+
+  inline final def splitAt(n: Int): (FiniteStream[E], Stream[E]) = (take(n), drop(n))
+  inline final def splitAt(p: E => Boolean): (FiniteStream[E], Stream[E]) = (takeWhile(p), dropWhile(p))
+
+  final def closeable: CloseableStream[E] = this match
     case that: CloseableStream[E] => that
     case _ => new CloseableStream[E](this)
   
@@ -228,6 +239,11 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]]:
   override protected def onUnwire(): Unit = {}
 
 object Stream:
+  object `::`:
+    def unapply[E](stream: Stream[E]): (Future[E], Stream[E]) = (stream.head, stream.tail)
+
+  private[signals3] final val EmptyTakeStream: TakeStream[Any] = new TakeStream[Any](Stream[Any](), 0)
+
   private[signals3] trait EventSubscriber[E]:
     // 'currentContext' is the context this method IS run in, NOT the context any subsequent methods SHOULD run in
     protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit
@@ -300,6 +316,3 @@ object Stream:
     * @return A new stream.
     */
   inline def from[E](future: Future[E]): Stream[E] = from(future, Threading.defaultContext)
-
-  object `::`:
-    def unapply[E](stream: Stream[E]): (Future[E], Stream[E]) = (stream.head, stream.tail)

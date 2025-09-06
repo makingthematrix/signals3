@@ -1,7 +1,8 @@
 package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.Closeable.CloseableStream
-import io.github.makingthematrix.signals3.ProxyStream.{IndexedStream, TakeStream}
+import io.github.makingthematrix.signals3.ProxyStream.IndexedStream
+import io.github.makingthematrix.signals3.Finite.FiniteStream
 import io.github.makingthematrix.signals3.testutils.awaitAllTasks
 
 import scala.collection.mutable
@@ -76,7 +77,7 @@ class IndexedStreamSpec extends munit.FunSuite:
 
   test("Close after two events") {
     val a: SourceStream[Int] = Stream()
-    val b: TakeStream[Int] = a.take(2)
+    val b: FiniteStream[Int] = a.take(2)
 
     val buffer = mutable.ArrayBuilder.make[Int]
     b.foreach { n =>
@@ -127,7 +128,7 @@ class IndexedStreamSpec extends munit.FunSuite:
 
   test("Drop and take") {
     val a: SourceStream[Int] = Stream()
-    val b: TakeStream[Int] = a.drop(1).take(2)
+    val b = a.drop(1).take(2)
 
     val buffer = mutable.ArrayBuilder.make[Int]
     b.foreach { n =>
@@ -241,4 +242,102 @@ class IndexedStreamSpec extends munit.FunSuite:
 
     assertEquals(cBuffer.result().toSeq, Seq(1, 2, 3))
     assertEquals(initBuffer.result().toSeq, Seq(1, 2))
+  }
+
+  test("Split a stream in half") {
+    val a: SourceStream[Int] = Stream()
+    val (b, c) = a.splitAt(2)
+
+    val bBuffer = mutable.ArrayBuilder.make[Int]
+    b.foreach {bBuffer.addOne}
+    val cBuffer = mutable.ArrayBuilder.make[Int]
+    c.foreach {cBuffer.addOne}
+
+    a ! 1
+    awaitAllTasks
+    a ! 2
+    awaitAllTasks
+    a ! 3
+    awaitAllTasks
+    a ! 4
+    awaitAllTasks
+
+    assertEquals(bBuffer.result().toSeq, Seq(1, 2))
+    assertEquals(cBuffer.result().toSeq, Seq(3, 4))
+  }
+
+  test("Drop events until a condition") {
+    val a: SourceStream[String] = Stream()
+    val b = a.dropWhile(str => str.toInt < 3)
+
+    val buffer = mutable.ArrayBuilder.make[Int]
+    b.foreach { str => buffer.addOne(str.toInt) }
+
+    a ! "1"
+    awaitAllTasks
+    a ! "2"
+    awaitAllTasks
+    a ! "3"
+    awaitAllTasks
+    a ! "4"
+    awaitAllTasks
+
+    assertEquals(buffer.result().toSeq, Seq(3, 4))
+  }
+
+  test("Empty take stream is already closed") {
+    val a: SourceStream[Int] = Stream()
+    val b = a.take(0)
+    assert(b.isClosed)
+
+    val bBuffer = mutable.ArrayBuilder.make[Int]
+    b.foreach(bBuffer.addOne)
+
+    a ! 1
+    awaitAllTasks
+    a ! 2
+    awaitAllTasks
+
+    assertEquals(bBuffer.result().toSeq, Seq.empty[Int])
+  }
+
+  test("Take events until a condition") {
+    val a: SourceStream[String] = Stream()
+    val b = a.takeWhile(str => str.toInt < 3)
+
+    val buffer = mutable.ArrayBuilder.make[Int]
+    b.foreach { str => buffer.addOne(str.toInt) }
+
+    a ! "1"
+    awaitAllTasks
+    a ! "2"
+    awaitAllTasks
+    a ! "3"
+    awaitAllTasks
+    a ! "4"
+    awaitAllTasks
+
+    assertEquals(buffer.result().toSeq, Seq(1, 2))
+  }
+
+  test("Split events with a condition") {
+    val a: SourceStream[String] = Stream()
+    val (b, c) = a.splitAt(_.toInt < 3)
+
+    val bBuffer = mutable.ArrayBuilder.make[Int]
+    b.foreach { str => bBuffer.addOne(str.toInt) }
+    val cBuffer = mutable.ArrayBuilder.make[Int]
+    c.foreach { str => cBuffer.addOne(str.toInt) }
+
+    a ! "1"
+    awaitAllTasks
+    a ! "2"
+    awaitAllTasks
+    a ! "3"
+    awaitAllTasks
+    a ! "4"
+    awaitAllTasks
+
+    assertEquals(bBuffer.result().toSeq, Seq(1, 2))
+    assertEquals(cBuffer.result().toSeq, Seq(3, 4))
   }
