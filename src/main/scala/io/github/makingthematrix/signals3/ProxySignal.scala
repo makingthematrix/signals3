@@ -1,7 +1,9 @@
 package io.github.makingthematrix.signals3
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import Signal.SignalSubscriber
+
+import scala.util.chaining.scalaUtilChainingOps
 
 abstract private[signals3] class ProxySignal[V](sources: Signal[?]*) extends Signal[V] with SignalSubscriber:
   override def onWire(): Unit =
@@ -27,7 +29,7 @@ private[signals3] object ProxySignal:
   class MapSignal[V, Z](source: Signal[V], f: V => Z) extends ProxySignal[Z](source):
     override protected def computeValue(current: Option[Z]): Option[Z] = source.value.map(f)
 
-  class IndexedSignal[V](source: Signal[V]) extends ProxySignal[V](source) with Indexed[V]:
+  class IndexedSignal[V](source: Signal[V]) extends ProxySignal[V](source) with Indexed:
     value = source.value
 
     override protected def computeValue(current: Option[V]): Option[V] =
@@ -51,20 +53,30 @@ private[signals3] object ProxySignal:
     override protected def computeValue(current: Option[V]): Option[V] =
       if !closed then source.value else current
 
-  final class TakeSignal[V](source: Signal[V], take: Int) extends IndexedSignal[V](source) with Closeable:
-    @volatile private var forceClose = false
-
-    override def closeAndCheck(): Boolean =
-      forceClose = true
-      true
-
-    override def isClosed: Boolean = forceClose || counter >= take
+  final class TakeSignal[V](source: Signal[V], take: Int) 
+    extends IndexedSignal[V](source) with Finite[V, Signal[V]]:
+    override def isClosed: Boolean = super.isClosed || counter >= take
 
     override protected def computeValue(current: Option[V]): Option[V] =
-      if !isClosed then
-        if source.value != current then inc()
-        source.value
-      else current
+      val res: Option[V] =
+        if !isClosed then
+          if source.value != current then 
+            inc()
+            if !isClosed then (initSignal, source.value) match 
+              case (Some(s), Some(v)) => s ! v
+              case _ =>
+          source.value
+        else current
+      if isClosed then (lastPromise, res) match
+        case (Some(p), Some(v)) if !p.isCompleted => p.trySuccess(v)
+        case _ => 
+      res    
+    
+    private var lastPromise: Option[Promise[V]] = None
+    override lazy val last: Future[V] = Promise[V]().tap { p => lastPromise = Some(p) }.future
+
+    private var initSignal: Option[SourceSignal[V]] = None
+    override lazy val init: Signal[V] = SourceSignal[V]().tap { s => initSignal = Some(s) }
 
   class CollectSignal[V, Z](source: Signal[V], pf: PartialFunction[V, Z]) extends ProxySignal[Z](source):
     override protected def computeValue(current: Option[Z]): Option[Z] =

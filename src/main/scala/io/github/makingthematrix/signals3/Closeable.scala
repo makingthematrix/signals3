@@ -34,7 +34,7 @@ trait Closeable extends java.lang.AutoCloseable:
     * A version of `closeAndCheck()` which ignores the boolean result.
     * If the closeable is used in try-with-resources, this method will be called automatically.
     */
-  override final def close(): Unit = closeAndCheck()
+  override def close(): Unit = closeAndCheck()
 
 object Closeable:
   /**

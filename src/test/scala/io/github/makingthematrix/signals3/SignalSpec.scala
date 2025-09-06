@@ -676,6 +676,53 @@ class SignalSpec extends munit.FunSuite:
     assertEquals(seq, Seq(2, 3))
   }
 
+  test("Take and use .last to get the last of the took elements") {
+    given DispatchQueue = SerialDispatchQueue()
+    val a: SourceSignal[Int] = Signal[Int]()
+
+    val c = a.take(2)
+    val cBuffer = mutable.ArrayBuilder.make[Int]
+    c.foreach {cBuffer.addOne}
+
+    val f = c.last
+    var fValue: Int = 0
+    f.foreach(fValue = _)
+
+    a ! 1
+    assert(waitForResult(a, 1))
+    a ! 2
+    assert(waitForResult(a, 2))
+    a ! 3
+    assert(waitForResult(a, 3))
+
+    assertEquals(cBuffer.result().toSeq, Seq(1, 2))
+    assertEquals(fValue, 2)
+  }
+
+  test("Take and use .init to get all but the last element") {
+    given DispatchQueue = SerialDispatchQueue()
+    val a: SourceSignal[Int] = Signal[Int]()
+
+    val c = a.take(3)
+    val cBuffer = mutable.ArrayBuilder.make[Int]
+    c.foreach {cBuffer.addOne}
+
+    val init = c.init
+    val initBuffer = mutable.ArrayBuilder.make[Int]
+    init.foreach {initBuffer.addOne}
+
+    a ! 1
+    awaitAllTasks
+    a ! 2
+    awaitAllTasks
+    a ! 3
+    awaitAllTasks
+    a ! 4
+    awaitAllTasks
+
+    assertEquals(cBuffer.result().toSeq, Seq(1, 2, 3))
+    assertEquals(initBuffer.result().toSeq, Seq(1, 2))
+  }
   test("A signal mapped from an empty signal stays empty") {
     val s1 = Signal.empty[Int]
     val mapped = s1.map(n => s"number: $n")
