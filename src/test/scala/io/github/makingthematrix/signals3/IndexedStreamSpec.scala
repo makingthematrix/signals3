@@ -198,7 +198,7 @@ class IndexedStreamSpec extends munit.FunSuite:
     assertEquals(seq, Seq(2, 3))
   }
 
-  test("Take and use .last to get the last of the took elements") {
+  test("Take and use .last to get the last of the taken elements") {
     val a: SourceStream[Int] = Stream()
 
     val c = a.take(2)
@@ -307,6 +307,10 @@ class IndexedStreamSpec extends munit.FunSuite:
 
     val buffer = mutable.ArrayBuilder.make[Int]
     b.foreach { str => buffer.addOne(str.toInt) }
+    val initBuffer = mutable.ArrayBuilder.make[Int]
+    b.init.foreach { str => initBuffer.addOne(str.toInt) }
+    var last: String = ""
+    b.last.foreach(last = _)
 
     a ! "1"
     awaitAllTasks
@@ -318,6 +322,9 @@ class IndexedStreamSpec extends munit.FunSuite:
     awaitAllTasks
 
     assertEquals(buffer.result().toSeq, Seq(1, 2))
+    assert(b.isClosed)
+    assertEquals(initBuffer.result().toSeq, Seq(1))
+    assertEquals(last, "2")
   }
 
   test("Split events with a condition") {

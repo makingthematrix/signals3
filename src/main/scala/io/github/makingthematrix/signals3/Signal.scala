@@ -1,6 +1,7 @@
 package io.github.makingthematrix.signals3
 
-import Signal.{SignalSubscriber, SignalSubscription}
+import Signal.{EmptyTakeSignal, SignalSubscriber, SignalSubscription}
+import Finite.FiniteSignal
 import ProxySignal.*
 
 import scala.concurrent.duration.FiniteDuration
@@ -505,18 +506,36 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
   final inline def nand[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] =
     Signal.nand(this.asInstanceOf[Signal[Boolean]], other.asInstanceOf[Signal[Boolean]])
 
-  final inline def indexed: IndexedSignal[V] = this match
+  final def indexed: IndexedSignal[V] = this match
     case that: IndexedSignal[V] => that
     case _ => new IndexedSignal[V](this)
   
-  final inline def closeable: CloseableSignal[V] = this match
+  final def closeable: CloseableSignal[V] = this match
     case that: CloseableSignal[V] => that
     case _ => new CloseableSignal[V](this)
 
-  inline final def drop(n: Int): DropSignal[V] = new DropSignal[V](this, n)
-  inline final def take(n: Int): TakeSignal[V] = new TakeSignal[V](this, n)
+  final def drop(n: Int): Signal[V] =
+    if n == 0 then this
+    else new DropSignal[V](this, n)
+
+  final inline def dropWhile(p: V => Boolean): Signal[V] = new DropWhileSignal[V](this, p)
+
+  final def take(n: Int): FiniteSignal[V] =
+    if n == 0 then EmptyTakeSignal.asInstanceOf[FiniteSignal[V]]
+    else new TakeSignal[V](this, n)
+
+  final inline def takeWhile(p: V => Boolean): FiniteSignal[V] = new TakeWhileSignal[V](this, p)
+
+  final inline def splitAt(n: Int): (FiniteSignal[V], Signal[V]) = (take(n), drop(n))
+  final inline def splitAt(p: V => Boolean): (FiniteSignal[V], Signal[V]) = (takeWhile(p), dropWhile(p))
 
 object Signal:
+  final private val EmptyTakeSignal: TakeSignal[Any] = new TakeSignal[Any](Signal[Any](), 0)
+  final private val Empty = new ConstSignal[Any](None)
+
+  object `::`:
+    def unapply[V](signal: Signal[V]): (Future[V], Signal[V]) = (signal.head, signal.tail)
+
   private[signals3] trait SignalSubscriber:
     // 'currentContext' is the context this method IS run in, NOT the context any subsequent methods SHOULD run in
     protected[signals3] def changed(currentContext: Option[ExecutionContext]): Unit
@@ -541,8 +560,6 @@ object Signal:
       changed(None) // refresh the subscriber with current value
 
     override protected[signals3] def onUnsubscribe(): Unit = source.unsubscribe(this)
-
-  final private val Empty = new ConstSignal[Any](None)
 
   /** Creates a new [[SourceSignal]] of values of the type `V`. A usual entry point for the signals network.
     * Starts uninitialized (its value is set to `None`).
@@ -836,6 +853,3 @@ object Signal:
     * @return A new signal with the value of the type `V`.
     */
   inline def from[V](source: Stream[V]): Signal[V] = new StreamSignal[V](source)
-
-  object `::`:
-    def unapply[V](signal: Signal[V]): (Future[V], Signal[V]) = (signal.head, signal.tail)

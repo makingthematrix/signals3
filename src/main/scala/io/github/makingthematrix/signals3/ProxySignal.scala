@@ -53,8 +53,15 @@ private[signals3] object ProxySignal:
     override protected def computeValue(current: Option[V]): Option[V] =
       if !closed then source.value else current
 
+  protected trait FiniteSignal[V] extends Finite[V, Signal[V]]:
+    protected var lastPromise: Option[Promise[V]] = None
+    override lazy val last: Future[V] = Promise[V]().tap { p => lastPromise = Some(p) }.future
+
+    protected var initSignal: Option[SourceSignal[V]] = None
+    override lazy val init: Signal[V] = SourceSignal[V]().tap { s => initSignal = Some(s) }
+
   final class TakeSignal[V](source: Signal[V], take: Int) 
-    extends IndexedSignal[V](source) with Finite[V, Signal[V]]:
+    extends IndexedSignal[V](source) with FiniteSignal[V]:
     override def isClosed: Boolean = super.isClosed || counter >= take
 
     override protected def computeValue(current: Option[V]): Option[V] =
@@ -71,12 +78,33 @@ private[signals3] object ProxySignal:
         case (Some(p), Some(v)) if !p.isCompleted => p.trySuccess(v)
         case _ => 
       res    
-    
-    private var lastPromise: Option[Promise[V]] = None
-    override lazy val last: Future[V] = Promise[V]().tap { p => lastPromise = Some(p) }.future
 
-    private var initSignal: Option[SourceSignal[V]] = None
-    override lazy val init: Signal[V] = SourceSignal[V]().tap { s => initSignal = Some(s) }
+  final class TakeWhileSignal[V](source: Signal[V], p: V => Boolean)
+    extends ProxySignal[V](source) with FiniteSignal[V]:
+
+    override protected def computeValue(current: Option[V]): Option[V] =
+      if isClosed || source.value == current then current
+      else
+        if !source.value.exists(p) then
+          close()
+          (lastPromise, current) match
+            case (Some(p), Some(c)) if !p.isCompleted => p.trySuccess(c)
+            case _ =>
+          current
+        else
+          (initSignal, current) match
+            case (Some(s), Some(c)) => s ! c
+            case _ =>
+          source.value
+        end if
+      end if
+
+  final class DropWhileSignal[V](source: Signal[V], p: V => Boolean) extends ProxySignal[V](source):
+    @volatile private var dropping = true
+    override protected def computeValue(current: Option[V]): Option[V] =
+      if dropping && source.value != current then
+        dropping = source.value.exists(p)
+      if !dropping then source.value else current
 
   class CollectSignal[V, Z](source: Signal[V], pf: PartialFunction[V, Z]) extends ProxySignal[Z](source):
     override protected def computeValue(current: Option[Z]): Option[Z] =

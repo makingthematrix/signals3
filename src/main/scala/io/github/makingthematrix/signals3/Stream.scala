@@ -242,7 +242,7 @@ object Stream:
   object `::`:
     def unapply[E](stream: Stream[E]): (Future[E], Stream[E]) = (stream.head, stream.tail)
 
-  private[signals3] final val EmptyTakeStream: TakeStream[Any] = new TakeStream[Any](Stream[Any](), 0)
+  private final val EmptyTakeStream: TakeStream[Any] = new TakeStream[Any](Stream[Any](), 0)
 
   private[signals3] trait EventSubscriber[E]:
     // 'currentContext' is the context this method IS run in, NOT the context any subsequent methods SHOULD run in
