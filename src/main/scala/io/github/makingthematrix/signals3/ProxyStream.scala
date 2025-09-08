@@ -111,17 +111,21 @@ private[signals3] object ProxyStream:
   final class TakeWhileStream[E](source: Stream[E], p: E => Boolean)
     extends ProxyStream[E, E](source) with FiniteStream[E]:
 
+    private var previousEvent: Option[E] = None
+
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       if !isClosed then
         if !p(event) then
           close()
-          lastPromise.foreach {
-            case p if !p.isCompleted => p.trySuccess(event)
+          (lastPromise, previousEvent) match
+            case (Some(p), Some(pe)) if !p.isCompleted => p.trySuccess(pe)
             case _ =>
-          }
         else
           dispatch(event, sourceContext)
-          initStream.foreach {_ ! event}
+          (initStream, previousEvent) match
+            case (Some(s), Some(pe)) => s ! pe
+            case _ =>
+          previousEvent = Some(event)
         end if
       end if
 

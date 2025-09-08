@@ -1,7 +1,6 @@
 package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.Closeable.CloseableSignal
-import io.github.makingthematrix.signals3.ProxySignal.TakeSignal
 
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, CyclicBarrier, TimeUnit}
@@ -540,7 +539,7 @@ class SignalSpec extends munit.FunSuite:
 
   test("Close after two changes") {
     val a = Signal[Int]()
-    val b: TakeSignal[Int] = a.take(2)
+    val b = a.take(2)
 
     val buffer = mutable.ArrayBuilder.make[Int]
     b.foreach { n =>
@@ -596,7 +595,7 @@ class SignalSpec extends munit.FunSuite:
 
   test("Drop and take") {
     val a = Signal[Int]()
-    val b: TakeSignal[Int] = a.drop(1).take(2)
+    val b = a.drop(1).take(2)
 
     val buffer = mutable.ArrayBuilder.make[Int]
     b.foreach { n =>
@@ -648,6 +647,34 @@ class SignalSpec extends munit.FunSuite:
     assertEquals(cSeq, Seq(2))
   }
 
+  test("Split a signal in half") {
+    given DispatchQueue = SerialDispatchQueue()
+    val a = Signal[Int]()
+
+    val (b, c) = a.splitAt(2)
+
+    val bBuffer = mutable.ArrayBuilder.make[Int]
+    b.foreach {bBuffer.addOne}
+    val cBuffer = mutable.ArrayBuilder.make[Int]
+    c.foreach {cBuffer.addOne}
+
+    a ! 1
+    a ! 1
+    assert(waitForResult(a, 1))
+
+    a ! 2
+    assert(waitForResult(a, 2))
+
+    a ! 3
+    assert(waitForResult(a, 3))
+
+    a ! 4
+    assert(waitForResult(a, 4))
+
+    assertEquals(bBuffer.result().toSeq, Seq(1, 2))
+    assertEquals(cBuffer.result().toSeq, Seq(3, 4))
+  }
+
   test("Split a signal into a head future and tail stream") {
     given DispatchQueue = SerialDispatchQueue()
     import Signal.`::`
@@ -676,7 +703,7 @@ class SignalSpec extends munit.FunSuite:
     assertEquals(seq, Seq(2, 3))
   }
 
-  test("Take and use .last to get the last of the took elements") {
+  test("Take and use .last to get the last of the taken elements") {
     given DispatchQueue = SerialDispatchQueue()
     val a: SourceSignal[Int] = Signal[Int]()
 
@@ -723,6 +750,95 @@ class SignalSpec extends munit.FunSuite:
     assertEquals(cBuffer.result().toSeq, Seq(1, 2, 3))
     assertEquals(initBuffer.result().toSeq, Seq(1, 2))
   }
+
+  test("Drop value changes until a condition") {
+    given DispatchQueue = SerialDispatchQueue()
+    val a = Signal[String]()
+
+    val b = a.dropWhile(str => str.toInt < 3)
+
+    val buffer = mutable.ArrayBuilder.make[Int]
+    b.foreach { str => buffer.addOne(str.toInt) }
+
+    a ! "1"
+    awaitAllTasks
+    a ! "2"
+    awaitAllTasks
+    a ! "3"
+    awaitAllTasks
+    a ! "4"
+    awaitAllTasks
+
+    assertEquals(buffer.result().toSeq, Seq(3, 4))
+  }
+
+  test("Empty take signal is already closed") {
+    given DispatchQueue = SerialDispatchQueue()
+    val a = Signal[Int]()
+    val b = a.take(0)
+    assert(b.isClosed)
+
+    val bBuffer = mutable.ArrayBuilder.make[Int]
+    b.foreach(bBuffer.addOne)
+
+    a ! 1
+    awaitAllTasks
+    a ! 2
+    awaitAllTasks
+
+    assertEquals(bBuffer.result().toSeq, Seq.empty[Int])
+  }
+
+  test("Take value changes until a condition") {
+    given DispatchQueue = SerialDispatchQueue()
+    val a = Signal[String]()
+    val b = a.takeWhile(str => str.toInt < 3)
+
+    val buffer = mutable.ArrayBuilder.make[Int]
+    b.foreach { str => buffer.addOne(str.toInt) }
+    val initBuffer = mutable.ArrayBuilder.make[Int]
+    b.init.foreach { str => initBuffer.addOne(str.toInt) }
+    var last: String = ""
+    b.last.foreach(last = _)
+
+    a ! "1"
+    awaitAllTasks
+    a ! "2"
+    awaitAllTasks
+    a ! "3"
+    awaitAllTasks
+    a ! "4"
+    awaitAllTasks
+
+    assertEquals(buffer.result().toSeq, Seq(1, 2))
+    assert(b.isClosed)
+    assertEquals(initBuffer.result().toSeq, Seq(1))
+    assertEquals(last, "2")
+  }
+
+  test("Split events with a condition") {
+    given DispatchQueue = SerialDispatchQueue()
+    val a = Signal[String]()
+    val (b, c) = a.splitAt(_.toInt < 3)
+
+    val bBuffer = mutable.ArrayBuilder.make[Int]
+    b.foreach { str => bBuffer.addOne(str.toInt) }
+    val cBuffer = mutable.ArrayBuilder.make[Int]
+    c.foreach { str => cBuffer.addOne(str.toInt) }
+
+    a ! "1"
+    awaitAllTasks
+    a ! "2"
+    awaitAllTasks
+    a ! "3"
+    awaitAllTasks
+    a ! "4"
+    awaitAllTasks
+
+    assertEquals(bBuffer.result().toSeq, Seq(1, 2))
+    assertEquals(cBuffer.result().toSeq, Seq(3, 4))
+  }
+
   test("A signal mapped from an empty signal stays empty") {
     val s1 = Signal.empty[Int]
     val mapped = s1.map(n => s"number: $n")
