@@ -6,7 +6,7 @@ import Stream.EventSubscriber
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
-object AggregatingSignal:
+object AggregatingSignal {
   /** Creates a new aggregating signal from the `loader` which will be used to compute the initial value of the signal,
     * a stream of events, and the `updater` function which will use those events to update the value of the signal.
     * The `loader` - which is a future - will be executed in the provided execution context or the default execution
@@ -27,6 +27,7 @@ object AggregatingSignal:
   def apply[E, V](loader: () => Future[V], sourceStream: Stream[E], updater: (V, E) => V)
                  (using ec: ExecutionContext = Threading.defaultContext): AggregatingSignal[E, V]
     = new AggregatingSignal(loader, sourceStream, updater)
+}
 
 /** A signal which initializes its value by executing the `loader` future and then updates the value by composition of
   * the previous value and an event published in the associated `source` stream.
@@ -58,7 +59,7 @@ object AggregatingSignal:
   */
 final class AggregatingSignal[E, V](loader: () => Future[V], sourceStream: Stream[E], updater: (V, E) => V)
                                    (using ec: ExecutionContext = Threading.defaultContext)
-  extends Signal[V] with EventSubscriber[E]:
+  extends Signal[V] with EventSubscriber[E] {
   self =>
   private object valueMonitor
 
@@ -82,11 +83,14 @@ final class AggregatingSignal[E, V](loader: () => Future[V], sourceStream: Strea
     case _ => // delegate is no longer the current one, discarding loaded value
   }(using ec)
 
-  override def onWire(): Unit =
+  override def onWire(): Unit = {
     stash = Vector.empty
     sourceStream.subscribe(this) // important to subscribe before starting to load
     startLoading(loadId.incrementAndGet())
+  }
 
-  override def onUnwire(): Unit =
+  override def onUnwire(): Unit = {
     loadId.set(0)
     sourceStream.unsubscribe(this)
+  }
+}

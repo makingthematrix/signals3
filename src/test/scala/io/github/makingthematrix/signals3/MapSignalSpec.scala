@@ -2,7 +2,7 @@ package io.github.makingthematrix.signals3
 
 import testutils.waitForResult
 
-class MapSignalSpec extends munit.FunSuite:
+class MapSignalSpec extends munit.FunSuite {
   test("Normal mapping") {
     val received = Signal(Seq.empty[Int])
     val capture: Int => Unit = { value => received.mutate(_ :+ value) }
@@ -76,3 +76,4 @@ class MapSignalSpec extends munit.FunSuite:
     o.destroy()
     assert(!s.wired)
   }
+}

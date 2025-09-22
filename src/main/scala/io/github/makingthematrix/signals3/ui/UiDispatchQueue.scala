@@ -45,14 +45,15 @@ import io.github.makingthematrix.signals3.{DispatchQueue, EventContext, Stream, 
   *
   * @param runUiWith A function from the GUI platform you're working with that will execute a given task in the GUI context
   */
-final class UiDispatchQueue(private val runUiWith: Runnable => Unit) extends DispatchQueue:
+final class UiDispatchQueue(private val runUiWith: Runnable => Unit) extends DispatchQueue {
   override def execute(runnable: Runnable): Unit = runUiWith(runnable)
+}
 
-object UiDispatchQueue:
+object UiDispatchQueue {
   private val Empty: DispatchQueue = new UiDispatchQueue(_ => ())
   private var _ui: DispatchQueue = Empty
 
-  object Implicits:
+  object Implicits {
     /** Import this into a block of code if you want to use the Ui dispatch queue as the implicit argument in subscriptions.
       * ```
       * import UiDispatchQueue.Implicit.Ui
@@ -61,6 +62,7 @@ object UiDispatchQueue:
       * @return the Ui dispatch queue
       */
     given Ui: DispatchQueue = _ui
+  }
 
   /** The current Ui dispatch queue. This is a method, not a value, because in theory it's possible to replace an UI dispatch queue
     * to another while the program is running. In practice, you will usually start the program without the UI initialized, and
@@ -101,8 +103,9 @@ object UiDispatchQueue:
     * @param context The event context the subscription is assigned to.
     * @return A new `Subscription` to the signal.
     */
-  extension [E](stream: Stream[E])
+  extension [E](stream: Stream[E]) {
     def onUi(subscriber: E => Unit)(using context: EventContext): Subscription = stream.on(_ui)(subscriber)
+  }
 
   /** An extension method to the `Signal` class. You can use `signal.onUi { value => ... }` instead of
     * `signal.foreach { value => ... }` to enforce the subscription to be run on the UI dispatch queue when
@@ -112,5 +115,7 @@ object UiDispatchQueue:
     * @param context    The event context the subscription is assigned to.
     * @return A new `Subscription` to the signal.
     */
-  extension [V](signal: Signal[V])
+  extension [V](signal: Signal[V]) {
     def onUi(subscriber: V => Unit)(using context: EventContext): Subscription = signal.on(_ui)(subscriber)
+  }
+}

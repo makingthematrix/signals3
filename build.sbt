@@ -1,6 +1,6 @@
 // based on http://caryrobbins.com/dev/sbt-publishing/
 
-val _scalaVersion = "3.7.1"
+val _scalaVersion = "3.7.2"
 
 organization := "io.github.makingthematrix"
 sonatypeProfileName := "io.github.makingthematrix"
@@ -23,7 +23,8 @@ val scala3Options = Seq(
   "-explain",
   "-Wsafe-init",
   "-Ycheck-all-patmat",
-  "-Wunused:imports"
+  "-Wunused:imports",
+  "-no-indent", "-rewrite"
 )
 
 publishMavenStyle := true
@@ -64,7 +65,7 @@ lazy val root = (project in file("."))
     name := "signals3",
     libraryDependencies ++= Seq(
       //Test dependencies
-      "org.scalameta" %% "munit" % "1.1.1" % "test"
+      "org.scalameta" %% "munit" % "1.2.0" % "test"
     ),
     scalacOptions ++= standardOptions ++ scala3Options
   )

@@ -8,7 +8,7 @@ import scala.concurrent.duration.*
 import scala.concurrent.{Future, Promise}
 import scala.language.postfixOps
 
-class TransformersSpec extends munit.FunSuite:
+class TransformersSpec extends munit.FunSuite {
   import EventContext.Implicits.global
   import Threading.defaultContext
 
@@ -198,12 +198,14 @@ class TransformersSpec extends munit.FunSuite:
   test("zip two generator streams") {
     var c1 = 0
     var c2 = 0
-    def bump1(): Int =
+    def bump1(): Int = {
       c1 += 1
       c1
-    def bump2(): Int =
+    }
+    def bump2(): Int = {
       c2 -= 1
       c2
+    }
 
     val stream = Transformers.zip(
       GeneratorStream.generate(200.millis)(bump1()),
@@ -535,4 +537,4 @@ class TransformersSpec extends munit.FunSuite:
     assert(original1.isClosed)
     assert(original2.isClosed)
     assert(zipped.isClosed)
-  }
+  }}

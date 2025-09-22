@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-class EmptySignalSpec extends munit.FunSuite:
+class EmptySignalSpec extends munit.FunSuite {
   test("Value of an uninitialized signal") {
     val signal = Signal[Int]()
     assertEquals(signal.currentValue, None)
@@ -91,3 +91,4 @@ class EmptySignalSpec extends munit.FunSuite:
     assertEquals(chain.currentValue, Some(46))
     assertEquals(fan.received, Vector(44, 46))
   }
+}

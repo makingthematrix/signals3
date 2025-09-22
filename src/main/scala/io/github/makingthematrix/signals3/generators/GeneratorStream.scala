@@ -38,12 +38,13 @@ final class GeneratorStream[E](generate: () => E,
                                interval: FiniteDuration | (() => Long),
                                paused  : () => Boolean)
                               (using ec: ExecutionContext)
-  extends Stream[E] with Closeable with NoAutowiring:
+  extends Stream[E] with Closeable with NoAutowiring {
 
   private val beat =
-    (interval match
+    (interval match {
        case intv: FiniteDuration => CloseableFuture.repeat(intv)
        case intv: (() => Long)   => CloseableFuture.repeatVariant(intv)
+    }
     ) {
       if !paused() then publish(generate())
     }
@@ -61,8 +62,9 @@ final class GeneratorStream[E](generate: () => E,
   override inline def isClosed: Boolean = beat.isClosed
 
   override inline def onClose(body: => Unit): Unit = beat.onClose(body)
+}
 
-object GeneratorStream:
+object GeneratorStream {
   /**
     * Creates a stream which generates a new event every `interval` by calling the `generate` function which
     * returns an event and publishing it.
@@ -165,3 +167,4 @@ object GeneratorStream:
   inline def heartbeat(interval: FiniteDuration)
                       (using ec: ExecutionContext = Threading.defaultContext): GeneratorStream[Unit] =
     repeat((), interval)
+}

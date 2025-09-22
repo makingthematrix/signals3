@@ -24,7 +24,7 @@ import scala.util.{Failure, Success}
   */
 final class RefreshingSignal[V](loader: () => CloseableFuture[V], refreshStream: Stream[?])
                                (using ec: ExecutionContext = Threading.defaultContext)
-  extends Signal[V]:
+  extends Signal[V] {
   @volatile private var loadFuture = CloseableFuture.closed[Unit]()
   @volatile private var subscription = Option.empty[Subscription]
 
@@ -42,14 +42,15 @@ final class RefreshingSignal[V](loader: () => CloseableFuture[V], refreshStream:
     }
   }
 
-  override protected def onWire(): Unit =
+  override protected def onWire(): Unit = {
     super.onWire()
     Future {
       subscription = Some(refreshStream.on(ec)(_ => reload())(using EventContext.Global))
       reload()
     }(using ec)
+  }
 
-  override protected def onUnwire(): Unit =
+  override protected def onUnwire(): Unit = {
     super.onUnwire()
     Future {
       subscription.foreach(_.unsubscribe())
@@ -57,9 +58,11 @@ final class RefreshingSignal[V](loader: () => CloseableFuture[V], refreshStream:
       loadFuture.close()
       value = None
     }(using ec)
+  }
+}
 
 
-object RefreshingSignal:
+object RefreshingSignal {
   /** Creates a new refreshing signal from the `loader` which will be used to compute the signal's value and a stream of
     * events which will trigger reloading. The `loader` - a closeable future - will be every time executed in the
     * provided execution context. If the execution context is not provided, the default one will be used.
@@ -86,3 +89,4 @@ object RefreshingSignal:
   inline def from[V](loader: => Future[V], refreshStream: Stream[?])
                     (using ec: ExecutionContext = Threading.defaultContext): RefreshingSignal[V] =
     new RefreshingSignal(() => CloseableFuture.lift(loader), refreshStream)
+}

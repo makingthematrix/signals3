@@ -2,7 +2,7 @@ package io.github.makingthematrix.signals3
 
 import testutils.result
 
-class FilterSignalSpec extends munit.FunSuite:
+class FilterSignalSpec extends munit.FunSuite {
 
   test("Value of a filtered signal") {
     val source = Signal(1)
@@ -53,3 +53,4 @@ class FilterSignalSpec extends munit.FunSuite:
     source ! 8
     assertEquals(fan.received, Vector(2, 8))
   }
+}

@@ -33,12 +33,13 @@ final class GeneratorSignal[V](init    : V,
                                interval: FiniteDuration | (V => Long),
                                paused  : V => Boolean)
                               (using ec: ExecutionContext)
-  extends Signal[V](Some(init)) with Closeable with NoAutowiring:
+  extends Signal[V](Some(init)) with Closeable with NoAutowiring {
 
   private val beat =
-    (interval match
+    (interval match {
        case intv: FiniteDuration => CloseableFuture.repeat(intv)
        case intv: (V => Long)    => CloseableFuture.repeatVariant(() => intv(currentValue.getOrElse(init)))
+    }
     ) {
       if !currentValue.exists(paused) then currentValue.foreach(v => publish(update(v), ec))
     }
@@ -56,8 +57,9 @@ final class GeneratorSignal[V](init    : V,
   override inline def isClosed: Boolean = beat.isClosed
 
   override inline def onClose(body: => Unit): Unit = beat.onClose(body)
+}
 
-object GeneratorSignal:
+object GeneratorSignal {
   /**
     * Creates a signal which updates its value every `interval` by calling the `update` function which takes the current
     * and returns a new one.
@@ -206,3 +208,4 @@ object GeneratorSignal:
   inline def counter(interval: FiniteDuration)
                     (using ec: ExecutionContext = Threading.defaultContext): GeneratorSignal[Int] =
     generate(0, interval)(_ + 1)
+}

@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-class EventContextSpec extends munit.FunSuite:
+class EventContextSpec extends munit.FunSuite {
   private var received = Seq[Int]()
   private val capture = (value: Int) => received = received :+ value
 
@@ -60,3 +60,4 @@ class EventContextSpec extends munit.FunSuite:
 
     assertEquals(received, Seq(0, 1, 2, 3, 5, 6, 7))
   }
+}

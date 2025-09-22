@@ -10,12 +10,13 @@ import scala.concurrent.Future
  * @tparam T The type of the stream's event or the signal's value
  * @tparam M The type of the source that will be closed eventually
  */
-trait Finite[T, M <: Source[T]] extends CanBeClosed:
+trait Finite[T, M <: Source[T]] extends CanBeClosed {
   @volatile private var forceClose = false
 
-  protected def closeAndCheck(): Boolean =
+  protected def closeAndCheck(): Boolean = {
     forceClose = true
     true
+  }
 
   protected final inline def close(): Unit = closeAndCheck()
 
@@ -23,9 +24,11 @@ trait Finite[T, M <: Source[T]] extends CanBeClosed:
 
   def last: Future[T]
   def init: M
+}
   
-object Finite:
+object Finite {
   type Source[T] = Stream[T] | Signal[T]
   type FiniteStream[E] = Stream[E] & Finite[E, Stream[E]]
   type FiniteSignal[V] = Signal[V] & Finite[V, Signal[V]]
+}
 

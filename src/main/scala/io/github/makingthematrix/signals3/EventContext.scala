@@ -2,21 +2,22 @@ package io.github.makingthematrix.signals3
 
 import scala.collection.immutable.Set
 
-object EventContext:
+object EventContext {
   /** Creates a new default implementation of an [[EventContext]]
     *
     * @return A default implementation of the [[EventContext]]
     */
   def apply(): EventContext = new BaseEventContext
 
-  object Implicits:
+  object Implicits {
     given global: EventContext = EventContext.Global
+  }
 
   /** A dummy global [[EventContext]] used when no other event context is specified.
     * It does not maintain its subscriptions, it's always started, it can't be stopped or destroyed,
     * and it lives for the lifetime of the program.
     */
-  object Global extends EventContext:
+  object Global extends EventContext {
     override def register(subscription: Subscription): Boolean = true
     override def unregister(subscription: Subscription): Unit = {}
     override def start(): Unit = {}
@@ -24,6 +25,8 @@ object EventContext:
     override def destroy(): Unit = {}
     override def isContextStarted: Boolean = true
     override def isContextDestroyed: Boolean = false
+  }
+}
 
 /** When you subscribe to an [[EventSource]] in return you receive a [[Subscription]]. You can use that subscription
   * to unsubscribe from the event source or to temporarily pause receiving events. But managing a big number of
@@ -40,7 +43,7 @@ object EventContext:
   *
   * @see [[EventSource]]
   */
-trait EventContext:
+trait EventContext {
   /** An[[EventContext]] has to be started before it can register subscriptions.
     * A newly created one is started by default.
     * If the event context maintains subscriptions, they will be re-subscribed.
@@ -76,8 +79,9 @@ trait EventContext:
 
   def isContextStarted: Boolean
   def isContextDestroyed: Boolean
+}
 
-class BaseEventContext extends EventContext:
+class BaseEventContext extends EventContext {
   private object lock
 
   private var started = true
@@ -85,15 +89,17 @@ class BaseEventContext extends EventContext:
   private var subscriptions = Set.empty[Subscription]
 
   override def start(): Unit = lock.synchronized {
-    if !started then
+    if !started then {
       started = true
       subscriptions.foreach(_.subscribe())
+    }
   }
 
   override def stop(): Unit = lock.synchronized {
-    if started then
+    if started then {
       started = false
       subscriptions.foreach(_.unsubscribe())
+    }
   }
 
   override def destroy(): Unit = lock.synchronized {
@@ -104,10 +110,11 @@ class BaseEventContext extends EventContext:
   }
 
   override def register(subscription: Subscription): Boolean = lock.synchronized {
-    if !destroyed && !subscriptions.contains(subscription) then
+    if !destroyed && !subscriptions.contains(subscription) then {
       subscriptions += subscription
       if started then subscription.subscribe()
       true
+    }
     else false
   }
 
@@ -116,3 +123,4 @@ class BaseEventContext extends EventContext:
   override def isContextStarted: Boolean = lock.synchronized(started && !destroyed)
 
   override def isContextDestroyed: Boolean = lock.synchronized(destroyed)
+}

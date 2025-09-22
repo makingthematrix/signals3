@@ -11,7 +11,7 @@ import scala.concurrent.ExecutionContext
   *
   * @tparam V the type of the value held by the signal.
   */
-final class SourceSignal[V](protected val v: Option[V]) extends Signal[V](v):
+final class SourceSignal[V](protected val v: Option[V]) extends Signal[V](v) {
   /** Changes the value of the signal.
     *
     * The original `publish` method of the [[Signal]] class is `protected` to ensure that intermediate signals - those created
@@ -83,8 +83,9 @@ final class SourceSignal[V](protected val v: Option[V]) extends Signal[V](v):
     *         false otherwise.
     */
   inline def mutateOrDefault(f: V => V, default: V): Boolean = update(_.map(f).orElse(Some(default)))
+}
 
-object SourceSignal:
+object SourceSignal {
   /** Creates a source signal initially holding the given value.
     *
     * @see also `Signal.apply`
@@ -102,4 +103,4 @@ object SourceSignal:
     * @tparam V The type of the value
     * @return A new source signal
     */
-  def apply[V](): SourceSignal[V] = new SourceSignal[V](None)
+  def apply[V](): SourceSignal[V] = new SourceSignal[V](None)}

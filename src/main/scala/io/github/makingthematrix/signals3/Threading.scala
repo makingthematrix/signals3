@@ -9,7 +9,7 @@ import scala.util.Try
   * dispatch queues and to run closeable futures, event streams, and signals, if no other execution context
   * is provided.
   */
-object Threading:
+object Threading {
   /** An implicit reference to the default execution context. It is lazy, giving you a chance to replace the default
     * context with one of your own choosing before it is used for the first time.
     */
@@ -55,4 +55,5 @@ object Threading:
    */
   private def virtualThreadsSupported(): Boolean = 
     Try(classOf[Thread].getMethod("ofVirtual")).isSuccess // tries to access the Thread.ofVirtual() method which exists only in Java 21+
+}
   

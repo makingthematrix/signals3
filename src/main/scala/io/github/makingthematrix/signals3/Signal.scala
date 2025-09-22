@@ -33,7 +33,7 @@ import scala.util.chaining.scalaUtilChainingOps
   * @param value The option of the last value published in the signal or `None` if the signal was not initialized yet.
   * @tparam V The type of the value held in the signal.
   */
-class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) extends EventSource[V, SignalSubscriber]: 
+class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) extends EventSource[V, SignalSubscriber] { 
   self =>
   private object updateMonitor
 
@@ -64,10 +64,11 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     *         false if the new value is the same as the old one.
     */
   protected[signals3] def set(v: Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
-    if value != v then
+    if value != v then {
       value = v
       notifySubscribers(currentContext)
       true
+    }
     else false
 
   /** Notifies the subscribers that the value of the signal has changed.
@@ -87,9 +88,10 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     *
     * @return The current value of the signal.
     */
-  final def currentValue: Option[V] =
+  final def currentValue: Option[V] = {
     if !wired then disableAutowiring()
     value
+  }
 
   /** Checks if the signal is currently empty.
     * A signal is usually empty just after creation, if it was not initialized with a value, and it still waits
@@ -108,16 +110,18 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
 
     * @return The current value of the signal or the value it will be set to in the next update.
     */
-  final def future: Future[V] = currentValue match
+  final def future: Future[V] = currentValue match {
     case Some(v) => Future.successful(v)
     case None =>
       val p = Promise[V]()
-      val subscriber = new SignalSubscriber:
+      val subscriber = new SignalSubscriber {
         override def changed(ec: Option[ExecutionContext]): Unit = value.foreach(p.trySuccess)
+      }
       subscribe(subscriber)
       p.future.onComplete(_ => unsubscribe(subscriber))(using Threading.defaultContext)
       value.foreach(p.trySuccess)
       p.future
+  }
 
   /** An alias to the `future` method. */
   inline final def head: Future[V] = future
@@ -153,9 +157,10 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
 
     override def changed(ec: Option[ExecutionContext]): Unit = stream.synchronized {
       self.value.foreach { current =>
-        if !prev.contains(current) then
+        if !prev.contains(current) then {
           dispatch((prev, current), ec)
           prev = Some(current)
+        }
       }
     }
 
@@ -309,8 +314,9 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     * @param fallback Another signal of the same value type.
     * @return A new signal of the same value type.
     */
-  final def orElse(fallback: Signal[V]): Signal[V] = new ProxySignal[V](self, fallback):
+  final def orElse(fallback: Signal[V]): Signal[V] = new ProxySignal[V](self, fallback) {
     override protected def computeValue(current: Option[V]): Option[V] = self.value.orElse(fallback.value)
+  }
 
   /** A generalization of the `orElse` method where the fallback signal can have another value type.
     * If the value of this signal is `V` and the value of the fallback signal is `Z`, the new signal will return
@@ -509,13 +515,15 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
   final inline def nand[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] =
     Signal.nand(this.asInstanceOf[Signal[Boolean]], other.asInstanceOf[Signal[Boolean]])
 
-  final def indexed: IndexedSignal[V] = this match
+  final def indexed: IndexedSignal[V] = this match {
     case that: IndexedSignal[V] => that
     case _ => new IndexedSignal[V](this)
+  }
   
-  final def closeable: CloseableSignal[V] = this match
+  final def closeable: CloseableSignal[V] = this match {
     case that: CloseableSignal[V] => that
     case _ => new CloseableSignal[V](this)
+  }
 
   final def drop(n: Int): Signal[V] =
     if n == 0 then this
@@ -531,38 +539,44 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
 
   final inline def splitAt(n: Int): (FiniteSignal[V], Signal[V]) = (take(n), drop(n))
   final inline def splitAt(p: V => Boolean): (FiniteSignal[V], Signal[V]) = (takeWhile(p), dropWhile(p))
+}
 
-object Signal:
+object Signal {
   final private val EmptyTakeSignal: TakeSignal[Any] = new TakeSignal[Any](Signal[Any](), 0)
   final private val Empty = new ConstSignal[Any](None)
 
-  object `::`:
+  object `::` {
     def unapply[V](signal: Signal[V]): (Future[V], Signal[V]) = (signal.head, signal.tail)
+  }
 
-  private[signals3] trait SignalSubscriber:
+  private[signals3] trait SignalSubscriber {
     // 'currentContext' is the context this method IS run in, NOT the context any subsequent methods SHOULD run in
     protected[signals3] def changed(currentContext: Option[ExecutionContext]): Unit
+  }
 
   final private class SignalSubscription[V](source:           Signal[V],
                                             f:                V => Unit,
                                             executionContext: Option[ExecutionContext] = None
                                            )(using context: WeakReference[EventContext])
-    extends BaseSubscription(context) with SignalSubscriber:
+    extends BaseSubscription(context) with SignalSubscriber {
 
     override def changed(currentContext: Option[ExecutionContext]): Unit = synchronized {
       source.value.foreach { event =>
         if subscribed then
-          executionContext match
+          executionContext match {
             case Some(ec) if !currentContext.contains(ec) => Future(if subscribed then Try(f(event)))(using ec)
             case _ => f(event)
+          }
       }
     }
 
-    override protected[signals3] def onSubscribe(): Unit =
+    override protected[signals3] def onSubscribe(): Unit = {
       source.subscribe(this)
       changed(None) // refresh the subscriber with current value
+    }
 
     override protected[signals3] def onUnsubscribe(): Unit = source.unsubscribe(this)
+  }
 
   /** Creates a new [[SourceSignal]] of values of the type `V`. A usual entry point for the signals network.
     * Starts uninitialized (its value is set to `None`).
@@ -856,3 +870,4 @@ object Signal:
     * @return A new signal with the value of the type `V`.
     */
   inline def from[V](source: Stream[V]): Signal[V] = new StreamSignal[V](source)
+}
