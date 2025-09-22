@@ -188,7 +188,11 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]]:
   final def closeable: CloseableStream[E] = this match
     case that: CloseableStream[E] => that
     case _ => new CloseableStream[E](this)
-  
+
+  inline final def grouped(n: Int): Stream[Seq[E]] = new GroupedStream[E](this, n)
+  inline final def groupBy(p: E => Boolean): Stream[Seq[E]] = new GroupByStream[E](this, p)
+
+
   /** Produces a [[CloseableFuture]] which will finish when the next event is emitted in the parent stream.
     *
     * @param context Internally, the method creates a subscription to the stream, and an [[EventContext]] can be provided

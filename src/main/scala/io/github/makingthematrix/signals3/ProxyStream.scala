@@ -2,6 +2,7 @@ package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.Stream.EventSubscriber
 
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success}
 import scala.util.chaining.scalaUtilChainingOps
@@ -25,7 +26,7 @@ private[signals3] object ProxyStream:
   class MapStream[E, V](source: Stream[E], f: E => V) extends ProxyStream[E, V](source):
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       dispatch(f(event), sourceContext)
-  
+
   class FutureStream[E, V](source: Stream[E], f: E => Future[V])
     extends ProxyStream[E, V](source):
     private val key = java.util.UUID.randomUUID()
@@ -59,6 +60,29 @@ private[signals3] object ProxyStream:
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       value = f(value, event)
       dispatch(value, sourceContext)
+
+  final class GroupedStream[E](source: Stream[E], n: Int) extends ProxyStream[E, Seq[E]](source):
+    require(n > 0, "n must be positive")
+    private val buffer = ArrayBuffer.empty[E]
+
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+      buffer.addOne(event)
+      if buffer.size == n then
+        val res = buffer.toSeq
+        buffer.clear()
+        dispatch(res, sourceContext)
+      end if
+
+  final class GroupByStream[E](source: Stream[E], groupBy: E => Boolean) extends ProxyStream[E, Seq[E]](source):
+    private val buffer = ArrayBuffer.empty[E]
+
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+      if groupBy(event) then
+        val res = buffer.toSeq
+        buffer.clear()
+        if res.nonEmpty then dispatch(res, sourceContext)
+      end if
+      buffer.addOne(event)
 
   class IndexedStream[E](source: Stream[E]) extends ProxyStream[E, E](source) with Indexed:
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
