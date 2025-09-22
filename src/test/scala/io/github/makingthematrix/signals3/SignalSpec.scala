@@ -7,6 +7,7 @@ import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, CyclicBarrie
 import testutils.*
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters.*
 import scala.concurrent.*
 import scala.concurrent.duration.*
@@ -1435,4 +1436,59 @@ class SignalSpec extends munit.FunSuite:
       waitForResult(s, n)
     }
     waitForResult(received, Seq(1, 2))
+  }
+
+  test("Group the signal") {
+    given dq: DispatchQueue = SerialDispatchQueue()
+
+    val a: SourceSignal[Int] = Signal[Int]()
+    val b: Signal[Seq[Int]] = a.grouped(2)
+
+    val buffer = ArrayBuffer[Seq[Int]]()
+    b.foreach(seq => buffer += seq)
+
+    a ! 1
+    awaitAllTasks
+    a ! 2
+    awaitAllTasks
+    a ! 3
+    awaitAllTasks
+    a ! 4
+    awaitAllTasks
+
+    val res = buffer.toSeq
+    assertEquals(res.size, 2)
+    assertEquals(res(0), Seq(1, 2))
+    assertEquals(res(1), Seq(3, 4))
+  }
+
+  test("Group the signal by the first letter") {
+    given dq: DispatchQueue = SerialDispatchQueue()
+
+    val a: SourceSignal[String] = Signal[String]()
+    var lastFirstLetter: Option[Char] = None
+    val b: Signal[Seq[String]] = a.groupBy { str =>
+      val res = if lastFirstLetter.isEmpty then false else !lastFirstLetter.contains(str.head)
+      lastFirstLetter = Some(str.head)
+      res
+    }
+
+    val buffer = ArrayBuffer[Seq[String]]()
+    b.foreach(seq => buffer += seq)
+
+    a ! "aa"
+    awaitAllTasks
+    a ! "ab"
+    awaitAllTasks
+    a ! "ba"
+    awaitAllTasks
+    a ! "bb"
+    awaitAllTasks
+    a ! "ac"
+    awaitAllTasks
+
+    val res = buffer.toSeq
+    assertEquals(res.size, 2)
+    assertEquals(res(0), Seq("aa", "ab"))
+    assertEquals(res(1), Seq("ba", "bb")) // "ac" is never released
   }

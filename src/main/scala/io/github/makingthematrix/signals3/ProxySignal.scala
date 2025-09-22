@@ -29,6 +29,31 @@ private[signals3] object ProxySignal:
   class MapSignal[V, Z](source: Signal[V], f: V => Z) extends ProxySignal[Z](source):
     override protected def computeValue(current: Option[Z]): Option[Z] = source.value.map(f)
 
+  final class GroupedSignal[V](source: Signal[V], n: Int) extends ProxySignal[Seq[V]](source):
+    require(n > 0, "n must be positive")
+    private val buffer = scala.collection.mutable.ArrayBuffer.empty[V]
+
+    override protected def computeValue(current: Option[Seq[V]]): Option[Seq[V]] =
+      source.value.foreach(buffer.addOne)
+      if buffer.size == n then
+        val res = buffer.toSeq
+        buffer.clear()
+        Some(res)
+      else current
+
+  final class GroupBySignal[V](source: Signal[V], groupBy: V => Boolean) extends ProxySignal[Seq[V]](source):
+    private val buffer = scala.collection.mutable.ArrayBuffer.empty[V]
+
+    override protected def computeValue(current: Option[Seq[V]]): Option[Seq[V]] =
+      val res = if buffer.nonEmpty && source.value.exists(groupBy) then
+        val seq = buffer.toSeq
+        buffer.clear()
+        Some(seq)
+      else current
+      source.value.foreach(buffer.addOne)
+      res
+
+
   class IndexedSignal[V](source: Signal[V]) extends ProxySignal[V](source) with Indexed:
     value = source.value
 

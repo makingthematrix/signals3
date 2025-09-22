@@ -2,6 +2,7 @@ package io.github.makingthematrix.signals3
 
 import testutils.{awaitAllTasks, result, waitForResult}
 
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.*
 import scala.concurrent.{Future, Promise}
 import scala.language.postfixOps
@@ -429,4 +430,59 @@ class StreamSpec extends munit.FunSuite:
 
     assertEquals(howMuchTrue, 2)
     assertEquals(howMuchFalse, 3)
+  }
+
+  test("Group the stream") {
+    given dq: DispatchQueue = SerialDispatchQueue()
+
+    val a: SourceStream[Int] = Stream()
+    val b: Stream[Seq[Int]] = a.grouped(2)
+
+    val buffer = ArrayBuffer[Seq[Int]]()
+    b.foreach(seq => buffer += seq)
+
+    a ! 1
+    awaitAllTasks
+    a ! 2
+    awaitAllTasks
+    a ! 3
+    awaitAllTasks
+    a ! 4
+    awaitAllTasks
+
+    val res = buffer.toSeq
+    assertEquals(res.size, 2)
+    assertEquals(res(0), Seq(1, 2))
+    assertEquals(res(1), Seq(3, 4))
+  }
+
+  test("Group the stream by the first letter") {
+    given dq: DispatchQueue = SerialDispatchQueue()
+
+    val a: SourceStream[String] = Stream()
+    var lastFirstLetter: Option[Char] = None
+    val b: Stream[Seq[String]] = a.groupBy { str =>
+      val res = if lastFirstLetter.isEmpty then false else !lastFirstLetter.contains(str.head)
+      lastFirstLetter = Some(str.head)
+      res
+    }
+
+    val buffer = ArrayBuffer[Seq[String]]()
+    b.foreach(seq => buffer += seq)
+
+    a ! "aa"
+    awaitAllTasks
+    a ! "ab"
+    awaitAllTasks
+    a ! "ba"
+    awaitAllTasks
+    a ! "bb"
+    awaitAllTasks
+    a ! "ac"
+    awaitAllTasks
+
+    val res = buffer.toSeq
+    assertEquals(res.size, 2)
+    assertEquals(res(0), Seq("aa", "ab"))
+    assertEquals(res(1), Seq("ba", "bb")) // "ac" is never released
   }

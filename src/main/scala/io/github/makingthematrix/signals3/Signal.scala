@@ -344,6 +344,9 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
   inline final def |(sourceSignal: SourceSignal[V])(using ec: EventContext = EventContext.Global): Subscription = 
     pipeTo(sourceSignal)
 
+  inline final def grouped(n: Int): Signal[Seq[V]] = new GroupedSignal(this, n)
+  inline final def groupBy(p: V => Boolean): Signal[Seq[V]] = new GroupBySignal(this, p)
+
   /** Creates a new signal of the same value type which changes its value to the changed value of the parent signal only if
     * the given `select` function returns different results for the old and the new value. If the results of the `select`
     * functions are equal, then even if the new value of the original signal is actually different from the old one, the value
