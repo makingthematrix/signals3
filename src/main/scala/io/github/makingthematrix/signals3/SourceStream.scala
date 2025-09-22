@@ -11,7 +11,7 @@ import scala.concurrent.ExecutionContext
   *
   * @tparam E the type of the event
   */
-final class SourceStream[E] extends Stream[E]:
+final class SourceStream[E] extends Stream[E] {
   /** Publishes the event to all subscribers.
     *
     * @see [[Stream.publish]]
@@ -46,3 +46,4 @@ final class SourceStream[E] extends Stream[E]:
     */
   @targetName("twobang")
   inline def !!(event: E)(using ec: ExecutionContext): Unit = publish(event, ec)
+}

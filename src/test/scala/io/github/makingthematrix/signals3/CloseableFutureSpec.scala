@@ -9,24 +9,27 @@ import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration.*
 import testutils.*
 
-class CloseableFutureSpec extends munit.FunSuite:
+class CloseableFutureSpec extends munit.FunSuite {
   test("Transform between a future and a closeable future") {
     import CloseableFuture._
     val f1: Future[Unit] = Future.successful(())
     val cf1 = f1.lift
-    cf1 match
+    cf1 match {
       case _: CloseableFuture[Unit] =>
       case null => fail("Future[Unit] should be transformed into CloseableFuture[Unit]")
+    }
 
     val f2 = cf1.future
-    f2 match
+    f2 match {
       case _: Future[Unit] =>
       case null => fail("CloseableFuture[Unit] should wrap over Future[Unit]")
+    }
 
     val cf2 = CloseableFuture.lift(f2)
-    cf2 match
+    cf2 match {
       case _: CloseableFuture[Unit] =>
       case null => fail("Future[Unit] should be lifted into CloseableFuture[Unit]")
+    }
   }
 
   test("Create a closeable future from the body") {
@@ -526,3 +529,4 @@ class CloseableFutureSpec extends munit.FunSuite:
 
     assertEquals(result(cf2), "bar")
   }
+}

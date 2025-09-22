@@ -4,13 +4,14 @@ package io.github.makingthematrix.signals3
  * A common supertrait for [[CloseableFuture]] and all streams and signals that can be closed at some point,
  * either by the user or by internal logic.
  */
-trait CanBeClosed:
+trait CanBeClosed {
   /**
    * Checks if the stream/signal is already closed.
    * @return `true` if the stream/signal is already closed, `false` if it's not. Note that if the stream/signal failed,
    *         the result can be unreliable.
    */
   def isClosed: Boolean
+}
 /**
   * A stream or a signal can be closeable, meaning that it can be closed and after that it will not publish new events
   * anymore. Every [[GeneratorStream]] and [[GeneratorSignal]] is [[Closeable]] which allows for stopping them when
@@ -20,7 +21,7 @@ trait CanBeClosed:
   * 
   * @see [[ProxyStream]] and [[ProxySignal]] for examples.
   */
-trait Closeable extends java.lang.AutoCloseable with CanBeClosed:
+trait Closeable extends java.lang.AutoCloseable with CanBeClosed {
   /**
     * Tries to close the stream/signal and returns if it worked.
     * @return Should return `true` if it was possible to close the stream/signal, `false` if it was impossible 
@@ -46,8 +47,9 @@ trait Closeable extends java.lang.AutoCloseable with CanBeClosed:
     * If the closeable is used in try-with-resources, this method will be called automatically.
     */
   override def close(): Unit = closeAndCheck()
+}
 
-object Closeable:
+object Closeable {
   /**
     * A type alias for a closeable stream.
     * @tparam E The event type of the stream.
@@ -58,3 +60,4 @@ object Closeable:
     * @tparam V The value type of the signal.
     */
   type CloseableSignal[V] = Signal[V] & Closeable
+}

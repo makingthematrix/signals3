@@ -6,7 +6,7 @@ import io.github.makingthematrix.signals3.{EventContext, Signal, Threading}
 import scala.collection.mutable
 import scala.concurrent.duration.*
 
-class GeneratorStreamSpec extends munit.FunSuite:
+class GeneratorStreamSpec extends munit.FunSuite {
   import EventContext.Implicits.global
   import Threading.defaultContext
 
@@ -121,9 +121,10 @@ class GeneratorStreamSpec extends munit.FunSuite:
     var pausedOn = 0L
 
     def paused(): Boolean =
-      if counter == 2 && pausedOn == 0L then
+      if counter == 2 && pausedOn == 0L then {
         pausedOn = System.currentTimeMillis
         true
+      }
       else
         System.currentTimeMillis - pausedOn < 300L
 
@@ -141,3 +142,4 @@ class GeneratorStreamSpec extends munit.FunSuite:
     assert(timePassed2 - timePassed1 >= 200, timePassed2)
     assert(pausedOn > 0L)
   }
+}

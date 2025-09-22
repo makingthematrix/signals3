@@ -6,7 +6,7 @@ import io.github.makingthematrix.signals3.{EventContext, Signal, Threading}
 import scala.collection.mutable
 import scala.concurrent.duration.*
 
-class GeneratorSignalSpec extends munit.FunSuite:
+class GeneratorSignalSpec extends munit.FunSuite {
   import EventContext.Implicits.global
   import Threading.defaultContext
   
@@ -107,9 +107,10 @@ class GeneratorSignalSpec extends munit.FunSuite:
     var pausedOn = 0L
 
     def paused(counter: Int): Boolean =
-      if counter == 2 && pausedOn == 0L then
+      if counter == 2 && pausedOn == 0L then {
         pausedOn = System.currentTimeMillis
         true
+      }
       else
         System.currentTimeMillis - pausedOn < 300L
 
@@ -157,4 +158,4 @@ class GeneratorSignalSpec extends munit.FunSuite:
     Thread.sleep(500L)
     val res2 = arr.result().toSeq
     assertEquals(res1, res2)
-  }
+  }}

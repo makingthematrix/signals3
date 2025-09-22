@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-class StreamWithAuxSignalSpec extends munit.FunSuite:
+class StreamWithAuxSignalSpec extends munit.FunSuite {
   private lazy val aux = new SourceSignal[Int](None)
   private lazy val e = new SourceStream[String]()
   private lazy val r = new StreamWithAuxSignal(e, aux)
@@ -40,3 +40,4 @@ class StreamWithAuxSignalSpec extends munit.FunSuite:
 
     assertEquals(events.size, 4)
   }
+}

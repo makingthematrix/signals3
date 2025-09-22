@@ -4,7 +4,7 @@ import testutils.*
 
 import scala.concurrent.Promise
 
-class AggregatingSignalSpec extends munit.FunSuite:
+class AggregatingSignalSpec extends munit.FunSuite {
   import Threading.defaultContext
 
   test("new aggregator, no subscribers") {
@@ -166,3 +166,4 @@ class AggregatingSignalSpec extends munit.FunSuite:
       assertEquals(result(as.future), Seq(42, 3, 4, 7, 9, 10, 4, 5))
     }
   }
+}

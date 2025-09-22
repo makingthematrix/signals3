@@ -3,7 +3,7 @@ package io.github.makingthematrix.signals3
 import scala.concurrent.ExecutionContext
 import scala.collection.immutable.Set
 
-abstract class EventSource[E, S]:
+abstract class EventSource[E, S] {
   private object subscribersMonitor
 
   private var autowiring = true
@@ -110,13 +110,16 @@ abstract class EventSource[E, S]:
   }
 
   inline final def wired: Boolean = hasSubscribers || !autowiring
+}
 
-object EventSource:
+object EventSource {
   /** By default, a new event source is initialized lazily, i.e. only when the first subscriber function is registered in it.
     * You can decorate it with `NoAutowiring` to enforce initialization.
     *
     * @see [[EventSource]]
     */
-  trait NoAutowiring:
+  trait NoAutowiring {
     self: EventSource[?, ?] =>
     self.disableAutowiring()
+  }
+}

@@ -12,7 +12,7 @@ import scala.collection.immutable.Map
   * if yes, processing of the second will start immediately, if not, the processing (in the form of a future or a [[CloseableFuture]])
   * will be attached to the end of the ongoing processing and triggered only after it's done.
   */
-object Serialized:
+object Serialized {
   private given dispatcher: DispatchQueue = SerialDispatchQueue("Serialized")
 
   private var locks = Map[String, Future[?]]()
@@ -48,10 +48,12 @@ object Serialized:
     * @return A new future representing the whole chain of operations which ends with the one which was just added.
     *         The user should refer to this one from now on instead of the original one.
     */
-  def future[T](key: String)(body: => Future[T]): Future[T] =
+  def future[T](key: String)(body: => Future[T]): Future[T] = {
     val future = locks.get(key).fold(body) { lock =>
       lock.recover { case _ => }.flatMap(_ => body)
     }
     locks += ((key, future))
     future.onComplete { _ => if locks.get(key).contains(future) then locks -= key }
     future
+  }
+}

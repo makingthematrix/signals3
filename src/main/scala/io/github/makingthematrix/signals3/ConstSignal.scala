@@ -10,9 +10,10 @@ import scala.concurrent.ExecutionContext
   * after that, so there's no need to keep the subscription.
   */
 final private[signals3] class ConstSignal[V] (private val v: Option[V])
-  extends Signal[V](v) with NoAutowiring with CanBeClosed:
+  extends Signal[V](v) with NoAutowiring with CanBeClosed {
   override inline def subscribe(subscriber: SignalSubscriber): Unit = {}
   override inline def unsubscribe(subscriber: SignalSubscriber): Unit = {}
   override inline protected[signals3] def update(f: Option[V] => Option[V], ec: Option[ExecutionContext]): Boolean = false
   override inline protected[signals3] def set(v: Option[V], ec: Option[ExecutionContext]): Boolean = false
   override inline def isClosed: Boolean = true
+}

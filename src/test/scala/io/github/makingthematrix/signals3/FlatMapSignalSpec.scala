@@ -2,7 +2,7 @@ package io.github.makingthematrix.signals3
 
 import testutils.{awaitAllTasks, result}
 
-class FlatMapSignalSpec extends munit.FunSuite:
+class FlatMapSignalSpec extends munit.FunSuite {
 
   private var received = Vector.empty[Int]
   private val capture = (value: Int) => received :+= value
@@ -218,3 +218,4 @@ class FlatMapSignalSpec extends munit.FunSuite:
     source ! 8
     assertEquals(fan.received, Vector(2, 8))
   }
+}

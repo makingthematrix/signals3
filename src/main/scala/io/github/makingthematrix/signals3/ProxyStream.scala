@@ -15,20 +15,22 @@ import scala.util.chaining.scalaUtilChainingOps
   * @tparam E The type of the events emitted by the stream constructed from the sources.
   */
 abstract private[signals3] class ProxyStream[A, E](sources: Stream[A]*)
-  extends Stream[E] with EventSubscriber[A]:
+  extends Stream[E] with EventSubscriber[A] {
   /** When the first subscriber is registered in this stream, subscribe the stream to all its sources. */
   override protected[signals3] def onWire(): Unit = sources.foreach(_.subscribe(this))
 
   /** When the last subscriber is unregistered from this stream, unsubscribe the stream from all its sources. */
   override protected[signals3] def onUnwire(): Unit = sources.foreach(_.unsubscribe(this))
+}
 
-private[signals3] object ProxyStream:
-  class MapStream[E, V](source: Stream[E], f: E => V) extends ProxyStream[E, V](source):
+private[signals3] object ProxyStream {
+  class MapStream[E, V](source: Stream[E], f: E => V) extends ProxyStream[E, V](source) {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       dispatch(f(event), sourceContext)
+  }
 
   class FutureStream[E, V](source: Stream[E], f: E => Future[V])
-    extends ProxyStream[E, V](source):
+    extends ProxyStream[E, V](source) {
     private val key = java.util.UUID.randomUUID()
   
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
@@ -37,137 +39,167 @@ private[signals3] object ProxyStream:
         case Failure(_: NoSuchElementException) => // do nothing to allow Future.filter/collect
         case Failure(_)                         =>
       }(using sourceContext.getOrElse(Threading.defaultContext))
+  }
   
   class CollectStream[E, V](source: Stream[E], pf: PartialFunction[E, V])
-    extends ProxyStream[E, V](source):
+    extends ProxyStream[E, V](source) {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       if pf.isDefinedAt(event) then dispatch(pf(event), sourceContext)
+  }
   
   class FilterStream[E](source: Stream[E], predicate: E => Boolean)
-    extends ProxyStream[E, E](source):
+    extends ProxyStream[E, E](source) {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       if predicate(event) then dispatch(event, sourceContext)
+  }
   
   class JoinStream[E](sources: Stream[E]*)
-    extends ProxyStream[E, E](sources*):
+    extends ProxyStream[E, E](sources*) {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       dispatch(event, sourceContext)
+  }
   
   final class ScanStream[E, V](source: Stream[E], zero: V, f: (V, E) => V)
-    extends ProxyStream[E, V](source):
+    extends ProxyStream[E, V](source) {
     @volatile private var value = zero
   
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
       value = f(value, event)
       dispatch(value, sourceContext)
+    }
+  }
 
-  final class GroupedStream[E](source: Stream[E], n: Int) extends ProxyStream[E, Seq[E]](source):
+  final class GroupedStream[E](source: Stream[E], n: Int) extends ProxyStream[E, Seq[E]](source) {
     require(n > 0, "n must be positive")
     private val buffer = ArrayBuffer.empty[E]
 
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
       buffer.addOne(event)
-      if buffer.size == n then
+      if buffer.size == n then {
         val res = buffer.toSeq
         buffer.clear()
         dispatch(res, sourceContext)
-      end if
+      } // end if
+    }
+  }
 
-  final class GroupByStream[E](source: Stream[E], groupBy: E => Boolean) extends ProxyStream[E, Seq[E]](source):
+  final class GroupByStream[E](source: Stream[E], groupBy: E => Boolean) extends ProxyStream[E, Seq[E]](source) {
     private val buffer = ArrayBuffer.empty[E]
 
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      if groupBy(event) then
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
+      if groupBy(event) then {
         val res = buffer.toSeq
         buffer.clear()
         if res.nonEmpty then dispatch(res, sourceContext)
-      end if
+      } // end if
       buffer.addOne(event)
+    }
+  }
 
-  class IndexedStream[E](source: Stream[E]) extends ProxyStream[E, E](source) with Indexed:
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+  class IndexedStream[E](source: Stream[E]) extends ProxyStream[E, E](source) with Indexed {
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
       inc()
       dispatch(event, sourceContext)
+    }
+  }
 
-  final class DropStream[E](source: Stream[E], drop: Int) extends IndexedStream[E](source):
+  final class DropStream[E](source: Stream[E], drop: Int) extends IndexedStream[E](source) {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       if counter < drop then inc() else dispatch(event, sourceContext)
+  }
 
-  final class DropWhileStream[E](source: Stream[E], p: E => Boolean) extends ProxyStream[E, E](source):
+  final class DropWhileStream[E](source: Stream[E], p: E => Boolean) extends ProxyStream[E, E](source) {
     @volatile private var dropping = true
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
       if dropping then dropping = p(event)
       if !dropping then dispatch(event, sourceContext)
+    }
+  }
 
-  final class CloseableStream[E](source: Stream[E]) extends ProxyStream[E, E](source) with Closeable:
+  final class CloseableStream[E](source: Stream[E]) extends ProxyStream[E, E](source) with Closeable {
     @volatile private var closed = false
 
-    override def closeAndCheck(): Boolean =
+    override def closeAndCheck(): Boolean = {
       closed = true
       true
+    }
 
     override def isClosed: Boolean = closed
 
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       if !closed then dispatch(event, sourceContext)
+  }
 
-  protected trait FiniteStream[E] extends Finite[E, Stream[E]]:
+  protected trait FiniteStream[E] extends Finite[E, Stream[E]] {
     protected var lastPromise: Option[Promise[E]] = None
     override lazy val last: Future[E] = Promise[E]().tap { p => lastPromise = Some(p) }.future
 
     protected var initStream: Option[SourceStream[E]] = None
     override lazy val init: Stream[E] = SourceStream[E]().tap { s => initStream = Some(s) }
+  }
 
   final class TakeStream[E](source: Stream[E], take: Int) 
-    extends IndexedStream[E](source) with FiniteStream[E]:
+    extends IndexedStream[E](source) with FiniteStream[E] {
     override def isClosed: Boolean = super.isClosed || counter >= take
 
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = 
-      if !isClosed then
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = { 
+      if !isClosed then {
         inc()
         dispatch(event, sourceContext)
         if !isClosed then initStream.foreach { _ ! event }
+      }
       if isClosed then lastPromise.foreach {
         case p if !p.isCompleted => p.trySuccess(event)
         case _ =>
       }
+    }
+  }
 
   final class TakeWhileStream[E](source: Stream[E], p: E => Boolean)
-    extends ProxyStream[E, E](source) with FiniteStream[E]:
+    extends ProxyStream[E, E](source) with FiniteStream[E] {
 
     private var previousEvent: Option[E] = None
 
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       if !isClosed then
-        if !p(event) then
+        if !p(event) then {
           close()
-          (lastPromise, previousEvent) match
+          (lastPromise, previousEvent) match {
             case (Some(p), Some(pe)) if !p.isCompleted => p.trySuccess(pe)
             case _ =>
-        else
+          }
+        }
+        else {
           dispatch(event, sourceContext)
-          (initStream, previousEvent) match
+          (initStream, previousEvent) match {
             case (Some(s), Some(pe)) => s ! pe
             case _ =>
+          }
           previousEvent = Some(event)
-        end if
+        } // end if
       end if
+  }
 
   final class FlatMapStream[E, V](source: Stream[E], f: E => Stream[V])
-    extends Stream[V] with EventSubscriber[E]:
+    extends Stream[V] with EventSubscriber[E] {
     @volatile private var mapped: Option[Stream[V]] = None
   
-    private val subscriber = new EventSubscriber[V]:
+    private val subscriber = new EventSubscriber[V] {
       override protected[signals3] def onEvent(event: V, currentContext: Option[ExecutionContext]): Unit =
         dispatch(event, currentContext)
+    }
   
-    override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit = {
       mapped.foreach(_.unsubscribe(subscriber))
       mapped = Some(f(event).tap(_.subscribe(subscriber)))
+    }
   
     override protected def onWire(): Unit = source.subscribe(this)
   
-    override protected def onUnwire(): Unit =
+    override protected def onUnwire(): Unit = {
       mapped.foreach(_.unsubscribe(subscriber))
       mapped = None
       source.unsubscribe(this)
+    }
+  }
+}

@@ -28,12 +28,12 @@ import scala.util.chaining.scalaUtilChainingOps
   *
   * @see For an example how `Transformers` can be used, see `GeneratorSignal.unfold`.
   */
-object Transformers:
+object Transformers {
   /**
     * Encapsulates logic for closing original streams/signals/c-futures, checking if they are closed, and calling
     * the registered `onClose` code (but only once, not once per the original source).
     */
-  private trait Closeability(sources: Closeable*) extends Closeable:
+  private trait Closeability(sources: Closeable*) extends Closeable {
     private var callOnClose: List[() => Unit] = Nil
     @volatile private var open = sources.length
 
@@ -51,6 +51,7 @@ object Transformers:
 
     final override def onClose(body: => Unit): Unit =
       callOnClose = (() => body) :: callOnClose
+  }
 
   /**
     * Creates a new `CloseableStream[V]` by mapping events of the type `E` emitted by the original generator or
@@ -297,3 +298,4 @@ object Transformers:
     */
   def signalFromStream[V](source: CloseableStream[V]): CloseableSignal[V] =
     new StreamSignal[V](source, None) with Closeability(source)
+}

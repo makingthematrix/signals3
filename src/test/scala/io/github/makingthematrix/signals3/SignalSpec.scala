@@ -13,7 +13,7 @@ import scala.concurrent.*
 import scala.concurrent.duration.*
 import scala.language.postfixOps
 
-class SignalSpec extends munit.FunSuite:
+class SignalSpec extends munit.FunSuite {
   private val eventContext = EventContext()
 
   override def beforeEach(context: BeforeEach): Unit =
@@ -127,9 +127,10 @@ class SignalSpec extends munit.FunSuite:
     val s = Signal(0)
     val s1 = Signal.const(1)
     val s2 = Signal.const(2)
-    val r = for
+    val r = for {
       x <- s
       y <- Seq(s1, s2)(x)
+    }
     yield y * 2
     r.foreach(capture)
     s ! 1
@@ -207,7 +208,7 @@ class SignalSpec extends munit.FunSuite:
     })
   }
 
-  private def incrementalUpdates(onUpdate: (Signal[Int], ConcurrentLinkedQueue[Int]) => Unit): Unit =
+  private def incrementalUpdates(onUpdate: (Signal[Int], ConcurrentLinkedQueue[Int]) => Unit): Unit = {
     given defaultContext: DispatchQueue = Threading.defaultContext
     100 times {
       val signal = Signal(0)
@@ -232,6 +233,7 @@ class SignalSpec extends munit.FunSuite:
       val arr = received.asScala.toVector
       assertEquals(arr, arr.sorted)
     }
+  }
 
   test("Two concurrent dispatches (global event and background execution contexts)") {
     given defaultContext: DispatchQueue = Threading.defaultContext
@@ -680,8 +682,9 @@ class SignalSpec extends munit.FunSuite:
     given DispatchQueue = SerialDispatchQueue()
     import Signal.`::`
     val a = Signal[Int]()
-    val (head, tail) = a match
+    val (head, tail) = a match {
       case head :: tail => (head, tail)
+    }
 
     var hn = 0
     head.foreach(n => hn = n)
@@ -860,9 +863,10 @@ class SignalSpec extends munit.FunSuite:
     var oddResults = List[Int]()
     val waitForMe = Promise[Unit]()
 
-    def add(n: Int, toEven: Boolean) =
+    def add(n: Int, toEven: Boolean) = {
       if toEven then evenResults :+= n else oddResults :+= n
       if evenResults.length + oddResults.length == numbers.length then waitForMe.success(())
+    }
 
     evenNumbers.foreach(add(_, toEven = true))
     oddNumbers.foreach(add(_, toEven = false))
@@ -1492,3 +1496,4 @@ class SignalSpec extends munit.FunSuite:
     assertEquals(res(0), Seq("aa", "ab"))
     assertEquals(res(1), Seq("ba", "bb")) // "ac" is never released
   }
+}

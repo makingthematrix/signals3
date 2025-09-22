@@ -22,7 +22,7 @@ import scala.util.chaining.scalaUtilChainingOps
   *
   * @see `ExecutionContext`
   */
-class Stream[E] extends EventSource[E, EventSubscriber[E]]:
+class Stream[E] extends EventSource[E, EventSubscriber[E]] {
   /** Dispatches the event to all subscribers.
     *
     * @param event The event to be dispatched.
@@ -167,9 +167,10 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]]:
   inline final def |(sourceStream: SourceStream[E])(using ec: EventContext = EventContext.Global): Subscription = 
     pipeTo(sourceStream)
 
-  final def indexed: IndexedStream[E] = this match
+  final def indexed: IndexedStream[E] = this match {
     case that: IndexedStream[E] => that
     case _ => new IndexedStream[E](this)
+  }
 
   final def drop(n: Int): Stream[E] =
     if n == 0 then this
@@ -185,9 +186,10 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]]:
   inline final def splitAt(n: Int): (FiniteStream[E], Stream[E]) = (take(n), drop(n))
   inline final def splitAt(p: E => Boolean): (FiniteStream[E], Stream[E]) = (takeWhile(p), dropWhile(p))
 
-  final def closeable: CloseableStream[E] = this match
+  final def closeable: CloseableStream[E] = this match {
     case that: CloseableStream[E] => that
     case _ => new CloseableStream[E](this)
+  }
 
   inline final def grouped(n: Int): Stream[Seq[E]] = new GroupedStream[E](this, n)
   inline final def groupBy(p: E => Boolean): Stream[Seq[E]] = new GroupByStream[E](this, p)
@@ -200,11 +202,12 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]]:
     *                future is finished or cancelled.
     * @return A closeable future which will finish with the next event emitted by the stream.
     */
-  final def next(using context: EventContext = EventContext.Global, executionContext: ExecutionContext = Threading.defaultContext): CloseableFuture[E] =
+  final def next(using context: EventContext = EventContext.Global, executionContext: ExecutionContext = Threading.defaultContext): CloseableFuture[E] = {
     val p = Promise[E]()
     val o = onCurrent { p.trySuccess }
     p.future.onComplete(_ => o.destroy())
     CloseableFuture.from(p)
+  }
 
   /** A shorthand for `next` which additionally unwraps the closeable future */
   inline final def future(using context: EventContext = EventContext.Global, executionContext: ExecutionContext = Threading.defaultContext): Future[E] =
@@ -241,32 +244,37 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]]:
 
   /** By default, a stream does not have the internal state so there's nothing to do in `onWire` and `onUnwire`*/
   override protected def onUnwire(): Unit = {}
+}
 
-object Stream:
-  object `::`:
+object Stream {
+  object `::` {
     def unapply[E](stream: Stream[E]): (Future[E], Stream[E]) = (stream.head, stream.tail)
+  }
 
   private final val EmptyTakeStream: TakeStream[Any] = new TakeStream[Any](Stream[Any](), 0)
 
-  private[signals3] trait EventSubscriber[E]:
+  private[signals3] trait EventSubscriber[E] {
     // 'currentContext' is the context this method IS run in, NOT the context any subsequent methods SHOULD run in
     protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit
+  }
 
   final private class StreamSubscription[E](source:            Stream[E],
                                             f:                 E => Unit,
                                             executionContext:  Option[ExecutionContext] = None
                                            )(using context: WeakReference[EventContext])
-    extends BaseSubscription(context) with EventSubscriber[E]:
+    extends BaseSubscription(context) with EventSubscriber[E] {
 
     override def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
       if subscribed then
-        executionContext match
+        executionContext match {
           case Some(ec) if !currentContext.contains(ec) => Future(if subscribed then Try(f(event)))(using ec)
           case _ => f(event)
+        }
 
     override protected[signals3] def onSubscribe(): Unit = source.subscribe(this)
 
     override protected[signals3] def onUnsubscribe(): Unit = source.unsubscribe(this)
+  }
 
   /** Creates a new [[SourceStream]] of events of the type `E`. A usual entry point for the event streams network.
     *
@@ -320,3 +328,4 @@ object Stream:
     * @return A new stream.
     */
   inline def from[E](future: Future[E]): Stream[E] = from(future, Threading.defaultContext)
+}

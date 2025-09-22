@@ -7,7 +7,7 @@ import io.github.makingthematrix.signals3.testutils.awaitAllTasks
 
 import scala.collection.mutable
 
-class IndexedStreamSpec extends munit.FunSuite:
+class IndexedStreamSpec extends munit.FunSuite {
   import EventContext.Implicits.global
   given DispatchQueue = SerialDispatchQueue()
 
@@ -174,8 +174,9 @@ class IndexedStreamSpec extends munit.FunSuite:
   test("Split a stream into a head future and tail stream") {
     import Stream.`::`
     val a: SourceStream[Int] = Stream()
-    val (head, tail) = a match
+    val (head, tail) = a match {
       case head :: tail => (head, tail)
+    }
 
     var hn = 0
     head.foreach(n => hn = n)
@@ -348,3 +349,4 @@ class IndexedStreamSpec extends munit.FunSuite:
     assertEquals(bBuffer.result().toSeq, Seq(1, 2))
     assertEquals(cBuffer.result().toSeq, Seq(3, 4))
   }
+}
