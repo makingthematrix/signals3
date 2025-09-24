@@ -103,29 +103,34 @@ private[signals3] object ProxySignal {
     override lazy val init: Signal[V] = SourceSignal[V]().tap { s => initSignal = Some(s) }
   }
 
+  final class FlagSignal extends Signal(Some(false)) with FiniteSignal[Boolean] {
+    def done(): Unit = {
+      publish(true)
+      close()
+    }
+  }
+
   final class TakeSignal[V](source: Signal[V], take: Int) 
-    extends IndexedSignal[V](source) with FiniteSignal[V] {
+    extends IndexedSignal[V](source) with FiniteSignal[V]{
     override def isClosed: Boolean = super.isClosed || counter >= take
 
-    override protected def computeValue(current: Option[V]): Option[V] = {
-      val res: Option[V] =
-        if !isClosed then {
-          if source.value != current then { 
-            inc()
-            if !isClosed then (initSignal, source.value) match { 
-              case (Some(s), Some(v)) => s ! v
-              case _ =>
-            }
+    override protected def computeValue(current: Option[V]): Option[V] =
+      if (!isClosed && source.value != current) {
+        inc()
+        if (counter < take)
+          (initSignal, source.value) match {
+            case (Some(s), Some(v)) => s ! v
+            case _ =>
           }
-          source.value
+        else {
+          (lastPromise, source.value) match {
+            case (Some(p), Some(v)) if !p.isCompleted => p.trySuccess(v)
+            case _ =>
+          }
+          close()
         }
-        else current
-      if isClosed then (lastPromise, res) match {
-        case (Some(p), Some(v)) if !p.isCompleted => p.trySuccess(v)
-        case _ => 
-      }
-      res    
-    }
+        source.value
+      } else current
   }
 
   final class TakeWhileSignal[V](source: Signal[V], p: V => Boolean)

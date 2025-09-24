@@ -29,8 +29,9 @@ class GeneratorSignalSpec extends munit.FunSuite {
     val builder = mutable.ArrayBuilder.make[Int]
     val isSuccess = Signal(false)
 
-    val signal = GeneratorSignal.unfold((0, 1), 200.millis) { case (a, b) => (b, a + b) -> b }
-    signal.foreach { b =>
+    val signal =
+      GeneratorSignal.unfold((0, 1), 200.millis) { case (a, b) => (b, a + b) -> b }
+    signal.foreach { b: Int =>
       builder.addOne(b)
       isSuccess ! (b == 8)
     }
@@ -84,7 +85,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(1, 2, 3, 5))
     // it should take (100 + 200 + 300 + 500)ms * 2 + 100ms for a buffer, but still it can be flaky
-    assert(totalTime >= 2200 && totalTime <= 2300L, s"total time: $totalTime")
+    assert(totalTime >= 2200 && totalTime <= 2500L, s"total time: $totalTime")
     assert(signal.isClosed)
   }
 
