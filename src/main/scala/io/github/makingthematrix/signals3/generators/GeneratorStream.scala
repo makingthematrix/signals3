@@ -1,9 +1,15 @@
 package io.github.makingthematrix.signals3.generators
 
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Stream, Threading}
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Indexed, Stream, Threading}
 import io.github.makingthematrix.signals3.EventSource.NoAutowiring
+import io.github.makingthematrix.signals3.ProxyStream.FiniteStream
+
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
+
+trait EPausable {
+  val paused: () => Boolean
+}
 
 /**
   * a stream capable of generating new events in the given intervals of time, by repeatedly calling a function
@@ -33,35 +39,76 @@ import scala.concurrent.duration.FiniteDuration
   * @param ec       The execution context in which the generator works.
   * @tparam E       The type of the generated event.
   */
+abstract class GeneratorStream[E](interval: FiniteDuration | (() => Long))(using ec: ExecutionContext)
+  extends Stream[E] with NoAutowiring {
 
-final class GeneratorStream[E](generate: () => E,
-                               interval: FiniteDuration | (() => Long),
-                               paused  : () => Boolean)
-                              (using ec: ExecutionContext)
-  extends Stream[E] with Closeable with NoAutowiring {
-
-  private val beat =
+  protected val beat: CloseableFuture[Unit] =
     (interval match {
        case intv: FiniteDuration => CloseableFuture.repeat(intv)
        case intv: (() => Long)   => CloseableFuture.repeatVariant(intv)
-    }
-    ) {
-      if !paused() then publish(generate())
+    }) {
+      onBeat()
     }
 
+  protected def onBeat(): Unit
+}
+
+class CloseableGeneratorStream[E](interval: FiniteDuration | (() => Long),
+                                  generate: () => E,
+                                  override val paused: () => Boolean)
+                                 (using ec: ExecutionContext)
+  extends GeneratorStream[E](interval) with Closeable with EPausable {
+
+  override protected def onBeat(): Unit = {
+    if (!paused()) publish(generate())
+  }
+
   /**
-    * Closes the generator permanently. There will be no further calls to `generate`, `interval`, and `paused`.
-    */
+   * Closes the generator permanently. There will be no further calls to `generate`, `interval`, and `paused`.
+   */
   override inline def closeAndCheck(): Boolean = beat.closeAndCheck()
 
   /**
-    * Checks if the generator is closed.
-    * 
-    * @return `true` if the generator was closed
-    */
+   * Checks if the generator is closed.
+   *
+   * @return `true` if the generator was closed
+   */
   override inline def isClosed: Boolean = beat.isClosed
 
   override inline def onClose(body: => Unit): Unit = beat.onClose(body)
+}
+
+class FiniteGeneratorStream[E](interval: FiniteDuration | (() => Long),
+                               val events: Iterable[E],
+                               override val paused : () => Boolean)
+                              (using ec: ExecutionContext)
+  extends GeneratorStream[E](interval) with FiniteStream[E] with Indexed with EPausable {
+  private val it = events.iterator
+  override def isClosed: Boolean = super.isClosed || it.isEmpty
+
+  override protected def onBeat(): Unit = if (!isClosed && !paused()) {
+    val event = it.next()
+    inc()
+    publish(event)
+    if (!isClosed) initStream.foreach {_ ! event}
+    else lastPromise.foreach {
+      case p if !p.isCompleted => p.trySuccess(event)
+      case _ =>
+    }
+  }
+}
+
+class LazyListGeneratorStream[E](interval: FiniteDuration | (() => Long),
+                                 val events: LazyList[E],
+                                 override val paused : () => Boolean)
+                                (using ec: ExecutionContext)
+  extends GeneratorStream[E](interval) with Indexed with EPausable {
+
+  override protected def onBeat(): Unit = if (!paused()) {
+    val event = events(counter)
+    inc()
+    publish(event)
+  }
 }
 
 object GeneratorStream {
@@ -84,8 +131,8 @@ object GeneratorStream {
   def apply[E](generate: () => E,
                interval: FiniteDuration,
                paused  : () => Boolean = () => false)
-              (using ec: ExecutionContext = Threading.defaultContext): GeneratorStream[E] =
-    new GeneratorStream[E](generate, interval, paused)
+              (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[E] =
+    new CloseableGeneratorStream[E](interval, generate, paused)
 
   /**
     * Creates a stream which generates a new event every `interval` by calling the `generate` function which
@@ -102,8 +149,8 @@ object GeneratorStream {
     * @return         A generator stream.
     */
   inline def generate[E](interval: FiniteDuration)(body: => E)
-                        (using ec: ExecutionContext = Threading.defaultContext): GeneratorStream[E] =
-    new GeneratorStream[E](() => body, interval, () => false)
+                        (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[E] =
+    new CloseableGeneratorStream[E](interval, () => body, () => false)
 
   /**
     * Creates a stream which generates a new event every `interval` by calling the `generate` function which
@@ -121,8 +168,8 @@ object GeneratorStream {
     * @return         A generator stream.
     */
   inline def generateVariant[E](interval: () => Long)(body: => E)
-                               (using ec: ExecutionContext = Threading.defaultContext): GeneratorStream[E] =
-    new GeneratorStream[E](() => body, interval, () => false)
+                               (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[E] =
+    new CloseableGeneratorStream[E](interval, () => body, () => false)
 
   /**
     * Creates a stream which publishes the same event every `interval`.
@@ -136,8 +183,8 @@ object GeneratorStream {
     * @return         A generator stream.
     */
   inline def repeat[E](event: E, interval: FiniteDuration)
-                      (using ec: ExecutionContext = Threading.defaultContext): GeneratorStream[E] =
-    new GeneratorStream[E](() => event, interval, () => false)
+                      (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[E] =
+    new CloseableGeneratorStream[E](interval, () => event, () => false)
 
   /**
     * Creates a stream which publishes the same event every given `interval`. In contrast to the simpler
@@ -152,8 +199,8 @@ object GeneratorStream {
     * @return A generator stream.
     */
   inline def repeatVariant[E](event: E, interval: () => Long)
-                             (using ec: ExecutionContext = Threading.defaultContext): GeneratorStream[E] =
-    new GeneratorStream[E](() => event, interval, () => false)
+                             (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[E] =
+    new CloseableGeneratorStream[E](interval, () => event, () => false)
 
   /**
     * A utility method that creates a stream which publishes `Unit` every given `interval`.
@@ -165,6 +212,18 @@ object GeneratorStream {
     * @return A generator stream.
     */
   inline def heartbeat(interval: FiniteDuration)
-                      (using ec: ExecutionContext = Threading.defaultContext): GeneratorStream[Unit] =
+                      (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[Unit] =
     repeat((), interval)
+
+  inline def heartbeatVariant(interval: () => Long)
+                      (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[Unit] =
+    repeatVariant((), interval)
+
+  inline def fromIterable[E](events: Iterable[E], interval: FiniteDuration)
+                     (using ec: ExecutionContext = Threading.defaultContext): FiniteGeneratorStream[E] =
+    new FiniteGeneratorStream[E](interval, events, () => false)
+
+  inline def fromLazyList[E](events: LazyList[E], interval: FiniteDuration)
+                     (using ec: ExecutionContext = Threading.defaultContext): LazyListGeneratorStream[E] =
+    new LazyListGeneratorStream[E](interval, events, () => false)
 }
