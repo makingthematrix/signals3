@@ -1,11 +1,16 @@
 package io.github.makingthematrix.signals3.generators
 
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Signal, Threading}
 import io.github.makingthematrix.signals3.Closeable.CloseableSignal
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Indexed, Signal, Threading}
 import io.github.makingthematrix.signals3.EventSource.NoAutowiring
+import io.github.makingthematrix.signals3.ProxySignal.FiniteSignal
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
+
+trait VPausable[V] {
+  val paused: V => Boolean
+}
 
 /**
   * A signal capable of generating new values in the given intervals of time, by repeatedly calling a function
@@ -28,35 +33,74 @@ import scala.concurrent.duration.FiniteDuration
   * @tparam V       The type of the signal's value.
   */
 
-final class GeneratorSignal[V](init    : V,
-                               update  : V => V,
-                               interval: FiniteDuration | (V => Long),
-                               paused  : V => Boolean)
-                              (using ec: ExecutionContext)
-  extends Signal[V](Some(init)) with Closeable with NoAutowiring {
+abstract class GeneratorSignal[V](init : V, interval: FiniteDuration | (V => Long))
+                                 (using ec: ExecutionContext)
+  extends Signal[V](Some(init)) with NoAutowiring {
+  protected def onBeat(): Unit
 
-  private val beat =
-    (interval match {
-       case intv: FiniteDuration => CloseableFuture.repeat(intv)
-       case intv: (V => Long)    => CloseableFuture.repeatVariant(() => intv(currentValue.getOrElse(init)))
-    }
-    ) {
-      if !currentValue.exists(paused) then currentValue.foreach(v => publish(update(v), ec))
-    }
+  protected val beat: CloseableFuture[Unit] = (interval match {
+    case intv: FiniteDuration => CloseableFuture.repeat(intv)
+    case intv: (V => Long)    => CloseableFuture.repeatVariant(() => intv(currentValue.getOrElse(init)))
+  }) { onBeat() }
+}
 
+class CloseableGeneratorSignal[V](init: V,
+                                  update: V => V,
+                                  interval: FiniteDuration | (V => Long),
+                                  override val paused: V => Boolean)
+                                 (using ec: ExecutionContext)
+  extends GeneratorSignal[V](init, interval) with Closeable with VPausable[V] {
+  override protected def onBeat(): Unit =
+    if !currentValue.exists(paused) && !isClosed then currentValue.foreach(v => publish(update(v), ec))
   /**
-    * Closes the generator permanently. There will be no further calls to `update`, `interval`, and `paused`.
-    */
+   * Closes the generator permanently. There will be no further calls to `update`, `interval`, and `paused`.
+   */
   override inline def closeAndCheck(): Boolean = beat.closeAndCheck()
 
   /**
-    * Checks if the generator is closed.
-    *
-    * @return `true` if the generator was closed
-    */
+   * Checks if the generator is closed.
+   *
+   * @return `true` if the generator was closed
+   */
   override inline def isClosed: Boolean = beat.isClosed
 
   override inline def onClose(body: => Unit): Unit = beat.onClose(body)
+}
+
+class FiniteGeneratorSignal[V](interval: FiniteDuration | (V => Long),
+                               val values: Iterable[V],
+                               override val paused: V => Boolean)
+                              (using ec: ExecutionContext)
+  extends GeneratorSignal[V](values.head, interval) with FiniteSignal[V] with Indexed with VPausable[V] {
+  inc() // the first value in values becomes the initial value, so we already increase the counter to 1
+  private val it = values.tail.iterator
+
+  override def isClosed: Boolean = super.isClosed || it.isEmpty
+
+  override protected def onBeat(): Unit = if (!currentValue.exists(paused) && !isClosed) {
+    val v = it.next()
+    inc()
+    publish(v, ec)
+    if (!isClosed) initSignal.foreach {_ ! v}
+    else lastPromise.foreach {
+      case p if !p.isCompleted => p.trySuccess(v)
+      case _ =>
+    }
+  }
+}
+
+class LazyListGeneratorSignal[V](interval: FiniteDuration | (V => Long),
+                                 val values: LazyList[V],
+                                 override val paused: V => Boolean)
+                                (using ec: ExecutionContext)
+  extends GeneratorSignal[V](values.head, interval) with Indexed with VPausable[V] {
+  inc() // the first value in values becomes the initial value, so we already increase the counter to 1
+
+  override protected def onBeat(): Unit = if (!currentValue.exists(paused)) {
+    val v =  values(counter)
+    inc()
+    publish(v, ec)
+  }
 }
 
 object GeneratorSignal {
@@ -81,8 +125,8 @@ object GeneratorSignal {
                update  : V => V,
                interval: FiniteDuration,
                paused  : V => Boolean = (_: V) => false)
-              (using ec: ExecutionContext = Threading.defaultContext): GeneratorSignal[V] =
-    new GeneratorSignal[V](init, update, interval, paused)
+              (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorSignal[V] =
+    new CloseableGeneratorSignal[V](init, update, interval, paused)
 
   /**
     * A utility method for easier creation of a generator signal. The user provides the initial value of the signal,
@@ -100,29 +144,13 @@ object GeneratorSignal {
     * @return         A new generator signal.
     */
   inline def generate[V](init: V, interval: FiniteDuration)(update: V => V)
-                        (using ec: ExecutionContext = Threading.defaultContext): GeneratorSignal[V] =
-    new GeneratorSignal[V](init, update, interval, (_: V) => false)
+                        (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorSignal[V] =
+    new CloseableGeneratorSignal[V](init, update, interval, (_: V) => false)
 
-  /**
-    * A utility method for easier creation of a generator signal. The user provides the initial
-    * value of the signal, and a function that will return the interval between updates - and then the update method
-    * in a separate argument list for better readability.
-    *
-    * @param init     The initial value of the generator signal.
-    * @param interval A function that returns the number of milliseconds to the next update.
-    * @param update   A function that, every time it's called, takes the current value of the signal and returns a new
-    *                 (or the same) value. If the new value is different from the old one, it will be published in
-    *                 the signal. If the code throws an exception, the value will not be updated, but the generator will
-    *                 call the `updatez function` again, with the same current value, after `interval`.
-    *                 The exception will be ignored.
-    * @param ec       The execution context in which the generator works. Optional.
-    *                 By default it's `Threading.defaultContext`.
-    * @tparam V       The type of the generator's value.
-    * @return         A new generator signal.
-    */
+
   inline def generateVariant[V](init: V, interval: V => Long)(update: V => V)
-                               (using ec: ExecutionContext = Threading.defaultContext): GeneratorSignal[V] =
-    new GeneratorSignal[V](init, update, interval, (_: V) => false)
+                        (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorSignal[V] =
+    new CloseableGeneratorSignal[V](init, update, interval, (_: V) => false)
 
   /**
     * A utility method which works in a way that can be imagined as an inversion of `.fold` methods in Scala collections
@@ -157,7 +185,7 @@ object GeneratorSignal {
   inline def unfold[V, Z](init: V, interval: FiniteDuration)(update: V => (V, Z))
                          (using ec: ExecutionContext = Threading.defaultContext): CloseableSignal[Z] =
     Transformers.map[(V, Z), Z](
-      new GeneratorSignal[(V, Z)](update(init), { case (v, _) => update(v) }, interval, _ => false)
+      new CloseableGeneratorSignal[(V, Z)](update(init), { (v, _) => update(v) }, interval, _ => false)
     )(_._2)
 
   /**
@@ -188,7 +216,7 @@ object GeneratorSignal {
   inline def unfoldVariant[V, Z](init: V, interval: V => Long)(update: V => (V, Z))
                                 (using ec: ExecutionContext = Threading.defaultContext): CloseableSignal[Z] =
     Transformers.map[(V, Z), Z](
-      new GeneratorSignal[(V, Z)](
+      new CloseableGeneratorSignal[(V, Z)](
         update(init),
         { case (v, _) => update(v) },
         { case (v, _) => interval(v) },
@@ -206,6 +234,18 @@ object GeneratorSignal {
     * @return         A new generator signal of integers.
     */
   inline def counter(interval: FiniteDuration)
-                    (using ec: ExecutionContext = Threading.defaultContext): GeneratorSignal[Int] =
+                    (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorSignal[Int] =
     generate(0, interval)(_ + 1)
+
+  inline def counterVariant(interval: Int => Long)
+                    (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorSignal[Int] =
+    generateVariant(0, interval)(_ + 1)
+
+  inline def fromIterable[V](values: Iterable[V], interval: FiniteDuration)
+                            (using ec: ExecutionContext = Threading.defaultContext): FiniteGeneratorSignal[V] =
+    new FiniteGeneratorSignal[V](interval, values, (_: V) => false)
+
+  inline def fromLazyList[V](values: LazyList[V], interval: FiniteDuration)
+                            (using ec: ExecutionContext = Threading.defaultContext): LazyListGeneratorSignal[V] =
+    new LazyListGeneratorSignal[V](interval, values, (_: V) => false)
 }

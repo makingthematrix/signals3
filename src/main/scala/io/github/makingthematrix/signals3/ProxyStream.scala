@@ -130,7 +130,7 @@ private[signals3] object ProxyStream {
       if !closed then dispatch(event, sourceContext)
   }
 
-  protected trait FiniteStream[E] extends Finite[E, Stream[E]] {
+  protected[signals3] trait FiniteStream[E] extends Finite[E, Stream[E]] {
     protected var lastPromise: Option[Promise[E]] = None
     override lazy val last: Future[E] = Promise[E]().tap { p => lastPromise = Some(p) }.future
 
@@ -143,12 +143,12 @@ private[signals3] object ProxyStream {
     override def isClosed: Boolean = super.isClosed || counter >= take
 
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = { 
-      if !isClosed then {
+      if (!isClosed) {
         inc()
         dispatch(event, sourceContext)
-        if !isClosed then initStream.foreach { _ ! event }
+        if (!isClosed) initStream.foreach { _ ! event }
       }
-      if isClosed then lastPromise.foreach {
+      if (isClosed) lastPromise.foreach {
         case p if !p.isCompleted => p.trySuccess(event)
         case _ =>
       }

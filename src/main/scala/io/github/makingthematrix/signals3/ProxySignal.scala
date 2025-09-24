@@ -95,7 +95,7 @@ private[signals3] object ProxySignal {
       if !closed then source.value else current
   }
 
-  protected trait FiniteSignal[V] extends Finite[V, Signal[V]] {
+  protected[signals3] trait FiniteSignal[V] extends Finite[V, Signal[V]] {
     protected var lastPromise: Option[Promise[V]] = None
     override lazy val last: Future[V] = Promise[V]().tap { p => lastPromise = Some(p) }.future
 
