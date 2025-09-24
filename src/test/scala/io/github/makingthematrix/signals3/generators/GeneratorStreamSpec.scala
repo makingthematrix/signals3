@@ -142,4 +142,21 @@ class GeneratorStreamSpec extends munit.FunSuite {
     assert(timePassed2 - timePassed1 >= 200, timePassed2)
     assert(pausedOn > 0L)
   }
+
+  test("Generate a stream from a sequence of numbers") {
+    val numbers = Seq(1,2,3,4,5,6,7,8,9,10)
+    val t = System.currentTimeMillis()
+    val buffer = mutable.ArrayBuffer[(Int, Long)]()
+    val isSuccess = Signal.flag()
+    val generator: FiniteGeneratorStream[Int] = GeneratorStream.fromIterable(numbers, 100.millis)
+    generator.onClose(isSuccess.done())
+    generator.map(n => (n, System.currentTimeMillis() - t)).foreach((n,l) => buffer.addOne((n, l)))
+
+    waitForResult(isSuccess, true)
+
+    val res = buffer.toSeq
+    assertEquals(res.size, numbers.size)
+    assertEquals(res.map(_._1), numbers)
+    assert(res.map(_._2).zip(res.tail.map(_._2)).forall((a, b) => b >= a))
+  }
 }

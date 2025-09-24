@@ -15,6 +15,7 @@ trait Finite[T, M <: Source[T]] extends CanBeClosed {
 
   protected def closeAndCheck(): Boolean = {
     forceClose = true
+    callOnClose()
     true
   }
 

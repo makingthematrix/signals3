@@ -870,4 +870,6 @@ object Signal {
     * @return A new signal with the value of the type `V`.
     */
   inline def from[V](source: Stream[V]): Signal[V] = new StreamSignal[V](source)
+
+  def flag(): FlagSignal = new FlagSignal()
 }

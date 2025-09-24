@@ -34,13 +34,13 @@ object Transformers {
     * the registered `onClose` code (but only once, not once per the original source).
     */
   private trait Closeability(sources: Closeable*) extends Closeable {
-    private var callOnClose: List[() => Unit] = Nil
+    private var callOnCloseList: List[() => Unit] = Nil
     @volatile private var open = sources.length
 
     sources.foreach(_.onClose {
       synchronized {
         open -= 1
-        if open == 0 then callOnClose.foreach(_())
+        if open == 0 then callOnCloseList.foreach(_())
       }
     })
 
@@ -50,7 +50,7 @@ object Transformers {
     final override def isClosed: Boolean = sources.forall(_.isClosed)
 
     final override def onClose(body: => Unit): Unit =
-      callOnClose = (() => body) :: callOnClose
+      callOnCloseList = (() => body) :: callOnCloseList
   }
 
   /**
