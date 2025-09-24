@@ -82,32 +82,21 @@ private[signals3] object ProxySignal {
   }
     
   final class CloseableSignal[V](source: Signal[V]) extends ProxySignal[V](source) with Closeable {
-    @volatile private var closed = false
-
-    override def closeAndCheck(): Boolean = {
-      closed = true
-      true
-    }
-
-    override def isClosed: Boolean = closed
-
     override protected def computeValue(current: Option[V]): Option[V] =
-      if !closed then source.value else current
+      if !isClosed then source.value else current
   }
 
   protected[signals3] trait FiniteSignal[V] extends Finite[V, Signal[V]] {
     protected var lastPromise: Option[Promise[V]] = None
     override lazy val last: Future[V] = Promise[V]().tap { p => lastPromise = Some(p) }.future
 
+    protected def pushLast(value: Option[V]): Unit = (lastPromise, value) match {
+      case (Some(p), Some(v)) if !p.isCompleted => p.trySuccess(v)
+      case _ =>
+    }
+
     protected var initSignal: Option[SourceSignal[V]] = None
     override lazy val init: Signal[V] = SourceSignal[V]().tap { s => initSignal = Some(s) }
-  }
-
-  final class FlagSignal extends Signal(Some(false)) with FiniteSignal[Boolean] {
-    def done(): Unit = {
-      publish(true)
-      close()
-    }
   }
 
   final class TakeSignal[V](source: Signal[V], take: Int) 
@@ -123,28 +112,25 @@ private[signals3] object ProxySignal {
             case _ =>
           }
         else {
-          (lastPromise, source.value) match {
-            case (Some(p), Some(v)) if !p.isCompleted => p.trySuccess(v)
-            case _ =>
-          }
+          pushLast(source.value)
           close()
         }
         source.value
       } else current
+
+    override def closeAndCheck(): Boolean =
+      super.closeAndCheck().tap { _ => pushLast(source.value) }
   }
 
   final class TakeWhileSignal[V](source: Signal[V], p: V => Boolean)
     extends ProxySignal[V](source) with FiniteSignal[V] {
 
     override protected def computeValue(current: Option[V]): Option[V] =
-      if isClosed || source.value == current then current
-      else
-        if !source.value.exists(p) then {
+      if (isClosed || source.value == current) current
+      else {
+        if (!source.value.exists(p)) {
           close()
-          (lastPromise, current) match {
-            case (Some(p), Some(c)) if !p.isCompleted => p.trySuccess(c)
-            case _ =>
-          }
+          pushLast(current)
           current
         }
         else {
@@ -153,8 +139,11 @@ private[signals3] object ProxySignal {
             case _ =>
           }
           source.value
-        } // end if
-      end if
+        }
+      }
+
+    override def closeAndCheck(): Boolean =
+      super.closeAndCheck().tap { _ => pushLast(source.value) }
   }
 
   final class DropWhileSignal[V](source: Signal[V], p: V => Boolean) extends ProxySignal[V](source) {

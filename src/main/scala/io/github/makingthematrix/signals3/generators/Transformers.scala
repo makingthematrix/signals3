@@ -37,17 +37,20 @@ object Transformers {
     private var callOnCloseList: List[() => Unit] = Nil
     @volatile private var open = sources.length
 
-    sources.foreach(_.onClose {
+    sources.foreach { s => s.closed.onDone {
       synchronized {
         open -= 1
         if open == 0 then callOnCloseList.foreach(_())
       }
-    })
+    }}
 
-    final override def closeAndCheck(): Boolean =
-      sources.map(_.closeAndCheck()).forall(p => p)
+    final override def closeAndCheck(): Boolean = {
+      super.closeAndCheck() &&
+        sources.map(_.closeAndCheck()).forall(p => p)
+    }
 
-    final override def isClosed: Boolean = sources.forall(_.isClosed)
+    final override def isClosed: Boolean =
+      super.isClosed && sources.forall(_.isClosed)
 
     final override def onClose(body: => Unit): Unit =
       callOnCloseList = (() => body) :: callOnCloseList

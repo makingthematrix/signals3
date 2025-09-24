@@ -6,6 +6,7 @@ import io.github.makingthematrix.signals3.ProxyStream.FiniteStream
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
+import scala.util.chaining.scalaUtilChainingOps
 
 trait EPausable {
   val paused: () => Boolean
@@ -66,16 +67,9 @@ class CloseableGeneratorStream[E](interval: FiniteDuration | (() => Long),
   /**
    * Closes the generator permanently. There will be no further calls to `generate`, `interval`, and `paused`.
    */
-  override inline def closeAndCheck(): Boolean = beat.closeAndCheck()
-
-  /**
-   * Checks if the generator is closed.
-   *
-   * @return `true` if the generator was closed
-   */
-  override inline def isClosed: Boolean = beat.isClosed
-
-  override inline def onClose(body: => Unit): Unit = beat.onClose(body)
+  override def closeAndCheck(): Boolean = {
+    super.closeAndCheck().tap { _ => beat.closeAndCheck() }
+  }
 }
 
 class FiniteGeneratorStream[E](interval: FiniteDuration | (() => Long),

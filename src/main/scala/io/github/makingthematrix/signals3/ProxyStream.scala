@@ -117,17 +117,8 @@ private[signals3] object ProxyStream {
   }
 
   final class CloseableStream[E](source: Stream[E]) extends ProxyStream[E, E](source) with Closeable {
-    @volatile private var closed = false
-
-    override def closeAndCheck(): Boolean = {
-      closed = true
-      true
-    }
-
-    override def isClosed: Boolean = closed
-
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      if !closed then dispatch(event, sourceContext)
+      if (!isClosed) dispatch(event, sourceContext)
   }
 
   protected[signals3] trait FiniteStream[E] extends Finite[E, Stream[E]] {

@@ -44,20 +44,6 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext = Threading.defaul
     */
   def fail(th: Throwable): Boolean
 
-  /** Adds a callback for when the future is closed (but not failed for any other reason).
-    * There can be more than one `onClose` callback.
-    * Returns the reference to itself so it can be chained with other `CloseableFuture` methods.
-    *
-    * @param body The callback code
-    * @return The reference to itself
-    */
-  override def onClose(body: => Unit): Unit =
-    if isCloseable then
-      future.onComplete {
-        case Failure(Closed) => body
-        case _ =>
-      }
-
   /** If the future is actually closeable, adds a timeout after which this future will be closed.
     * In theory, it's possible to add more than one timeout - the shortest one will close all others.
     * Returns the reference to itself so it can be chained with other `CloseableFuture` methods.
@@ -77,9 +63,11 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext = Threading.defaul
     *
     * @return `true` if the future was closed, `false` if it was not possible to close it
     */
-  override def closeAndCheck(): Boolean = fail(Closed)
+  override def closeAndCheck(): Boolean = {
+    fail(Closed).tap { _ => closed.done() }
+  }
 
-  override def isClosed: Boolean = future.isCompleted
+  override def isClosed: Boolean = super.isClosed && future.isCompleted
 
   /** Same as `Future.onComplete`.
     * @see `Future`
@@ -89,7 +77,8 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext = Threading.defaul
     *                 of this future
     * @tparam U The result type of `f`
     */
-  inline final def onComplete[U](f: Try[T] => U)(using executor: ExecutionContext = ec): Unit = future.onComplete(f)(using executor)
+  inline final def onComplete[U](f: Try[T] => U)(using executor: ExecutionContext = ec): Unit = 
+    future.onComplete(f)(using executor)
 
   /** Same as `Future.foreach`.
     * @see `Future`
@@ -99,7 +88,8 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext = Threading.defaul
     *                 of this future
     * @tparam U The result type of `pf`
     */
-  inline final def foreach[U](pf: T => U)(using executor: ExecutionContext = ec): Unit = future.foreach(pf)(using executor)
+  inline final def foreach[U](pf: T => U)(using executor: ExecutionContext = ec): Unit = 
+    future.foreach(pf)(using executor)
 
   /** Creates a new closeable future by applying the `f` function to the successful result
     * of this one. If this future is completed with an exception then the new future will
@@ -507,7 +497,7 @@ object CloseableFuture {
     else {
       val p = Promise[Unit]()
       val task = schedule(() => p.trySuccess(()), duration.toMillis)
-      new ActuallyCloseable(p).tap { _ .onClose(task.cancel()) }
+      new ActuallyCloseable(p).tap { _.closed.onDone(task.cancel()) }
     }
 
   /** Creates an empty closeable future which will repeat the mapped computation every given `interval` until
@@ -559,16 +549,16 @@ object CloseableFuture {
     new ActuallyCloseable(Promise[Unit]()) {
       inline def sched(t: Long): TimerTask = schedule(() => { Try(body); startNewTimeoutLoop() }, t)
 
-      @volatile private var closed: Boolean = false
+      @volatile private var taskClosed: Boolean = false
       @volatile private var task: TimerTask = sched(interval())
 
       private def startNewTimeoutLoop(): Unit =
-        if !closed then
+        if !taskClosed then
           task = sched(interval())
 
       override def closeAndCheck(): Boolean = {
         task.cancel()
-        closed = true
+        taskClosed = true
         super.closeAndCheck()
       }
     }

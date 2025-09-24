@@ -1,6 +1,6 @@
 // based on http://caryrobbins.com/dev/sbt-publishing/
 
-val _scalaVersion = "3.7.2"
+val _scalaVersion = "3.7.3"
 
 organization := "io.github.makingthematrix"
 sonatypeProfileName := "io.github.makingthematrix"

@@ -1,5 +1,6 @@
 package io.github.makingthematrix.signals3.generators
 
+import io.github.makingthematrix.signals3.Closeable.CloseableSignal
 import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, waitForResult}
 import io.github.makingthematrix.signals3.{EventContext, Signal, Threading}
 
@@ -27,15 +28,10 @@ class GeneratorSignalSpec extends munit.FunSuite {
 
   test("fibonacci signal with unfold") {
     val builder = mutable.ArrayBuilder.make[Int]
-    val isSuccess = Signal(false)
-
-    val signal =
+    val signal: CloseableSignal[Int] =
       GeneratorSignal.unfold((0, 1), 200.millis) { case (a, b) => (b, a + b) -> b }
-    signal.foreach { b: Int =>
-      builder.addOne(b)
-      isSuccess ! (b == 8)
-    }
-    waitForResult(isSuccess, true)
+    signal.foreach { builder.addOne }
+    waitForResult(signal.closed, true)
     signal.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(1, 2, 3, 5, 8))

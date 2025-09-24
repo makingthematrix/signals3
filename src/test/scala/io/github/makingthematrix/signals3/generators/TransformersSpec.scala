@@ -24,11 +24,11 @@ class TransformersSpec extends munit.FunSuite {
     }
     val mapped = Transformers.map(original) { _._2 }
 
-    val isSuccess = Signal(false)
+    val isSuccess = Signal.flag()
     val builder = mutable.ArrayBuilder.make[Int]
     mapped.foreach { t =>
       builder.addOne(t)
-      isSuccess ! (t == 8)
+      if (t == 8) isSuccess.done()
     }
 
     waitForResult(isSuccess, true)
@@ -51,11 +51,11 @@ class TransformersSpec extends munit.FunSuite {
 
     val signal = Transformers.signalFromStream(Transformers.map(original) { _._2 })
 
-    val isSuccess = Signal(false)
+    val isSuccess = Signal.flag()
     val builder = mutable.ArrayBuilder.make[Int]
     signal.foreach { t =>
       builder.addOne(t)
-      isSuccess ! (t == 8)
+      if (t == 8) isSuccess.done()
     }
 
     waitForResult(isSuccess, true)
@@ -78,11 +78,11 @@ class TransformersSpec extends munit.FunSuite {
 
     val signal = Transformers.signalFromStream(0, Transformers.map(original) { _._2 })
 
-    val isSuccess = Signal(false)
+    val isSuccess = Signal.flag()
     val builder = mutable.ArrayBuilder.make[Int]
     signal.foreach { t =>
       builder.addOne(t)
-      isSuccess ! (t == 8)
+      if (t == 8) isSuccess.done()
     }
 
     waitForResult(isSuccess, true)
@@ -98,11 +98,11 @@ class TransformersSpec extends munit.FunSuite {
       _ % 2 != 0
     }
 
-    val isSuccess = Signal(false)
+    val isSuccess = Signal.flag()
     val builder = mutable.ArrayBuilder.make[Int]
     stream.foreach { n =>
       builder.addOne(n)
-      isSuccess ! (n == 7)
+      if (n == 7) isSuccess.done()
     }
 
     waitForResult(isSuccess, true)
@@ -434,7 +434,7 @@ class TransformersSpec extends munit.FunSuite {
     val mapped = Transformers.map(original)(_ => "foo")
 
     val isClosed = Signal(0)
-    mapped.onClose { isClosed.mutate(_ + 1)  }
+    mapped.closed.onDone { isClosed.mutate(_ + 1)  }
 
     mapped.close()
     awaitAllTasks
@@ -446,7 +446,7 @@ class TransformersSpec extends munit.FunSuite {
     val mapped = Transformers.map(original)(_ => "foo")
 
     val isClosed = Signal(0)
-    original.onClose { isClosed.mutate(_ + 1) }
+    original.closed.onDone { isClosed.mutate(_ + 1) }
 
     mapped.close()
 
@@ -459,7 +459,7 @@ class TransformersSpec extends munit.FunSuite {
     val mapped = Transformers.map(original)(_ => "foo")
 
     val isClosed = Signal(0)
-    mapped.onClose { isClosed.mutate(_ + 1) }
+    mapped.closed.onDone{ isClosed.mutate(_ + 1) }
 
     original.close()
 
@@ -498,11 +498,11 @@ class TransformersSpec extends munit.FunSuite {
   test("In a zipped stream, closing the transformed one calls all onClose") {
     val isClosed = Signal(0)
     val original1 = GeneratorStream.heartbeat(200.millis)
-    original1.onClose { isClosed.mutate(_ + 1) }
+    original1.closed.onDone { isClosed.mutate(_ + 1) }
     val original2 = GeneratorStream.heartbeat(300.millis)
-    original2.onClose { isClosed.mutate(_ + 1) }
+    original2.closed.onDone { isClosed.mutate(_ + 1) }
     val zipped = Transformers.zip(original1, original2)
-    zipped.onClose { isClosed.mutate(_ + 1) }
+    zipped.closed.onDone { isClosed.mutate(_ + 1) }
 
     zipped.close()
 
