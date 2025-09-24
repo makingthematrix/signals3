@@ -31,7 +31,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
 
     val signal =
       GeneratorSignal.unfold((0, 1), 200.millis) { case (a, b) => (b, a + b) -> b }
-    signal.foreach { b: Int =>
+    signal.foreach { b =>
       builder.addOne(b)
       isSuccess ! (b == 8)
     }
