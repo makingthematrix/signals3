@@ -1,5 +1,7 @@
 package io.github.makingthematrix.signals3
 
+import scala.util.chaining.scalaUtilChainingOps
+
 /**
  * A common supertrait for [[CloseableFuture]] and all streams and signals that can be closed at some point,
  * either by the user or by internal logic.
@@ -16,13 +18,19 @@ trait CanBeClosed {
    * Registers a block of code that should be called exactly once when the closeable is being closed.
    * @param body
    */
-  def onClose(body: => Unit): Unit = {
-    _onClose = Some(() => body)
-  }
+  def onClose(body: => Unit): Unit =
+    _onClose = (() => body) :: _onClose
 
   protected def callOnClose(): Unit = _onClose.foreach(_())
 
-  private var _onClose: Option[() => Unit] = None
+  private var _onClose: List[() => Unit] = Nil
+
+  lazy val isClosedSignal: Signal[Boolean] =
+    FlagSignal().tap { signal =>
+      onClose {
+        signal.done()
+      }
+    }
 }
 
 /**
@@ -53,7 +61,7 @@ trait Closeable extends java.lang.AutoCloseable with CanBeClosed {
     * A version of `closeAndCheck()` which ignores the boolean result.
     * If the closeable is used in try-with-resources, this method will be called automatically.
     */
-  override def close(): Unit = closeAndCheck()
+  final inline def close(): Unit = closeAndCheck()
 }
 
 object Closeable {

@@ -36,7 +36,7 @@ trait VPausable[V] {
 abstract class GeneratorSignal[V](init : V, interval: FiniteDuration | (V => Long))
                                  (using ec: ExecutionContext)
   extends Signal[V](Some(init)) with NoAutowiring {
-  protected def onBeat(): Unit
+  protected def onBeat(): Unit = {}
 
   protected val beat: CloseableFuture[Unit] = (interval match {
     case intv: FiniteDuration => CloseableFuture.repeat(intv)
