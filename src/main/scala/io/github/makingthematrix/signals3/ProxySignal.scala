@@ -102,14 +102,7 @@ private[signals3] object ProxySignal {
     protected var initSignal: Option[SourceSignal[V]] = None
     override lazy val init: Signal[V] = SourceSignal[V]().tap { s => initSignal = Some(s) }
   }
-
-  final class FlagSignal extends Signal(Some(false)) with FiniteSignal[Boolean] {
-    def done(): Unit = {
-      publish(true)
-      close()
-    }
-  }
-
+  
   final class TakeSignal[V](source: Signal[V], take: Int) 
     extends IndexedSignal[V](source) with FiniteSignal[V]{
     override def isClosed: Boolean = super.isClosed || counter >= take

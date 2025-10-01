@@ -596,6 +596,33 @@ class SignalSpec extends munit.FunSuite {
     assertEquals(seq, Seq(1, 2))
   }
 
+  test("Get info about closing a signal through isClosedSignal") {
+    given dq: DispatchQueue = SerialDispatchQueue()
+
+    val a = Signal[Int]()
+    val b = a.take(2)
+
+    val buffer = mutable.ArrayBuilder.make[Int]
+    b.foreach { n =>
+      buffer.addOne(n)
+    }
+    var closed = false
+    b.isClosedSignal.onTrue.foreach { _ =>
+      closed = true
+    }
+
+    a ! 1
+    assert(waitForResult(a, 1))
+    assert(waitForResult(b, 1))
+
+    a ! 2
+    assert(waitForResult(a, 2))
+    assert(waitForResult(b, 2))
+
+    assert(b.isClosed)
+    assert(closed)
+  }
+
   test("Drop and take") {
     val a = Signal[Int]()
     val b = a.drop(1).take(2)
