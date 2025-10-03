@@ -7,6 +7,7 @@ import io.github.makingthematrix.signals3.ProxySignal.FiniteSignal
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
+import scala.util.chaining.scalaUtilChainingOps
 
 trait VPausable[V] {
   val paused: V => Boolean
@@ -36,12 +37,17 @@ trait VPausable[V] {
 abstract class GeneratorSignal[V](init : V, interval: FiniteDuration | (V => Long))
                                  (using ec: ExecutionContext)
   extends Signal[V](Some(init)) with NoAutowiring {
-  protected def onBeat(): Unit = {}
 
-  protected val beat: CloseableFuture[Unit] = (interval match {
+  protected lazy val beat: CloseableFuture[Unit] = (interval match {
     case intv: FiniteDuration => CloseableFuture.repeat(intv)
     case intv: (V => Long)    => CloseableFuture.repeatVariant(() => intv(currentValue.getOrElse(init)))
   }) { onBeat() }
+
+  protected def onBeat(): Unit
+
+  protected[signals3] final def initialize(): Unit = {
+    beat
+  }
 }
 
 class CloseableGeneratorSignal[V](init: V,
@@ -126,7 +132,7 @@ object GeneratorSignal {
                interval: FiniteDuration,
                paused  : V => Boolean = (_: V) => false)
               (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorSignal[V] =
-    new CloseableGeneratorSignal[V](init, update, interval, paused)
+    new CloseableGeneratorSignal[V](init, update, interval, paused).tap(_.initialize())
 
   /**
     * A utility method for easier creation of a generator signal. The user provides the initial value of the signal,
@@ -145,12 +151,12 @@ object GeneratorSignal {
     */
   inline def generate[V](init: V, interval: FiniteDuration)(update: V => V)
                         (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorSignal[V] =
-    new CloseableGeneratorSignal[V](init, update, interval, (_: V) => false)
+    new CloseableGeneratorSignal[V](init, update, interval, (_: V) => false).tap(_.initialize())
 
 
   inline def generateVariant[V](init: V, interval: V => Long)(update: V => V)
                         (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorSignal[V] =
-    new CloseableGeneratorSignal[V](init, update, interval, (_: V) => false)
+    new CloseableGeneratorSignal[V](init, update, interval, (_: V) => false).tap(_.initialize())
 
   /**
     * A utility method which works in a way that can be imagined as an inversion of `.fold` methods in Scala collections
@@ -185,7 +191,7 @@ object GeneratorSignal {
   inline def unfold[V, Z](init: V, interval: FiniteDuration)(update: V => (V, Z))
                          (using ec: ExecutionContext = Threading.defaultContext): CloseableSignal[Z] =
     Transformers.map[(V, Z), Z](
-      new CloseableGeneratorSignal[(V, Z)](update(init), { (v, _) => update(v) }, interval, _ => false)
+      new CloseableGeneratorSignal[(V, Z)](update(init), { (v, _) => update(v) }, interval, _ => false).tap(_.initialize())
     )(_._2)
 
   /**
@@ -221,7 +227,7 @@ object GeneratorSignal {
         { case (v, _) => update(v) },
         { case (v, _) => interval(v) },
         _ => false
-      )
+      ).tap(_.initialize())
     )(_._2)
 
   /**
@@ -243,9 +249,9 @@ object GeneratorSignal {
 
   inline def fromIterable[V](values: Iterable[V], interval: FiniteDuration)
                             (using ec: ExecutionContext = Threading.defaultContext): FiniteGeneratorSignal[V] =
-    new FiniteGeneratorSignal[V](interval, values, (_: V) => false)
+    new FiniteGeneratorSignal[V](interval, values, (_: V) => false).tap(_.initialize())
 
   inline def fromLazyList[V](values: LazyList[V], interval: FiniteDuration)
                             (using ec: ExecutionContext = Threading.defaultContext): LazyListGeneratorSignal[V] =
-    new LazyListGeneratorSignal[V](interval, values, (_: V) => false)
+    new LazyListGeneratorSignal[V](interval, values, (_: V) => false).tap(_.initialize())
 }
