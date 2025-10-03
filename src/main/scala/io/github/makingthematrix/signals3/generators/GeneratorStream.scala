@@ -6,13 +6,14 @@ import io.github.makingthematrix.signals3.ProxyStream.FiniteStream
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
+import scala.util.chaining.scalaUtilChainingOps
 
 trait EPausable {
   val paused: () => Boolean
 }
 
 /**
-  * a stream capable of generating new events in the given intervals of time, by repeatedly calling a function
+  * A stream capable of generating new events in the given intervals of time, by repeatedly calling a function
   * that returns a new event. The interval can be given either as `FiniteDuration` or as a function that will return
   * the number of milliseconds in `Long` every time it's called. The difference in returned types is there to avoid
   * repeated wrapping and unwrapping of milliseconds in `FiniteDuration` but it also means that it is now on the user
@@ -42,7 +43,7 @@ trait EPausable {
 abstract class GeneratorStream[E](interval: FiniteDuration | (() => Long))(using ec: ExecutionContext)
   extends Stream[E] with NoAutowiring {
 
-  protected val beat: CloseableFuture[Unit] =
+  protected lazy val beat: CloseableFuture[Unit] =
     (interval match {
        case intv: FiniteDuration => CloseableFuture.repeat(intv)
        case intv: (() => Long)   => CloseableFuture.repeatVariant(intv)
@@ -51,6 +52,10 @@ abstract class GeneratorStream[E](interval: FiniteDuration | (() => Long))(using
     }
 
   protected def onBeat(): Unit
+
+  protected[signals3] final def initialize(): Unit = {
+    beat
+  }
 }
 
 class CloseableGeneratorStream[E](interval: FiniteDuration | (() => Long),
@@ -91,9 +96,12 @@ class FiniteGeneratorStream[E](interval: FiniteDuration | (() => Long),
     inc()
     publish(event)
     if (!isClosed) initStream.foreach {_ ! event}
-    else lastPromise.foreach {
-      case p if !p.isCompleted => p.trySuccess(event)
-      case _ =>
+    else {
+      lastPromise.foreach {
+        case p if !p.isCompleted => p.trySuccess(event)
+        case _ =>
+      }
+      beat.close()
     }
   }
 }
@@ -132,7 +140,7 @@ object GeneratorStream {
                interval: FiniteDuration,
                paused  : () => Boolean = () => false)
               (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[E] =
-    new CloseableGeneratorStream[E](interval, generate, paused)
+    new CloseableGeneratorStream[E](interval, generate, paused).tap(_.initialize())
 
   /**
     * Creates a stream which generates a new event every `interval` by calling the `generate` function which
@@ -150,7 +158,7 @@ object GeneratorStream {
     */
   inline def generate[E](interval: FiniteDuration)(body: => E)
                         (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[E] =
-    new CloseableGeneratorStream[E](interval, () => body, () => false)
+    new CloseableGeneratorStream[E](interval, () => body, () => false).tap(_.initialize())
 
   /**
     * Creates a stream which generates a new event every `interval` by calling the `generate` function which
@@ -169,7 +177,7 @@ object GeneratorStream {
     */
   inline def generateVariant[E](interval: () => Long)(body: => E)
                                (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[E] =
-    new CloseableGeneratorStream[E](interval, () => body, () => false)
+    new CloseableGeneratorStream[E](interval, () => body, () => false).tap(_.initialize())
 
   /**
     * Creates a stream which publishes the same event every `interval`.
@@ -184,7 +192,7 @@ object GeneratorStream {
     */
   inline def repeat[E](event: E, interval: FiniteDuration)
                       (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[E] =
-    new CloseableGeneratorStream[E](interval, () => event, () => false)
+    new CloseableGeneratorStream[E](interval, () => event, () => false).tap(_.initialize())
 
   /**
     * Creates a stream which publishes the same event every given `interval`. In contrast to the simpler
@@ -200,7 +208,7 @@ object GeneratorStream {
     */
   inline def repeatVariant[E](event: E, interval: () => Long)
                              (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[E] =
-    new CloseableGeneratorStream[E](interval, () => event, () => false)
+    new CloseableGeneratorStream[E](interval, () => event, () => false).tap(_.initialize())
 
   /**
     * A utility method that creates a stream which publishes `Unit` every given `interval`.
@@ -213,17 +221,17 @@ object GeneratorStream {
     */
   inline def heartbeat(interval: FiniteDuration)
                       (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[Unit] =
-    repeat((), interval)
+    repeat((), interval).tap(_.initialize())
 
   inline def heartbeatVariant(interval: () => Long)
                       (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[Unit] =
-    repeatVariant((), interval)
+    repeatVariant((), interval).tap(_.initialize())
 
   inline def fromIterable[E](events: Iterable[E], interval: FiniteDuration)
                      (using ec: ExecutionContext = Threading.defaultContext): FiniteGeneratorStream[E] =
-    new FiniteGeneratorStream[E](interval, events, () => false)
+    new FiniteGeneratorStream[E](interval, events, () => false).tap(_.initialize())
 
   inline def fromLazyList[E](events: LazyList[E], interval: FiniteDuration)
                      (using ec: ExecutionContext = Threading.defaultContext): LazyListGeneratorStream[E] =
-    new LazyListGeneratorStream[E](interval, events, () => false)
+    new LazyListGeneratorStream[E](interval, events, () => false).tap(_.initialize())
 }
