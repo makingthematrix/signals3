@@ -7,12 +7,20 @@ import scala.util.chaining.scalaUtilChainingOps
  * either by the user or by internal logic.
  */
 trait CanBeClosed {
+  @volatile private var closed: Boolean = false
+
   /**
    * Checks if the stream/signal is already closed.
    * @return `true` if the stream/signal is already closed, `false` if it's not. Note that if the stream/signal failed,
    *         the result can be unreliable.
    */
-  def isClosed: Boolean
+  def isClosed: Boolean = closed
+
+  protected def closeAndCheck(): Boolean = if (!closed) {
+    closed = true
+    callOnClose()
+    true
+  } else false
 
   /**
    * Registers a block of code that should be called exactly once when the closeable is being closed.
@@ -43,19 +51,7 @@ trait CanBeClosed {
   * @see [[ProxyStream]] and [[ProxySignal]] for examples.
   */
 trait Closeable extends java.lang.AutoCloseable with CanBeClosed {
-  private var closed: Boolean = false
-  /**
-    * Tries to close the stream/signal and returns if it worked.
-    * @return Should return `true` if it was possible to close the stream/signal, `false` if it was impossible 
-    *         to close it or **if the stream/signal was already closed**.
-    */
-  def closeAndCheck(): Boolean = if (!isClosed) {
-    closed = true
-    callOnClose()
-    true
-  } else false
-
-  override def isClosed: Boolean = closed
+  override def closeAndCheck(): Boolean = super.closeAndCheck()
 
   /**
     * A version of `closeAndCheck()` which ignores the boolean result.
