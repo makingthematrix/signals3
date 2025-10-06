@@ -29,15 +29,14 @@ trait CanBeClosed {
   def onClose(body: => Unit): Unit =
     _onClose = (() => body) :: _onClose
 
-  protected def callOnClose(): Unit = _onClose.foreach(_())
+  private final inline def callOnClose(): Unit = _onClose.foreach(_())
 
   private var _onClose: List[() => Unit] = Nil
 
   lazy val isClosedSignal: Signal[Boolean] =
     FlagSignal().tap { signal =>
-      onClose {
-        signal.done()
-      }
+      if (isClosed) signal.done()
+      else onClose { signal.done() }
     }
 }
 
