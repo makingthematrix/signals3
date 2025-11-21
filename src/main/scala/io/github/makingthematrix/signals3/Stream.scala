@@ -143,11 +143,21 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
     */
   inline final def join(stream: Stream[E]): Stream[E] = new JoinStream[E](this, stream)
 
-  /** An alias for `join`. */
+  /** An alias for `join`.
+   * TODO: This is wrong. It's very easy to confuse with how ::: works for sequences and assume that the second stream will
+   * start firing only after the first one finishes. Let's remove this alias from here and from Signal, and instead create
+   * a new ::: functionality in FiniteStream/Signal where it makes sense.
+   * */
+
   inline final def :::(stream: Stream[E]): Stream[E] = join(stream)
   
   inline final def join(future: Future[E]): Stream[E] = join(Stream.from(future))
-  
+
+  /**
+   * TODO: Similarly to :::, this one shouldn't be here. Let's remove it from here and from Signal.
+   * Instead, there should be a conversion between a Future and a FiniteStream of one element,
+   * and :: can be implemented for FiniteStream as a special case of :::.
+   * */
   inline final def ::(future: Future[E]): Stream[E] = join(future)
 
   /** A shorthand for registering a subscriber function in this stream which only purpose is to publish events emitted
@@ -308,7 +318,7 @@ object Stream {
   inline def from[E](signal: Signal[E]): Stream[E] = signal.onChanged
 
   /** Creates a stream from a future. The stream will emit one event if the future finishes with success, zero otherwise.
-    *
+    * TODO: It should be a FiniteStream, not a Stream.
     * @param future The `Future` treated as the source of the only event that can be emitted by the event source.
     * @param executionContext The `ExecutionContext` in which the event will be dispatched.
     * @tparam E The type of the event.

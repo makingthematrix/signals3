@@ -51,10 +51,17 @@ abstract class GeneratorStream[E](interval: FiniteDuration | (() => Long))(using
       onBeat()
     }
 
-  protected def onBeat(): Unit
+  private var isInitialized = false
+
+  protected def onBeat(): Unit =
+    if (!isInitialized) {
+      beat
+      isInitialized = true
+    }
 
   protected[signals3] final def initialize(): Unit = {
     beat
+    isInitialized = true
   }
 }
 
@@ -65,6 +72,7 @@ class CloseableGeneratorStream[E](interval: FiniteDuration | (() => Long),
   extends GeneratorStream[E](interval) with Closeable with EPausable {
 
   override protected def onBeat(): Unit = {
+    super.onBeat()
     if (!paused()) publish(generate())
   }
 
@@ -91,17 +99,20 @@ class FiniteGeneratorStream[E](interval: FiniteDuration | (() => Long),
   private val it = events.iterator
   override def isClosed: Boolean = super.isClosed || it.isEmpty
 
-  override protected def onBeat(): Unit = if (!isClosed && !paused()) {
-    val event = it.next()
-    inc()
-    publish(event)
-    if (!isClosed) initStream.foreach {_ ! event}
-    else {
-      lastPromise.foreach {
-        case p if !p.isCompleted => p.trySuccess(event)
-        case _ =>
+  override protected def onBeat(): Unit = {
+    super.onBeat()
+    if (!isClosed && !paused()) {
+      val event = it.next()
+      inc()
+      publish(event)
+      if (!isClosed) initStream.foreach {_ ! event}
+      else {
+        lastPromise.foreach {
+          case p if !p.isCompleted => p.trySuccess(event)
+          case _ =>
+        }
+        beat.close()
       }
-      beat.close()
     }
   }
 }
@@ -112,10 +123,13 @@ class LazyListGeneratorStream[E](interval: FiniteDuration | (() => Long),
                                 (using ec: ExecutionContext)
   extends GeneratorStream[E](interval) with Indexed with EPausable {
 
-  override protected def onBeat(): Unit = if (!paused()) {
-    val event = events(counter)
-    inc()
-    publish(event)
+  override protected def onBeat(): Unit = {
+    super.onBeat()
+    if (!paused()) {
+      val event = events(counter)
+      inc()
+      publish(event)
+    }
   }
 }
 
@@ -231,7 +245,35 @@ object GeneratorStream {
                      (using ec: ExecutionContext = Threading.defaultContext): FiniteGeneratorStream[E] =
     new FiniteGeneratorStream[E](interval, events, () => false).tap(_.initialize())
 
+  inline def fromIterableVariant[E](events: Iterable[E], interval: () => Long)
+                            (using ec: ExecutionContext = Threading.defaultContext): FiniteGeneratorStream[E] =
+    new FiniteGeneratorStream[E](interval, events, () => false).tap(_.initialize())
+
+  def fromFunction[E](generate: () => Option[E], interval: FiniteDuration)
+                     (using ec: ExecutionContext = Threading.defaultContext): FiniteGeneratorStream[E] = {
+    val it = Iterable.from(new Iterator[E]{
+      private var _next = generate()
+      override def hasNext: Boolean = _next.isDefined
+      override def next(): E = _next.get.tap { _ => _next = generate() }
+    })
+    new FiniteGeneratorStream[E](interval, it, () => false).tap(_.initialize())
+  }
+
+  def fromFunctionVariant[E](generate: () => Option[E], interval: () => Long)
+                     (using ec: ExecutionContext = Threading.defaultContext): FiniteGeneratorStream[E] = {
+    val it = Iterable.from(new Iterator[E]{
+      private var _next = generate()
+      override def hasNext: Boolean = _next.isDefined
+      override def next(): E = _next.get.tap { _ => _next = generate() }
+    })
+    new FiniteGeneratorStream[E](interval, it, () => false).tap(_.initialize())
+  }
+
   inline def fromLazyList[E](events: LazyList[E], interval: FiniteDuration)
                      (using ec: ExecutionContext = Threading.defaultContext): LazyListGeneratorStream[E] =
+    new LazyListGeneratorStream[E](interval, events, () => false).tap(_.initialize())
+
+  inline def fromLazyListVariant[E](events: LazyList[E], interval: () => Long)
+                            (using ec: ExecutionContext = Threading.defaultContext): LazyListGeneratorStream[E] =
     new LazyListGeneratorStream[E](interval, events, () => false).tap(_.initialize())
 }

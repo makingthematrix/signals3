@@ -43,10 +43,17 @@ abstract class GeneratorSignal[V](init : V, interval: FiniteDuration | (V => Lon
     case intv: (V => Long)    => CloseableFuture.repeatVariant(() => intv(currentValue.getOrElse(init)))
   }) { onBeat() }
 
-  protected def onBeat(): Unit
+  private var isInitialized = false
+
+  protected def onBeat(): Unit =
+    if (!isInitialized) {
+      beat
+      isInitialized = true
+    }
 
   protected[signals3] final def initialize(): Unit = {
     beat
+    isInitialized = true
   }
 }
 
@@ -56,8 +63,11 @@ class CloseableGeneratorSignal[V](init: V,
                                   override val paused: V => Boolean)
                                  (using ec: ExecutionContext)
   extends GeneratorSignal[V](init, interval) with Closeable with VPausable[V] {
-  override protected def onBeat(): Unit =
+  override protected def onBeat(): Unit = {
+    super.onBeat()
     if !currentValue.exists(paused) && !isClosed then currentValue.foreach(v => publish(update(v), ec))
+  }
+
   /**
    * Closes the generator permanently. There will be no further calls to `update`, `interval`, and `paused`.
    */
@@ -83,14 +93,17 @@ class FiniteGeneratorSignal[V](interval: FiniteDuration | (V => Long),
 
   override def isClosed: Boolean = super.isClosed || it.isEmpty
 
-  override protected def onBeat(): Unit = if (!currentValue.exists(paused) && !isClosed) {
-    val v = it.next()
-    inc()
-    publish(v, ec)
-    if (!isClosed) initSignal.foreach {_ ! v}
-    else lastPromise.foreach {
-      case p if !p.isCompleted => p.trySuccess(v)
-      case _ =>
+  override protected def onBeat(): Unit = {
+    super.onBeat()
+    if (!currentValue.exists(paused) && !isClosed) {
+      val v = it.next()
+      inc()
+      publish(v, ec)
+      if (!isClosed) initSignal.foreach {_ ! v}
+      else lastPromise.foreach {
+        case p if !p.isCompleted => p.trySuccess(v)
+        case _ =>
+      }
     }
   }
 }
@@ -102,10 +115,13 @@ class LazyListGeneratorSignal[V](interval: FiniteDuration | (V => Long),
   extends GeneratorSignal[V](values.head, interval) with Indexed with VPausable[V] {
   inc() // the first value in values becomes the initial value, so we already increase the counter to 1
 
-  override protected def onBeat(): Unit = if (!currentValue.exists(paused)) {
-    val v =  values(counter)
-    inc()
-    publish(v, ec)
+  override protected def onBeat(): Unit = {
+    super.onBeat()
+    if (!currentValue.exists(paused)) {
+      val v =  values(counter)
+      inc()
+      publish(v, ec)
+    }
   }
 }
 
@@ -251,7 +267,35 @@ object GeneratorSignal {
                             (using ec: ExecutionContext = Threading.defaultContext): FiniteGeneratorSignal[V] =
     new FiniteGeneratorSignal[V](interval, values, (_: V) => false).tap(_.initialize())
 
+  inline def fromIterableVariant[V](values: Iterable[V], interval: V => Long)
+                            (using ec: ExecutionContext = Threading.defaultContext): FiniteGeneratorSignal[V] =
+    new FiniteGeneratorSignal[V](interval, values, (_: V) => false).tap(_.initialize())
+
+  def fromFunction[V](generate: () => Option[V], interval: FiniteDuration)
+                     (using ec: ExecutionContext = Threading.defaultContext): FiniteGeneratorSignal[V] = {
+    val it = Iterable.from(new Iterator[V]{
+      private var value = generate()
+      override def hasNext: Boolean = value.isDefined
+      override def next(): V = value.get.tap { _ => value = generate() }
+    })
+    new FiniteGeneratorSignal[V](interval, it, (_: V) => false).tap(_.initialize())
+  }
+
+  def fromFunctionVariant[V](generate: () => Option[V], interval: V => Long)
+                     (using ec: ExecutionContext = Threading.defaultContext): FiniteGeneratorSignal[V] = {
+    val it = Iterable.from(new Iterator[V]{
+      private var value = generate()
+      override def hasNext: Boolean = value.isDefined
+      override def next(): V = value.get.tap { _ => value = generate() }
+    })
+    new FiniteGeneratorSignal[V](interval, it, (_: V) => false).tap(_.initialize())
+  }
+
   inline def fromLazyList[V](values: LazyList[V], interval: FiniteDuration)
+                            (using ec: ExecutionContext = Threading.defaultContext): LazyListGeneratorSignal[V] =
+    new LazyListGeneratorSignal[V](interval, values, (_: V) => false).tap(_.initialize())
+
+  inline def fromLazyListVariant[V](values: LazyList[V], interval: V => Long)
                             (using ec: ExecutionContext = Threading.defaultContext): LazyListGeneratorSignal[V] =
     new LazyListGeneratorSignal[V](interval, values, (_: V) => false).tap(_.initialize())
 }
