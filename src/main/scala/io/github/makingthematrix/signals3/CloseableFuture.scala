@@ -277,7 +277,7 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext = Threading.defaul
 
     new ActuallyCloseable(p) {
       override def closeAndCheck(): Boolean =
-        if super.closeAndCheck() then {
+        if (super.closeAndCheck()) {
           Future(closeSelf.foreach(_ ()))(using executor)
           true
         }
