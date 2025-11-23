@@ -103,4 +103,5 @@ object SourceSignal {
     * @tparam V The type of the value
     * @return A new source signal
     */
-  def apply[V](): SourceSignal[V] = new SourceSignal[V](None)}
+  def apply[V](): SourceSignal[V] = new SourceSignal[V](None)
+}

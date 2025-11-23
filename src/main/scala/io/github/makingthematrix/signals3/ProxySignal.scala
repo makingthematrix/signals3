@@ -1,9 +1,7 @@
 package io.github.makingthematrix.signals3
 
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.ExecutionContext
 import Signal.SignalSubscriber
-
-import scala.util.chaining.scalaUtilChainingOps
 
 abstract private[signals3] class ProxySignal[V](sources: Signal[?]*) extends Signal[V] with SignalSubscriber {
   override def onWire(): Unit = {
@@ -94,24 +92,16 @@ private[signals3] object ProxySignal {
     override protected def computeValue(current: Option[V]): Option[V] =
       if !closed then source.value else current
   }
-
-  protected[signals3] trait FiniteSignal[V] extends Finite[V, Signal[V]] {
-    protected var lastPromise: Option[Promise[V]] = None
-    override lazy val last: Future[V] = Promise[V]().tap { p => lastPromise = Some(p) }.future
-
-    protected var initSignal: Option[SourceSignal[V]] = None
-    override lazy val init: Signal[V] = SourceSignal[V]().tap { s => initSignal = Some(s) }
-  }
   
   final class TakeSignal[V](source: Signal[V], take: Int) 
-    extends IndexedSignal[V](source) with FiniteSignal[V]{
+    extends IndexedSignal[V](source) with Finite[V, SourceSignal[V]](SourceSignal[V]) {
     override def isClosed: Boolean = super.isClosed || counter >= take
 
     override protected def computeValue(current: Option[V]): Option[V] =
       if (!isClosed && source.value != current) {
         inc()
         if (counter < take)
-          (initSignal, source.value) match {
+          (initSource, source.value) match {
             case (Some(s), Some(v)) => s ! v
             case _ =>
           }
@@ -127,7 +117,7 @@ private[signals3] object ProxySignal {
   }
 
   final class TakeWhileSignal[V](source: Signal[V], p: V => Boolean)
-    extends ProxySignal[V](source) with FiniteSignal[V] {
+    extends ProxySignal[V](source) with Finite[V, SourceSignal[V]](SourceSignal[V]) {
 
     override protected def computeValue(current: Option[V]): Option[V] =
       if isClosed || source.value == current then current
@@ -141,7 +131,7 @@ private[signals3] object ProxySignal {
           current
         }
         else {
-          (initSignal, current) match {
+          (initSource, current) match {
             case (Some(s), Some(c)) => s ! c
             case _ =>
           }
