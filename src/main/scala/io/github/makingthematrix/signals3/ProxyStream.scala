@@ -3,7 +3,7 @@ package io.github.makingthematrix.signals3
 import io.github.makingthematrix.signals3.Stream.EventSubscriber
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 import scala.util.chaining.scalaUtilChainingOps
 
@@ -130,23 +130,15 @@ private[signals3] object ProxyStream {
       if !closed then dispatch(event, sourceContext)
   }
 
-  protected[signals3] trait FiniteStream[E] extends Finite[E, Stream[E]] {
-    protected var lastPromise: Option[Promise[E]] = None
-    override lazy val last: Future[E] = Promise[E]().tap { p => lastPromise = Some(p) }.future
-
-    protected var initStream: Option[SourceStream[E]] = None
-    override lazy val init: Stream[E] = SourceStream[E]().tap { s => initStream = Some(s) }
-  }
-
   final class TakeStream[E](source: Stream[E], take: Int) 
-    extends IndexedStream[E](source) with FiniteStream[E] {
+    extends IndexedStream[E](source) with Finite[E, SourceStream[E]](SourceStream[E]) {
     override def isClosed: Boolean = super.isClosed || counter >= take
 
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = { 
       if (!isClosed) {
         inc()
         dispatch(event, sourceContext)
-        if (!isClosed) initStream.foreach { _ ! event }
+        if (!isClosed) initSource.foreach { _ ! event }
       }
       if (isClosed) lastPromise.foreach {
         case p if !p.isCompleted => p.trySuccess(event)
@@ -156,7 +148,7 @@ private[signals3] object ProxyStream {
   }
 
   final class TakeWhileStream[E](source: Stream[E], p: E => Boolean)
-    extends ProxyStream[E, E](source) with FiniteStream[E] {
+    extends ProxyStream[E, E](source) with Finite[E, SourceStream[E]](SourceStream[E]) {
 
     private var previousEvent: Option[E] = None
 
@@ -171,7 +163,7 @@ private[signals3] object ProxyStream {
         }
         else {
           dispatch(event, sourceContext)
-          (initStream, previousEvent) match {
+          (initSource, previousEvent) match {
             case (Some(s), Some(pe)) => s ! pe
             case _ =>
           }

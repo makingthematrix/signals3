@@ -1,8 +1,7 @@
 package io.github.makingthematrix.signals3.generators
 
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Indexed, Stream, Threading}
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Finite, Indexed, SourceStream, Stream, Threading}
 import io.github.makingthematrix.signals3.EventSource.NoAutowiring
-import io.github.makingthematrix.signals3.ProxyStream.FiniteStream
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
@@ -95,7 +94,7 @@ class FiniteGeneratorStream[E](interval: FiniteDuration | (() => Long),
                                val events: Iterable[E],
                                override val paused : () => Boolean)
                               (using ec: ExecutionContext)
-  extends GeneratorStream[E](interval) with FiniteStream[E] with Indexed with EPausable {
+  extends GeneratorStream[E](interval) with Finite[E, SourceStream[E]](SourceStream[E]) with Indexed with EPausable {
   private val it = events.iterator
   override def isClosed: Boolean = super.isClosed || it.isEmpty
 
@@ -105,7 +104,7 @@ class FiniteGeneratorStream[E](interval: FiniteDuration | (() => Long),
       val event = it.next()
       inc()
       publish(event)
-      if (!isClosed) initStream.foreach {_ ! event}
+      if (!isClosed) initSource.foreach {_ ! event}
       else {
         lastPromise.foreach {
           case p if !p.isCompleted => p.trySuccess(event)
