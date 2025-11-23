@@ -12,14 +12,14 @@ import scala.util.chaining.scalaUtilChainingOps
  * @tparam T The type of the stream's event or the signal's value
  * @tparam M The type of the source that will be closed eventually
  */
-protected[signals3] trait Finite[T, M <: Source[T]](constructor: () => M) extends CanBeClosed {
+protected[signals3] trait Finite[T, M <: Source[T]](private val constructor: () => M) extends CanBeClosed {
   protected final inline def close(): Unit = closeAndCheck()
 
   protected var lastPromise: Option[Promise[T]] = None
-  lazy val last: Future[T] = Promise[T]().tap { p => lastPromise = Some(p) }.future
+  final lazy val last: Future[T] = Promise[T]().tap { p => lastPromise = Some(p) }.future
 
   protected var initSource: Option[M] = None
-  lazy val init: M = constructor().tap { s => initSource = Some(s) }
+  final lazy val init: M = constructor().tap { s => initSource = Some(s) }
 }
   
 object Finite {
