@@ -308,8 +308,6 @@ class IndexedStreamSpec extends munit.FunSuite {
 
     val buffer = mutable.ArrayBuilder.make[Int]
     b.foreach { str => buffer.addOne(str.toInt) }
-    val initBuffer = mutable.ArrayBuilder.make[Int]
-    b.init.foreach { str => initBuffer.addOne(str.toInt) }
     var last: String = ""
     b.last.foreach(last = _)
 
@@ -324,7 +322,6 @@ class IndexedStreamSpec extends munit.FunSuite {
 
     assertEquals(buffer.result().toSeq, Seq(1, 2))
     assert(b.isClosed)
-    assertEquals(initBuffer.result().toSeq, Seq(1))
     assertEquals(last, "2")
   }
 

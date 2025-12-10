@@ -38,7 +38,7 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
     *
     * @param event The event to be published.
     */
-  protected def publish(event: E): Unit = dispatch(event, None)
+  protected[signals3] def publish(event: E): Unit = dispatch(event, None)
 
   /** Registers a subscriber in a specified execution context and returns the subscription. An optional event context can also
     * be provided by the user for managing the subscription instead of doing it manually. When an event is published in
@@ -183,11 +183,11 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
   }
 
   final def drop(n: Int): Stream[E] =
-    if n == 0 then this
+    if n <= 0 then this
     else new DropStream[E](this, n)
 
-  final def take(n: Int): FiniteStream[E] =
-    if n == 0 then EmptyTakeStream.asInstanceOf[FiniteStream[E]]
+  final def take(n: Int): TakeStream[E] =
+    if n <= 0 then EmptyTakeStream.asInstanceOf[TakeStream[E]]
     else new TakeStream[E](this, n)
 
   inline final def takeWhile(p: E => Boolean): FiniteStream[E] = new TakeWhileStream[E](this, p)

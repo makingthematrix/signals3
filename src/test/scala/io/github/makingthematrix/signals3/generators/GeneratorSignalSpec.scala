@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, waitForResult}
-import io.github.makingthematrix.signals3.{EventContext, FlagSignal, Signal, Threading}
+import io.github.makingthematrix.signals3.{EventContext, DoneSignal, Signal, Threading}
 
 import scala.collection.mutable
 import scala.concurrent.duration.*
@@ -12,7 +12,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
   
   test("fibonacci signal with generate") {
     val builder = mutable.ArrayBuilder.make[Int]
-    val isSuccess = FlagSignal()
+    val isSuccess = DoneSignal()
   
     val signal = GeneratorSignal.generate((0, 1), 200.millis) { case (a, b) => (b, a + b) }
     signal.foreach { case (_, b) =>
@@ -27,7 +27,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
 
   test("fibonacci signal with unfold") {
     val builder = mutable.ArrayBuilder.make[Int]
-    val isSuccess = FlagSignal()
+    val isSuccess = DoneSignal()
 
     val signal =
       GeneratorSignal.unfold((0, 1), 200.millis) { case (a, b) => (b, a + b) -> b }

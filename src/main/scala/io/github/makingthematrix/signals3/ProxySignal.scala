@@ -92,52 +92,23 @@ private[signals3] object ProxySignal {
     override protected def computeValue(current: Option[V]): Option[V] =
       if !closed then source.value else current
   }
-  
-  final class TakeSignal[V](source: Signal[V], take: Int) 
-    extends IndexedSignal[V](source) with Finite[V, SourceSignal[V]](SourceSignal[V]) {
-    override def isClosed: Boolean = super.isClosed || counter >= take
-
-    override protected def computeValue(current: Option[V]): Option[V] =
-      if (!isClosed && source.value != current) {
-        inc()
-        if (counter < take)
-          (initSource, source.value) match {
-            case (Some(s), Some(v)) => s ! v
-            case _ =>
-          }
-        else {
-          (lastPromise, source.value) match {
-            case (Some(p), Some(v)) if !p.isCompleted => p.trySuccess(v)
-            case _ =>
-          }
-          close()
-        }
-        source.value
-      } else current
-  }
 
   final class TakeWhileSignal[V](source: Signal[V], p: V => Boolean)
-    extends ProxySignal[V](source) with Finite[V, SourceSignal[V]](SourceSignal[V]) {
+    extends ProxySignal[V](source) with Finite[V] {
+
+    computeValue(source.value)
 
     override protected def computeValue(current: Option[V]): Option[V] =
-      if isClosed || source.value == current then current
-      else
-        if !source.value.exists(p) then {
-          close()
-          (lastPromise, current) match {
-            case (Some(p), Some(c)) if !p.isCompleted => p.trySuccess(c)
-            case _ =>
-          }
-          current
+      if (isClosed || source.value == current) current
+      else if (!source.value.exists(p)) {
+        (lastPromise, current) match {
+          case (Some(promise), Some(v)) if !promise.isCompleted => promise.trySuccess(v)
+          case _ =>
         }
-        else {
-          (initSource, current) match {
-            case (Some(s), Some(c)) => s ! c
-            case _ =>
-          }
-          source.value
-        } // end if
-      end if
+        close()
+        current
+      }
+      else source.value
   }
 
   final class DropWhileSignal[V](source: Signal[V], p: V => Boolean) extends ProxySignal[V](source) {

@@ -48,7 +48,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     */
   protected[signals3] def update(f: Option[V] => Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
     updateMonitor.synchronized {
-      set(f(value), currentContext)
+      setValue(f(value), currentContext)
     }
 
   /** Sets the value of the signal to the new one.
@@ -63,7 +63,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     * @return true if the new value is different from the old one and so a change actually happens and the subscribers will be notified,
     *         false if the new value is the same as the old one.
     */
-  protected[signals3] def set(v: Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
+  protected[signals3] def setValue(v: Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
     if value != v then {
       value = v
       notifySubscribers(currentContext)
@@ -422,7 +422,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     *
     * @param value The new value of the signal.
     */
-  protected def publish(value: V): Unit = set(Some(value))
+  protected[signals3] def publish(value: V): Unit = setValue(Some(value))
 
   /** Sets the value of the signal to the given value. Notifies the subscribers if the value actually changes.
     * if the subscription specify the execution context, that execution context will be used to execute the subscriber
@@ -432,7 +432,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     * @param currentContext The execution context that will be used to call the subscriber function if the subscription
     *                       does not say otherwise.
     */
-  protected def publish(value: V, currentContext: ExecutionContext): Unit = set(Some(value), Some(currentContext))
+  protected def publish(value: V, currentContext: ExecutionContext): Unit = setValue(Some(value), Some(currentContext))
 
   /** Creates a boolean signal where the value is the result of comparison of current values in both the original signals.
     * This method uses Scala `equals` internally and for the sake of consistency with how `equals` works in Scala, 
@@ -526,13 +526,13 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
   }
 
   final def drop(n: Int): Signal[V] =
-    if n == 0 then this
+    if n <= 0 then this
     else new DropSignal[V](this, n)
 
   final inline def dropWhile(p: V => Boolean): Signal[V] = new DropWhileSignal[V](this, p)
 
-  final def take(n: Int): FiniteSignal[V] =
-    if n == 0 then EmptyTakeSignal.asInstanceOf[FiniteSignal[V]]
+  final def take(n: Int): TakeSignal[V] =
+    if n <= 0 then EmptyTakeSignal.asInstanceOf[TakeSignal[V]]
     else new TakeSignal[V](this, n)
 
   final inline def takeWhile(p: V => Boolean): FiniteSignal[V] = new TakeWhileSignal[V](this, p)
@@ -843,7 +843,7 @@ object Signal {
   def from[V](future: Future[V], executionContext: ExecutionContext): Signal[V] =
     new Signal[V]().tap { signal =>
       future.foreach {
-        res => signal.set(Option(res), Some(executionContext))
+        res => signal.setValue(Option(res), Some(executionContext))
       }(using executionContext)
     }
 
@@ -871,5 +871,5 @@ object Signal {
     */
   inline def from[V](source: Stream[V]): Signal[V] = new StreamSignal[V](source)
 
-  def flag(): FlagSignal = new FlagSignal()
+  def flag(): DoneSignal = new DoneSignal()
 }

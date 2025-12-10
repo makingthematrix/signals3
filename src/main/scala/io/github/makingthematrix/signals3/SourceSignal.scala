@@ -11,7 +11,7 @@ import scala.concurrent.ExecutionContext
   *
   * @tparam V the type of the value held by the signal.
   */
-final class SourceSignal[V](protected val v: Option[V]) extends Signal[V](v) {
+class SourceSignal[V](protected val v: Option[V]) extends Signal[V](v) {
   /** Changes the value of the signal.
     *
     * The original `publish` method of the [[Signal]] class is `protected` to ensure that intermediate signals - those created
