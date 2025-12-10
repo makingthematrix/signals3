@@ -4,8 +4,8 @@ import io.github.makingthematrix.signals3.Stream.EventSubscriber
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success}
 import scala.util.chaining.scalaUtilChainingOps
+import scala.util.{Failure, Success}
 
 
 /** A superclass for all event streams which compose other event streams into one.
@@ -127,49 +127,26 @@ private[signals3] object ProxyStream {
     override def isClosed: Boolean = closed
 
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      if !closed then dispatch(event, sourceContext)
-  }
-
-  final class TakeStream[E](source: Stream[E], take: Int) 
-    extends IndexedStream[E](source) with Finite[E, SourceStream[E]](SourceStream[E]) {
-    override def isClosed: Boolean = super.isClosed || counter >= take
-
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = { 
-      if (!isClosed) {
-        inc()
-        dispatch(event, sourceContext)
-        if (!isClosed) initSource.foreach { _ ! event }
-      }
-      if (isClosed) lastPromise.foreach {
-        case p if !p.isCompleted => p.trySuccess(event)
-        case _ =>
-      }
-    }
+      if (!closed) dispatch(event, sourceContext)
   }
 
   final class TakeWhileStream[E](source: Stream[E], p: E => Boolean)
-    extends ProxyStream[E, E](source) with Finite[E, SourceStream[E]](SourceStream[E]) {
+    extends ProxyStream[E, E](source) with Finite[E]{
 
     private var previousEvent: Option[E] = None
 
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      if !isClosed then
-        if !p(event) then {
-          close()
-          (lastPromise, previousEvent) match {
-            case (Some(p), Some(pe)) if !p.isCompleted => p.trySuccess(pe)
-            case _ =>
-          }
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = if (!isClosed) {
+      if !p(event) then {
+        close()
+        (lastPromise, previousEvent) match {
+          case (Some(p), Some(pe)) if !p.isCompleted => p.trySuccess(pe)
+          case _ =>
         }
-        else {
-          dispatch(event, sourceContext)
-          (initSource, previousEvent) match {
-            case (Some(s), Some(pe)) => s ! pe
-            case _ =>
-          }
-          previousEvent = Some(event)
-        } // end if
-      end if
+      } else {
+        dispatch(event, sourceContext)
+        previousEvent = Some(event)
+      }
+    }
   }
 
   final class FlatMapStream[E, V](source: Stream[E], f: E => Stream[V])

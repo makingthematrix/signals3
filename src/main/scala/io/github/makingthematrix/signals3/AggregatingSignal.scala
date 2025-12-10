@@ -68,14 +68,14 @@ final class AggregatingSignal[E, V](loader: () => Future[V], sourceStream: Strea
 
   override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit = valueMonitor.synchronized {
     if loadId.intValue() == 0 then
-      value.foreach(v => self.set(Some(updater(v, event)), currentContext))
+      value.foreach(v => self.setValue(Some(updater(v, event)), currentContext))
     else
       stash :+= event
   }
 
   private def startLoading(id: Int): Unit = loader().onComplete {
     case Success(s) if loadId.intValue() == id => valueMonitor.synchronized {
-      self.set(Some(stash.foldLeft(s)(updater)), Some(ec))
+      self.setValue(Some(stash.foldLeft(s)(updater)), Some(ec))
       loadId.compareAndSet(id, 0)
       stash = Vector.empty
     }

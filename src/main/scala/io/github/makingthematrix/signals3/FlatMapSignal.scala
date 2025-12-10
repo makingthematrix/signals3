@@ -36,7 +36,7 @@ final private[signals3] class FlatMapSignal[A, B](source: Signal[A], f: A => Sig
         else false
       }
 
-      if changed then set(mapped.value)
+      if changed then setValue(mapped.value)
     }
   }
 
@@ -58,5 +58,5 @@ final private[signals3] class FlatMapSignal[A, B](source: Signal[A], f: A => Sig
     mapped.unsubscribe(this)
   }
 
-  override def changed(currentContext: Option[ExecutionContext]): Unit = set(mapped.value, currentContext)
+  override def changed(currentContext: Option[ExecutionContext]): Unit = setValue(mapped.value, currentContext)
 }

@@ -1,8 +1,9 @@
 package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.Closeable.CloseableSignal
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Finite, Indexed, Signal, SourceSignal, Threading}
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Finite, Indexed, Signal, Threading}
 import io.github.makingthematrix.signals3.EventSource.NoAutowiring
+import io.github.makingthematrix.signals3.Finite.FiniteSignal
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
@@ -86,7 +87,7 @@ class FiniteGeneratorSignal[V](interval: FiniteDuration | (V => Long),
                                val values: Iterable[V],
                                override val paused: V => Boolean)
                               (using ec: ExecutionContext)
-  extends GeneratorSignal[V](values.head, interval) with Finite[V, SourceSignal[V]](SourceSignal[V]) with Indexed with VPausable[V] {
+  extends GeneratorSignal[V](values.head, interval) with Finite[V] with Indexed with VPausable[V] {
   inc() // the first value in values becomes the initial value, so we already increase the counter to 1
   private val it = values.tail.iterator
 
@@ -98,13 +99,17 @@ class FiniteGeneratorSignal[V](interval: FiniteDuration | (V => Long),
       val v = it.next()
       inc()
       publish(v, ec)
-      if (!isClosed) initSource.foreach {_ ! v}
-      else lastPromise.foreach {
-        case p if !p.isCompleted => p.trySuccess(v)
-        case _ =>
+      if (isClosed) {
+        beat.close()
+        lastPromise.foreach {
+          case p if !p.isCompleted => p.trySuccess(v)
+          case _ =>
+        }
       }
     }
   }
+
+  lazy val init: FiniteSignal[V] = this.take(values.size - 1)
 }
 
 class LazyListGeneratorSignal[V](interval: FiniteDuration | (V => Long),

@@ -14,6 +14,6 @@ final private[signals3] class ConstSignal[V] (private val v: Option[V])
   override inline def subscribe(subscriber: SignalSubscriber): Unit = {}
   override inline def unsubscribe(subscriber: SignalSubscriber): Unit = {}
   override inline protected[signals3] def update(f: Option[V] => Option[V], ec: Option[ExecutionContext]): Boolean = false
-  override inline protected[signals3] def set(v: Option[V], ec: Option[ExecutionContext]): Boolean = false
+  override inline protected[signals3] def setValue(v: Option[V], ec: Option[ExecutionContext]): Boolean = false
   override inline def isClosed: Boolean = true
 }
