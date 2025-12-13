@@ -212,7 +212,7 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
     *                future is finished or cancelled.
     * @return A closeable future which will finish with the next event emitted by the stream.
     */
-  final def next(using context: EventContext = EventContext.Global, executionContext: ExecutionContext = Threading.defaultContext): CloseableFuture[E] = {
+  final def next(using context: EventContext = EventContext.Global, executionContext: ExecutionContext): CloseableFuture[E] = {
     val p = Promise[E]()
     val o = onCurrent { p.trySuccess }
     p.future.onComplete(_ => o.destroy())
@@ -220,11 +220,11 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
   }
 
   /** A shorthand for `next` which additionally unwraps the closeable future */
-  inline final def future(using context: EventContext = EventContext.Global, executionContext: ExecutionContext = Threading.defaultContext): Future[E] =
+  inline final def future(using context: EventContext = EventContext.Global, executionContext: ExecutionContext): Future[E] =
     next.future
 
   /** An alias to the `future` method. */
-  inline final def head: Future[E] = future
+  inline final def head(using ec: ExecutionContext): Future[E] = future
   
   inline final def tail: Stream[E] = drop(1)
 
@@ -258,7 +258,7 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
 
 object Stream {
   object `::` {
-    def unapply[E](stream: Stream[E]): (Future[E], Stream[E]) = (stream.head, stream.tail)
+    def unapply[E](stream: Stream[E])(using ec: ExecutionContext): (Future[E], Stream[E]) = (stream.head, stream.tail)
   }
 
   private final val EmptyTakeStream: TakeStream[Any] = new TakeStream[Any](Stream[Any](), 0)

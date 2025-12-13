@@ -6,10 +6,9 @@ import testutils.*
 import scala.collection.mutable
 
 class FlagSignalSpec extends munit.FunSuite {
+  import Threading.defaultContext
 
   test("Take and use .last to get the last of the taken elements (FlagSignal)") {
-    given DispatchQueue = SerialDispatchQueue()
-
     val a = FlagSignal() // starts with false
 
     val taken: FiniteSignal[Boolean] = a.take(2)
@@ -31,8 +30,6 @@ class FlagSignalSpec extends munit.FunSuite {
   }
 
   test("Take and use .init to get all but the last element (FlagSignal)") {
-    given DispatchQueue = SerialDispatchQueue()
-
     val a = FlagSignal() // starts with false
 
     val taken = a.take(3)
@@ -61,8 +58,6 @@ class FlagSignalSpec extends munit.FunSuite {
   }
 
   test("Empty take signal is already closed (FlagSignal)") {
-    given DispatchQueue = SerialDispatchQueue()
-
     val a = FlagSignal()
     val taken0 = a.take(0)
     assert(taken0.isClosed)
@@ -80,8 +75,6 @@ class FlagSignalSpec extends munit.FunSuite {
   }
 
   test("Group the FlagSignal with grouped(2)") {
-    given DispatchQueue = SerialDispatchQueue()
-
     val a = FlagSignal() // initial value false participates in grouping
     val b: Signal[Seq[Boolean]] = a.grouped(2)
 
@@ -102,8 +95,6 @@ class FlagSignalSpec extends munit.FunSuite {
   }
 
   test("Group the FlagSignal by change in value") {
-    given DispatchQueue = SerialDispatchQueue()
-
     val a = FlagSignal()
     var last: Option[Boolean] = None
     val b: Signal[Seq[Boolean]] = a.groupBy { v =>

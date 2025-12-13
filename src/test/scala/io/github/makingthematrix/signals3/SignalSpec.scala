@@ -15,6 +15,7 @@ import scala.language.postfixOps
 
 class SignalSpec extends munit.FunSuite {
   private val eventContext = EventContext()
+  import Threading.defaultContext
 
   override def beforeEach(context: BeforeEach): Unit =
     eventContext.start()
@@ -23,7 +24,6 @@ class SignalSpec extends munit.FunSuite {
     eventContext.stop()
 
   test("Receive initial value") {
-
     val received = Signal(Seq.empty[Int])
     val capture: Int => Unit = { value => received.mutate(_ :+ value) }
 

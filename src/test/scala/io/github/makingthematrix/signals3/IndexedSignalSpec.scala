@@ -6,7 +6,7 @@ import scala.collection.mutable
 
 class IndexedSignalSpec extends munit.FunSuite {
   import EventContext.Implicits.global
-  given DispatchQueue = SerialDispatchQueue()
+  import Threading.defaultContext
 
   test("Counter starts at zero") {
     val a: Indexed = Signal().indexed
@@ -48,9 +48,11 @@ class IndexedSignalSpec extends munit.FunSuite {
   }
 
   test("take(1) signal takes the current value of its parent and is already closed") {
+    given DispatchQueue = SerialDispatchQueue() // TODO: This test fails if we use Threading.defaultContext instead of SerialDispatchQueue(), check why
     val a = Signal[Int](1)
     assert(a.currentValue.contains(1))
     val b = a.take(1)
+    awaitAllTasks
     assert(b.currentValue.contains(1))
     assert(b.isClosed)
 
@@ -275,6 +277,7 @@ class IndexedSignalSpec extends munit.FunSuite {
   }
 
   test("Take and use .init to get all but the last element") {
+    given DispatchQueue = SerialDispatchQueue() // TODO: This test fails if we use Threading.defaultContext instead of SerialDispatchQueue(), check why
     val a: SourceSignal[Int] = Signal[Int]()
 
     val c = a.take(3)

@@ -62,7 +62,7 @@ package object testutils {
 
   def waitForResult[V](signal: Signal[V], expected: V): Boolean = waitForResult(signal, expected, DefaultTimeout)
 
-  def waitForResult[E](stream: Stream[E], expected: E, timeout: FiniteDuration): Boolean = {
+  def waitForResult[E](stream: Stream[E], expected: E, timeout: FiniteDuration)(using ec: ExecutionContext): Boolean = {
     val offset = System.currentTimeMillis()
     while System.currentTimeMillis() - offset < timeout.toMillis do {
       Try(result(stream.next)(using timeout)) match {
@@ -77,7 +77,7 @@ package object testutils {
     false
   }
 
-  def waitForResult[E](stream: Stream[E], expected: E): Boolean = waitForResult(stream, expected, DefaultTimeout)
+  def waitForResult[E](stream: Stream[E], expected: E)(using ec: ExecutionContext): Boolean = waitForResult(stream, expected, DefaultTimeout)
 
   /**
     * Very useful for checking that something DOESN'T happen (e.g., ensure that a signal doesn't get updated after

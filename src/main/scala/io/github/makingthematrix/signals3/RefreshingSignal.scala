@@ -23,9 +23,9 @@ import scala.util.{Failure, Success}
   * @tparam V The value type of the signal and the result of the `loader` closeable future.
   */
 final class RefreshingSignal[V](loader: () => CloseableFuture[V], refreshStream: Stream[?])
-                               (using ec: ExecutionContext = Threading.defaultContext)
+                               (using ec: ExecutionContext)
   extends Signal[V] {
-  @volatile private var loadFuture = CloseableFuture.closed[Unit]()
+  @volatile private var loadFuture = CloseableFuture.closed[Unit]
   @volatile private var subscription = Option.empty[Subscription]
 
   private def reload(): Unit = subscription.foreach { _ =>
@@ -80,13 +80,13 @@ object RefreshingSignal {
     * @return A new refreshing signal with the value of the type `V`.
     */
   def apply[V](loader: () => CloseableFuture[V], refreshStream: Stream[?])
-              (using ec: ExecutionContext = Threading.defaultContext): RefreshingSignal[V] =
+              (using ec: ExecutionContext): RefreshingSignal[V] =
     new RefreshingSignal(loader, refreshStream)
 
   /** A version of the `apply` method where the loader is a regular Scala future. It will be wrapped in a closeable future
     * on the first execution.
     */
   inline def from[V](loader: => Future[V], refreshStream: Stream[?])
-                    (using ec: ExecutionContext = Threading.defaultContext): RefreshingSignal[V] =
+                    (using ec: ExecutionContext): RefreshingSignal[V] =
     new RefreshingSignal(() => CloseableFuture.lift(loader), refreshStream)
 }

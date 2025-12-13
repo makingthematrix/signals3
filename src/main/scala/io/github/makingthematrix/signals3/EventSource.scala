@@ -47,7 +47,7 @@ abstract class EventSource[E, S] {
 
   /** An alias for the `on` method with the default [[ExecutionContext]]. */
   inline final def foreach(body: E => Unit)
-                          (using executionContext: ExecutionContext = Threading.defaultContext,
+                          (using executionContext: ExecutionContext,
                            eventContext: EventContext = EventContext.Global): Subscription =
     on(executionContext)(body)
 

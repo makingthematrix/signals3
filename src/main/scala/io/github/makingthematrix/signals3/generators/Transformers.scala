@@ -2,7 +2,7 @@ package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.ProxyStream.*
 import io.github.makingthematrix.signals3.ProxySignal.*
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Signal, Stream, Threading}
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Signal, Stream}
 import io.github.makingthematrix.signals3.Closeable.{CloseableSignal, CloseableStream}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -256,7 +256,7 @@ object Transformers {
     * @return        A new closeable stream which will emit at most only one event of the type `E`.
     */
   def streamFromFuture[E](cFuture: CloseableFuture[E])
-                         (using ec: ExecutionContext = Threading.defaultContext): CloseableStream[E] =
+                         (using ec: ExecutionContext): CloseableStream[E] =
     new Stream[E]() with Closeability(cFuture).tap { stream =>
       cFuture.foreach { stream.dispatch(_, Some(ec)) }
     }
@@ -271,7 +271,7 @@ object Transformers {
     * @return        A new closeable signal which starts empty and will update at most only once.
     */
   def signalFromFuture[V](cFuture: CloseableFuture[V])
-                         (using ec: ExecutionContext = Threading.defaultContext): CloseableSignal[V] =
+                         (using ec: ExecutionContext): CloseableSignal[V] =
     new Signal[V]() with Closeability(cFuture).tap { signal =>
       cFuture.foreach { res => signal.setValue(Option(res), Some(ec)) }
     }

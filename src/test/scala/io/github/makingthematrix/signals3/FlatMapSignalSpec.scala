@@ -3,6 +3,8 @@ package io.github.makingthematrix.signals3
 import testutils.{awaitAllTasks, result}
 
 class FlatMapSignalSpec extends munit.FunSuite {
+  import EventContext.Implicits.global
+  import Threading.defaultContext
 
   private var received = Vector.empty[Int]
   private val capture = (value: Int) => received :+= value

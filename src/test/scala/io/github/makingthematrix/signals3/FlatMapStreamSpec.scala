@@ -3,8 +3,10 @@ package io.github.makingthematrix.signals3
 import testutils.{awaitAllTasks, waitForResult}
 
 class FlatMapStreamSpec extends munit.FunSuite {
+  import EventContext.Implicits.global
+  import Threading.defaultContext
+
   test("Normal flatmapping") {
-    given dispatchQueue: DispatchQueue = SerialDispatchQueue()
     val received = Signal(Seq.empty[Int])
     val capture: Int => Unit = { value => received.mutate(_ :+ value) }
 
@@ -54,7 +56,6 @@ class FlatMapStreamSpec extends munit.FunSuite {
   }
 
   test("Chained flatmapping") {
-    given dispatchQueue: DispatchQueue = SerialDispatchQueue()
     val received = Signal(Seq.empty[Int])
     val capture: Int => Unit = { value => received.mutate(_ :+ value) }
 

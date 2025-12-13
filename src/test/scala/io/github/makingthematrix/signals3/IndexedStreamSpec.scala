@@ -9,7 +9,7 @@ import scala.collection.mutable
 
 class IndexedStreamSpec extends munit.FunSuite {
   import EventContext.Implicits.global
-  given DispatchQueue = SerialDispatchQueue()
+  given DispatchQueue = SerialDispatchQueue() // TODO: This test suite fails if we use Threading.defaultContext instead of SerialDispatchQueue(), check why
 
   test("Counter starts at zero") {
     val a: Indexed = Stream().indexed
