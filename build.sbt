@@ -65,7 +65,7 @@ lazy val root = (project in file("."))
     name := "signals3",
     libraryDependencies ++= Seq(
       //Test dependencies
-      "org.scalameta" %% "munit" % "1.2.0" % "test"
+      "org.scalameta" %% "munit" % "1.2.1" % "test"
     ),
     scalacOptions ++= standardOptions ++ scala3Options
   )

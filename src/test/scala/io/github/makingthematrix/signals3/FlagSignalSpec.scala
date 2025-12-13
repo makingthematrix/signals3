@@ -36,6 +36,7 @@ class FlagSignalSpec extends munit.FunSuite {
     val a = FlagSignal() // starts with false
 
     val taken = a.take(3)
+    awaitAllTasks
     val takenBuffer = mutable.ArrayBuilder.make[Boolean]
     taken.foreach(b => takenBuffer.addOne(b))
 
