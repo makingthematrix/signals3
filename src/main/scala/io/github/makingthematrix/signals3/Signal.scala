@@ -871,5 +871,7 @@ object Signal {
     */
   inline def from[V](source: Stream[V]): Signal[V] = new StreamSignal[V](source)
 
-  def flag(): DoneSignal = new DoneSignal()
+  private[signals3] def done(): DoneSignal = new DoneSignal()
+
+  def flag(): FlagSignal = FlagSignal()
 }

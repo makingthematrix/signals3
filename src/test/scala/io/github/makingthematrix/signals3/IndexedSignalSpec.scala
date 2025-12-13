@@ -4,9 +4,33 @@ import testutils.*
 
 import scala.collection.mutable
 
-class TakeSignalSpec extends munit.FunSuite {
+class IndexedSignalSpec extends munit.FunSuite {
+  import EventContext.Implicits.global
+  given DispatchQueue = SerialDispatchQueue()
+
+  test("Counter starts at zero") {
+    val a: Indexed = Signal().indexed
+    assertEquals(0, a.counter)
+  }
+
+  test("Count events") {
+    val a = Signal[Int]()
+    val b = a.indexed
+    var localCounter = 0
+    b.foreach { _ =>
+      localCounter += 1
+      assertEquals(b.counter, localCounter)
+    }
+
+    a ! 1
+    awaitAllTasks
+    a ! 2
+    awaitAllTasks
+    a ! 3
+    awaitAllTasks
+  }
+
   test("Empty take signal is already closed") {
-    given DispatchQueue = SerialDispatchQueue()
     val a = Signal[Int]()
     val b = a.take(0)
     assert(b.isClosed)
@@ -24,8 +48,6 @@ class TakeSignalSpec extends munit.FunSuite {
   }
 
   test("take(1) signal takes the current value of its parent and is already closed") {
-    given DispatchQueue = SerialDispatchQueue()
-
     val a = Signal[Int](1)
     assert(a.currentValue.contains(1))
     val b = a.take(1)
@@ -44,7 +66,6 @@ class TakeSignalSpec extends munit.FunSuite {
   }
 
   test("Take value changes until a condition") {
-    given DispatchQueue = SerialDispatchQueue()
     val a = Signal[String]()
     val b = a.takeWhile(str => str.toInt < 3)
 
@@ -98,8 +119,6 @@ class TakeSignalSpec extends munit.FunSuite {
   }
 
   test("Get info about closing a signal through isClosedSignal") {
-    given dq: DispatchQueue = SerialDispatchQueue()
-
     val a = Signal[Int]()
     val b = a.take(2)
 
@@ -179,8 +198,6 @@ class TakeSignalSpec extends munit.FunSuite {
   }
 
   test("Split a signal in half") {
-    given DispatchQueue = SerialDispatchQueue()
-
     val a = Signal[Int]()
 
     val (b, c) = a.splitAt(2)
@@ -208,7 +225,6 @@ class TakeSignalSpec extends munit.FunSuite {
   }
 
   test("Split a signal into a head future and tail stream") {
-    given DispatchQueue = SerialDispatchQueue()
     import Signal.`::`
     val a = Signal[Int]()
     val (head, tail) = a match {
@@ -237,8 +253,6 @@ class TakeSignalSpec extends munit.FunSuite {
   }
 
   test("Take and use .last to get the last of the taken elements") {
-    given DispatchQueue = SerialDispatchQueue()
-
     val a: SourceSignal[Int] = Signal[Int]()
 
     val c = a.take(2)
@@ -261,8 +275,6 @@ class TakeSignalSpec extends munit.FunSuite {
   }
 
   test("Take and use .init to get all but the last element") {
-    given DispatchQueue = SerialDispatchQueue()
-
     val a: SourceSignal[Int] = Signal[Int]()
 
     val c = a.take(3)
