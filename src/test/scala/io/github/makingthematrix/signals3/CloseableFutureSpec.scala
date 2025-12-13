@@ -1,19 +1,20 @@
 package io.github.makingthematrix.signals3
 
-import CloseableFuture.Closed
-import CloseableFuture.toFuture
+import CloseableFuture.{Closed, toCloseable, toFuture}
+
 import scala.language.implicitConversions
 import scala.util.chaining.scalaUtilChainingOps
-
 import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration.*
 import testutils.*
 
 class CloseableFutureSpec extends munit.FunSuite {
+  import EventContext.Implicits.global
+  import Threading.defaultContext
+
   test("Transform between a future and a closeable future") {
-    import CloseableFuture._
     val f1: Future[Unit] = Future.successful(())
-    val cf1 = f1.lift
+    val cf1 = f1.toCloseable
     cf1 match {
       case _: CloseableFuture[Unit] =>
       case null => fail("Future[Unit] should be transformed into CloseableFuture[Unit]")
@@ -33,7 +34,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Create a closeable future from the body") {
-    import Threading.defaultContext
     var res = 0
 
     val cf = CloseableFuture { res = 1 }
@@ -57,12 +57,11 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Create an already closed closeable future") {
-    val cf = CloseableFuture.closed()
+    val cf = CloseableFuture.closed
     assert(cf.isCompleted)
   }
 
   test(" A closeable future succeeds just like a standard one") {
-    given ec: DispatchQueue = SerialDispatchQueue()
     var res = 0
 
     val p = Promise[Int]()
@@ -70,6 +69,7 @@ class CloseableFutureSpec extends munit.FunSuite {
     f.foreach { res = _ }
 
     val cf = CloseableFuture.from(p).tap { _.onClose { res = -1 } }
+    awaitAllTasks
 
     p.success(1)
     assertEquals(result(f), 1)
@@ -80,7 +80,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("A closeable future can be closed (wow! who would expect that)"){
-    import Threading.defaultContext
     val res = Signal(0)
 
     val p = Promise[Int]()
@@ -96,7 +95,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("A closeable future can't be closed twice") {
-    import Threading.defaultContext
     val res = Signal(0)
 
     val p = Promise[Int]()
@@ -126,7 +124,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Complete a closeable future delayed in another way") {
-    import Threading.defaultContext
     var res = 0
 
     val cf: CloseableFuture[Unit] = CloseableFuture.delayed(500.millis) { res = 1 }
@@ -138,7 +135,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Close a delayed future") {
-    import Threading.defaultContext
     var res = 0
 
     val cf: CloseableFuture[Unit] = CloseableFuture.delayed(500.millis) { res = 1 }
@@ -151,8 +147,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Repeat a task until closed") {
-    import Threading.defaultContext
-
     var timestamps = Seq.empty[Long]
     val offset = System.currentTimeMillis
     val cf = CloseableFuture.repeat(100.millis){ timestamps :+= (System.currentTimeMillis - offset) }
@@ -165,8 +159,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Turn a sequence of closeable futures into one") {
-    import Threading.defaultContext
-
     var timestamps = Seq.empty[Long]
     val offset = System.currentTimeMillis
     val cf1 = CloseableFuture.delayed(100.millis) { timestamps :+= (System.currentTimeMillis - offset) }
@@ -179,9 +171,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("You can't close a lifted future") {
-    import Threading.defaultContext
-    import CloseableFuture._
-
     var theFlag = false // this should stay false if the future was closed (but it won't)
     var semaphore = false
     val f1: Future[Unit] = Future {
@@ -189,7 +178,7 @@ class CloseableFutureSpec extends munit.FunSuite {
       theFlag = true
     }
 
-    val cf1 = f1.lift
+    val cf1 = f1.toCloseable
     assert(!cf1.closeAndCheck())
 
     semaphore = true
@@ -199,8 +188,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Traverse a sequence of tasks") {
-    import Threading.defaultContext
-
     var timestamps = Seq.empty[Long]
     val offset = System.currentTimeMillis
     val millis = Seq(200, 100, 50, 150)
@@ -211,8 +198,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Traverse a sequence of tasks sequentially") {
-    import Threading.defaultContext
-
     var timestamps = Seq.empty[(Int, Long)]
     val offset = System.currentTimeMillis
     val millis = Seq((1, 200), (2, 100), (3, 50), (4, 150))
@@ -227,8 +212,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Traverse a sequence of tasks - quickest goes first") {
-    import Threading.defaultContext
-
     var timestamps = Seq.empty[(Int, Long)]
     val offset = System.currentTimeMillis
     val millis = Seq((1, 200), (2, 100), (3, 50), (4, 150))
@@ -244,8 +227,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Close a sequence of closeable futures") {
-    import Threading.defaultContext
-
     val onClose = Signal(false)
 
     var timestamps = Seq.empty[Long]
@@ -264,8 +245,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("After a successful execution of one future in the sequence, close the rest") {
-    import Threading.defaultContext
-
     val onClose = Stream[Unit]()
 
     var timestamps = Seq.empty[Long]
@@ -289,8 +268,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Close a traverse after the first task finishes with success") {
-    import Threading.defaultContext
-
     val onClose = Stream[Unit]()
     var timestamps = Seq.empty[Long]
     val offset = System.currentTimeMillis
@@ -312,8 +289,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Close a sequential traverse after the first task finishes with success") {
-    import Threading.defaultContext
-
     val onClose = Stream[Unit]()
     var timestamps = Seq.empty[Long]
     val offset = System.currentTimeMillis
@@ -335,8 +310,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Sequence two closeable futures and get the result") {
-    import Threading.defaultContext
-
     val cf1: CloseableFuture[String] = CloseableFuture.delayed(100.millis) { "foo" }
     val cf2: CloseableFuture[String] = CloseableFuture.delayed(150.millis) { "bar" }
     val cf: CloseableFuture[Iterable[String]] = CloseableFuture.sequence(Vector(cf1, cf2))
@@ -348,8 +321,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Zip two closeable futures") {
-    import Threading.defaultContext
-
     val cf1: CloseableFuture[String] = CloseableFuture.delayed(100.millis) { "foo" }
     val cf2: CloseableFuture[Int] = CloseableFuture.delayed(150.millis) { 666 }
     val cf: CloseableFuture[(String, Int)] = CloseableFuture.zip(cf1, cf2)
@@ -357,8 +328,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Close zipped futures") {
-    import Threading.defaultContext
-
     val s = Signal(0)
 
     val cf1 = CloseableFuture.delayed(200.millis) { s ! 1; "foo" }
@@ -373,8 +342,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("You can't close an uncloseable future") {
-    import Threading.defaultContext
-
     val s = Signal(0)
 
     val cf = CloseableFuture.delayed(200.millis) { s ! 1 }.toUncloseable
@@ -388,8 +355,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Closing a future triggers its onClose task") {
-    import Threading.defaultContext
-
     val s = Signal(0)
 
     val cf = CloseableFuture { Thread.sleep(200); s ! 1 }.tap { _.onClose { s ! 2 } }
@@ -403,8 +368,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Closing a delayed future triggers its onClose task") {
-    import Threading.defaultContext
-
     val s = Signal(0)
 
     val cf = CloseableFuture.delayed(200.millis){ s ! 1 }.tap { _.onClose { s ! 2 } }
@@ -418,7 +381,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("A failed but not closed future does not trigger onClose") {
-    import Threading.defaultContext
     var res = 0
 
     val cf: CloseableFuture[Unit] = CloseableFuture { Thread.sleep(500); res = 1 }.tap { _.onClose { res = 2 } }
@@ -433,7 +395,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("onClose added after the future is already finished won't work") {
-    import Threading.defaultContext
     var res = 0
 
     val cf: CloseableFuture[Unit] = CloseableFuture { res = 1 }
@@ -447,7 +408,7 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("onClose added after the future is already closed won't work") {
-    import Threading.defaultContext
+
     var res = 0
 
     val cf: CloseableFuture[Unit] = CloseableFuture { Thread.sleep(500); res = 1 }
@@ -460,8 +421,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Map a closeable future") {
-    import Threading.defaultContext
-
     val cf1 = CloseableFuture { Thread.sleep(50); "foo" }
     val cf2 = cf1.map(_.toUpperCase)
 
@@ -477,8 +436,6 @@ class CloseableFutureSpec extends munit.FunSuite {
     * futures as well (and `.traverse`, and `.zip`, etc.)
     */
   test("Closing a mapped future also closes the original one") {
-    import Threading.defaultContext
-
     val s = Signal("")
 
     val cf1 = CloseableFuture { Thread.sleep(500); s ! "foo"; "foo" }.tap { _.onClose { s ! "bar" } }
@@ -490,8 +447,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Flat-map a closeable future") {
-    import Threading.defaultContext
-
     val cf1 = CloseableFuture { Thread.sleep(50); "foo" }
     val cf2 = cf1.flatMap {
       case ""    => CloseableFuture.successful("boo")
@@ -502,8 +457,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("Closing a flat-mapped future also closes the original one") {
-    import Threading.defaultContext
-
     val s = Signal("")
 
     val cf1 = CloseableFuture { Thread.sleep(500); s ! "foo"; "foo" }.tap { _.onClose { s ! "bar" } }
@@ -518,8 +471,6 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test("recover from a closed future") {
-    import Threading.defaultContext
-
     val cf1 = CloseableFuture { Thread.sleep(500); "foo" }
     val cf2 = cf1.recover {
       case Closed => "bar"

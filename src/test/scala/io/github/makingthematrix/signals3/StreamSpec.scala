@@ -9,6 +9,7 @@ import scala.language.postfixOps
 
 class StreamSpec extends munit.FunSuite {
   import EventContext.Implicits.global
+  import Threading.defaultContext
 
   test("unsubscribe from source and current mapped signal on onUnwire") {
     val a: SourceStream[Int] = Stream()

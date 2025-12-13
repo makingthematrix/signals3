@@ -2,7 +2,7 @@ package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.EventSource.NoAutowiring
 import io.github.makingthematrix.signals3.Finite.FiniteStream
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Finite, Indexed, Stream, Threading}
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Finite, Indexed, Stream}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
@@ -154,7 +154,7 @@ object GeneratorStream {
   def apply[E](generate: () => E,
                interval: FiniteDuration,
                paused  : () => Boolean = () => false)
-              (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[E] =
+              (using ec: ExecutionContext): CloseableGeneratorStream[E] =
     new CloseableGeneratorStream[E](interval, generate, paused).tap(_.initialize())
 
   /**
@@ -172,7 +172,7 @@ object GeneratorStream {
     * @return         A generator stream.
     */
   inline def generate[E](interval: FiniteDuration)(body: => E)
-                        (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[E] =
+                        (using ec: ExecutionContext): CloseableGeneratorStream[E] =
     new CloseableGeneratorStream[E](interval, () => body, () => false).tap(_.initialize())
 
   /**
@@ -191,7 +191,7 @@ object GeneratorStream {
     * @return         A generator stream.
     */
   inline def generateVariant[E](interval: () => Long)(body: => E)
-                               (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[E] =
+                               (using ec: ExecutionContext): CloseableGeneratorStream[E] =
     new CloseableGeneratorStream[E](interval, () => body, () => false).tap(_.initialize())
 
   /**
@@ -206,7 +206,7 @@ object GeneratorStream {
     * @return         A generator stream.
     */
   inline def repeat[E](event: E, interval: FiniteDuration)
-                      (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[E] =
+                      (using ec: ExecutionContext): CloseableGeneratorStream[E] =
     new CloseableGeneratorStream[E](interval, () => event, () => false).tap(_.initialize())
 
   /**
@@ -222,7 +222,7 @@ object GeneratorStream {
     * @return A generator stream.
     */
   inline def repeatVariant[E](event: E, interval: () => Long)
-                             (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[E] =
+                             (using ec: ExecutionContext): CloseableGeneratorStream[E] =
     new CloseableGeneratorStream[E](interval, () => event, () => false).tap(_.initialize())
 
   /**
@@ -235,23 +235,23 @@ object GeneratorStream {
     * @return A generator stream.
     */
   inline def heartbeat(interval: FiniteDuration)
-                      (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[Unit] =
+                      (using ec: ExecutionContext): CloseableGeneratorStream[Unit] =
     repeat((), interval).tap(_.initialize())
 
   inline def heartbeatVariant(interval: () => Long)
-                      (using ec: ExecutionContext = Threading.defaultContext): CloseableGeneratorStream[Unit] =
+                      (using ec: ExecutionContext): CloseableGeneratorStream[Unit] =
     repeatVariant((), interval).tap(_.initialize())
 
   inline def fromIterable[E](events: Iterable[E], interval: FiniteDuration)
-                     (using ec: ExecutionContext = Threading.defaultContext): FiniteGeneratorStream[E] =
+                     (using ec: ExecutionContext): FiniteGeneratorStream[E] =
     new FiniteGeneratorStream[E](interval, events, () => false).tap(_.initialize())
 
   inline def fromIterableVariant[E](events: Iterable[E], interval: () => Long)
-                            (using ec: ExecutionContext = Threading.defaultContext): FiniteGeneratorStream[E] =
+                            (using ec: ExecutionContext): FiniteGeneratorStream[E] =
     new FiniteGeneratorStream[E](interval, events, () => false).tap(_.initialize())
 
   def fromFunction[E](generate: () => Option[E], interval: FiniteDuration)
-                     (using ec: ExecutionContext = Threading.defaultContext): FiniteGeneratorStream[E] = {
+                     (using ec: ExecutionContext): FiniteGeneratorStream[E] = {
     val it = Iterable.from(new Iterator[E]{
       private var _next = generate()
       override def hasNext: Boolean = _next.isDefined
@@ -261,7 +261,7 @@ object GeneratorStream {
   }
 
   def fromFunctionVariant[E](generate: () => Option[E], interval: () => Long)
-                     (using ec: ExecutionContext = Threading.defaultContext): FiniteGeneratorStream[E] = {
+                     (using ec: ExecutionContext): FiniteGeneratorStream[E] = {
     val it = Iterable.from(new Iterator[E]{
       private var _next = generate()
       override def hasNext: Boolean = _next.isDefined
@@ -271,10 +271,10 @@ object GeneratorStream {
   }
 
   inline def fromLazyList[E](events: LazyList[E], interval: FiniteDuration)
-                     (using ec: ExecutionContext = Threading.defaultContext): LazyListGeneratorStream[E] =
+                     (using ec: ExecutionContext): LazyListGeneratorStream[E] =
     new LazyListGeneratorStream[E](interval, events, () => false).tap(_.initialize())
 
   inline def fromLazyListVariant[E](events: LazyList[E], interval: () => Long)
-                            (using ec: ExecutionContext = Threading.defaultContext): LazyListGeneratorStream[E] =
+                            (using ec: ExecutionContext): LazyListGeneratorStream[E] =
     new LazyListGeneratorStream[E](interval, events, () => false).tap(_.initialize())
 }

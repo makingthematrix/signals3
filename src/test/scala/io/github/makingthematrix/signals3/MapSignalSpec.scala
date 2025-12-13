@@ -3,6 +3,9 @@ package io.github.makingthematrix.signals3
 import testutils.waitForResult
 
 class MapSignalSpec extends munit.FunSuite {
+  import EventContext.Implicits.global
+  import Threading.defaultContext
+
   test("Normal mapping") {
     val received = Signal(Seq.empty[Int])
     val capture: Int => Unit = { value => received.mutate(_ :+ value) }

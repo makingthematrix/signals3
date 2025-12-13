@@ -19,7 +19,7 @@ import scala.util.chaining.scalaUtilChainingOps
   * @see https://github.com/wireapp/wire-signals/wiki/Overview
   * @see `Uncloseable` for details on uncloseable futures
   */
-abstract class CloseableFuture[+T](using ec: ExecutionContext = Threading.defaultContext)
+abstract class CloseableFuture[+T](using ec: ExecutionContext)
   extends Awaitable[T] with Closeable {
   self =>
   import CloseableFuture._
@@ -361,7 +361,7 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext = Threading.defaul
   */
 object CloseableFuture {
   extension [T](future: Future[T]) {
-    def lift: CloseableFuture[T] = CloseableFuture.lift(future)(using Threading.defaultContext)
+    def toCloseable(using ec: ExecutionContext): CloseableFuture[T] = CloseableFuture.lift(future)
   }
 
   given toFuture[T]: Conversion[CloseableFuture[T], Future[T]] with {
@@ -408,7 +408,7 @@ object CloseableFuture {
     * @tparam T The result type of the closeable future
     */
   private[signals3] class ActuallyCloseable[+T](promise: Promise[T])
-                                               (using ec: ExecutionContext = Threading.defaultContext) extends CloseableFuture[T] {
+                                               (using ec: ExecutionContext) extends CloseableFuture[T] {
     override val future: Future[T] = promise.future
     override def fail(ex: Throwable): Boolean = promise.tryFailure(ex)
     override def toUncloseable: CloseableFuture[T] = new Uncloseable[T](future)
@@ -450,7 +450,7 @@ object CloseableFuture {
     * @tparam T The result type of the closeable future
     */
   private[signals3] final class Uncloseable[+T](override val future: Future[T])
-                                               (using ec: ExecutionContext = Threading.defaultContext) extends CloseableFuture[T] {
+                                               (using ec: ExecutionContext) extends CloseableFuture[T] {
     override def fail(ex: Throwable): Boolean = false
     override def toUncloseable: CloseableFuture[T] = this
     override def isCloseable: Boolean = false
@@ -469,7 +469,7 @@ object CloseableFuture {
     * @tparam T The result type of the given function
     * @return A closeable future executing the function
     */
-  final def apply[T](body: => T)(using ec: ExecutionContext = Threading.defaultContext): CloseableFuture[T] = {
+  final def apply[T](body: => T)(using ec: ExecutionContext): CloseableFuture[T] = {
     val pcr = new PromiseCompletingRunnable(body)
     ec.execute(pcr)
     new ActuallyCloseable(pcr.promise)
@@ -482,7 +482,7 @@ object CloseableFuture {
     * @tparam T The future's result type
     * @return A new **uncloseable** future wrapped over the original future
     */
-  inline final def lift[T](future: Future[T])(using ec: ExecutionContext = Threading.defaultContext): CloseableFuture[T] =
+  inline final def lift[T](future: Future[T])(using ec: ExecutionContext): CloseableFuture[T] =
     new Uncloseable(future)
 
   /** Turns a `Promise[T]` into a **closeable** `CloseableFuture[T]`.
@@ -492,7 +492,7 @@ object CloseableFuture {
     * @tparam T The promise's result type
     * @return A new **closeable** future wrapped over the original promise
     */
-  inline final def from[T](promise: Promise[T])(using ec: ExecutionContext = Threading.defaultContext): CloseableFuture[T] =
+  inline final def from[T](promise: Promise[T])(using ec: ExecutionContext): CloseableFuture[T] =
     new ActuallyCloseable(promise)
 
   /** Creates an empty closeable future that will finish its execution with success after the given time.
@@ -502,7 +502,7 @@ object CloseableFuture {
     * @param ec The execution context
     * @return A new closeable future of `Unit` which will finish with success after the given time
     */
-  final def delay(duration: FiniteDuration)(using ec: ExecutionContext = Threading.defaultContext): CloseableFuture[Unit] =
+  final def delay(duration: FiniteDuration)(using ec: ExecutionContext): CloseableFuture[Unit] =
     if duration <= Duration.Zero then successful(())
     else {
       val p = Promise[Unit]()
@@ -527,7 +527,7 @@ object CloseableFuture {
     *             call `body` again, after interval`.
     * @return A closeable future representing the whole process.
     */
-  final def repeat(interval: FiniteDuration)(body: => Unit)(using ec: ExecutionContext = Threading.defaultContext): CloseableFuture[Unit] = {
+  final def repeat(interval: FiniteDuration)(body: => Unit)(using ec: ExecutionContext): CloseableFuture[Unit] = {
     val intervalMillis = interval.toMillis
     @volatile var last = System.currentTimeMillis
     def calcInterval(): Long = {
@@ -555,7 +555,7 @@ object CloseableFuture {
     *             call `body` again, after `interval`.
     * @return A closeable future representing the whole process.
     */
-  final def repeatVariant(interval: () => Long)(body: => Unit)(using ec: ExecutionContext = Threading.defaultContext): CloseableFuture[Unit] =
+  final def repeatVariant(interval: () => Long)(body: => Unit)(using ec: ExecutionContext): CloseableFuture[Unit] =
     new ActuallyCloseable(Promise[Unit]()) {
       inline def sched(t: Long): TimerTask = schedule(() => { Try(body); startNewTimeoutLoop() }, t)
 
@@ -591,7 +591,7 @@ object CloseableFuture {
     * @param ec The execution context
     * @return A new closeable future of `T`
     */
-  final def delayed[T](duration: FiniteDuration)(body: => T)(using ec: ExecutionContext = Threading.defaultContext): CloseableFuture[T] =
+  final def delayed[T](duration: FiniteDuration)(body: => T)(using ec: ExecutionContext): CloseableFuture[T] =
     if duration <= Duration.Zero then CloseableFuture(body)
     else delay(duration).map { _ => body }
 
@@ -601,7 +601,7 @@ object CloseableFuture {
     * @tparam T The type of the `result`
     * @return An already successfully completed **un**closeable future
     */
-  inline final def successful[T](result: T): CloseableFuture[T] = new Uncloseable[T](Future.successful(result))
+  inline final def successful[T](result: T)(using ec: ExecutionContext): CloseableFuture[T] = new Uncloseable[T](Future.successful(result))
 
   /** Creates an already failed `CloseableFuture[T]` with the given throwable as the failure reason.
     *
@@ -609,14 +609,14 @@ object CloseableFuture {
     * @tparam T The type of what the future would return had it been successful
     * @return An already failed **un**closeable future
     */
-  inline final def failed[T](th: Throwable): CloseableFuture[T] = new Uncloseable[T](Future.failed(th))
+  inline final def failed[T](th: Throwable)(using ec: ExecutionContext): CloseableFuture[T] = new Uncloseable[T](Future.failed(th))
 
   /** Creates an already closed `CloseableFuture[T]`.
     *
     * @tparam T The type of what the future would return had it been successful
     * @return An already closed **un**closeable future
     */
-  inline final def closed[T](): CloseableFuture[T] = failed(Closed)
+  inline final def closed[T](using ec: ExecutionContext): CloseableFuture[T] = failed(Closed)
 
   /** Creates a new `CloseableFuture[Iterable[T]]` from a Iterable of `Iterable[T]`.
     * The original futures are executed asynchronously, but there are some rules that control them:

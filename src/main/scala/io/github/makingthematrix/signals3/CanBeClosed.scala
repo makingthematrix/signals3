@@ -1,5 +1,6 @@
 package io.github.makingthematrix.signals3
 
+import scala.concurrent.ExecutionContext
 import scala.util.chaining.scalaUtilChainingOps
 
 /**
@@ -33,6 +34,6 @@ protected[signals3] trait CanBeClosed {
 
   private var _onClose: List[() => Unit] = Nil
 
-  lazy val isClosedSignal: Signal[Boolean] =
+  def isClosedSignal(using ec: ExecutionContext): Signal[Boolean] =
     DoneSignal().tap { signal => if (isClosed) signal.done() else onClose(signal.done()) }
 }
