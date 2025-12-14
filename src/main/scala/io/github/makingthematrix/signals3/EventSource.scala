@@ -1,7 +1,6 @@
 package io.github.makingthematrix.signals3
 
 import scala.concurrent.ExecutionContext
-import scala.collection.immutable.Set
 
 abstract class EventSource[E, S] {
   private object subscribersMonitor

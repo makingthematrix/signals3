@@ -261,7 +261,7 @@ class StreamSpec extends munit.FunSuite {
   test("create a stream from a future on a separate execution context") {
     given dq: DispatchQueue = SerialDispatchQueue()
     val promise = Promise[Int]()
-    val stream = Stream.from(promise.future, dq)
+    val stream = Stream.from(promise.future)(using dq)
 
     val received = Signal(0)
     stream.foreach { n =>

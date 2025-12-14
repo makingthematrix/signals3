@@ -17,7 +17,6 @@ protected[signals3] trait Finite[T] extends CanBeClosed {
 }
   
 object Finite {
-  type Source[T] = Stream[T] | Signal[T]
   type FiniteStream[E] = Stream[E] & Finite[E]
   type FiniteSignal[V] = Signal[V] & Finite[V]
 }

@@ -49,7 +49,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
     val now = System.currentTimeMillis
     val isSuccess = Signal(false)
 
-    val signal = GeneratorSignal.generateVariant((0, 1), fibDelay) { case (a, b) => (b, a + b) }
+    val signal = GeneratorSignal.generate((0, 1), fibDelay _) { case (a, b) => (b, a + b) }
     signal.foreach { case (a, b) =>
       builder.addOne(b)
       isSuccess ! (b == 5)
@@ -65,14 +65,14 @@ class GeneratorSignalSpec extends munit.FunSuite {
     assert(totalTime >= 1400 && totalTime <= 1500L, s"total time: $totalTime")
   }
 
-  test("fibonacci signal with unfoldVariant with delays also in fibonacci") {
+  test("fibonacci signal with variant unfold with delays also in fibonacci") {
     def fibDelay(t: (Int, Int)): Long = t._2 * 200L
 
     val builder = mutable.ArrayBuilder.make[Int]
     val now = System.currentTimeMillis
     val isSuccess = Signal(false)
     
-    val signal = GeneratorSignal.unfoldVariant((0, 1), fibDelay) { case (a, b) => (b, a + b) -> b }
+    val signal = GeneratorSignal.unfold((0, 1), fibDelay _) { case (a, b) => (b, a + b) -> b }
     signal.foreach { b =>
       builder.addOne(b)
       isSuccess ! (b == 5)
@@ -115,7 +115,8 @@ class GeneratorSignalSpec extends munit.FunSuite {
       else
         System.currentTimeMillis - pausedOn < 300L
 
-    val signal2 = GeneratorSignal(0, _ + 1, 200.millis, paused)
+    val signal2 = GeneratorSignal(0, (n: Int) => n + 1, 200.millis, paused)
+
     signal2.foreach { counter =>
       isSuccess ! (counter == 4)
     }
