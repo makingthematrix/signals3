@@ -169,14 +169,10 @@ object GeneratorSignal {
     * @tparam V       The type of the signal's value.
     * @return         A new generator signal.
     */
-  inline def generate[V](init: V, interval: FiniteDuration)(update: V => V)
+  inline def generate[V](init: V, interval: FiniteDuration | (V => Long))(update: V => V)
                         (using ec: ExecutionContext): CloseableGeneratorSignal[V] =
     new CloseableGeneratorSignal[V](init, update, interval, (_: V) => false).tap(_.initialize())
 
-
-  inline def generateVariant[V](init: V, interval: V => Long)(update: V => V)
-                        (using ec: ExecutionContext): CloseableGeneratorSignal[V] =
-    new CloseableGeneratorSignal[V](init, update, interval, (_: V) => false).tap(_.initialize())
 
   /**
     * A utility method which works in a way that can be imagined as an inversion of `.fold` methods in Scala collections
@@ -239,8 +235,8 @@ object GeneratorSignal {
     * @tparam Z       The type of the generator's published value.
     * @return         A new generator signal.
     */
-  inline def unfoldVariant[V, Z](init: V, interval: V => Long)(update: V => (V, Z))
-                                (using ec: ExecutionContext): CloseableSignal[Z] =
+  inline def unfold[V, Z](init: V, interval: V => Long)(update: V => (V, Z))
+                         (using ec: ExecutionContext): CloseableSignal[Z] =
     Transformers.map[(V, Z), Z](
       new CloseableGeneratorSignal[(V, Z)](
         update(init),
@@ -259,24 +255,31 @@ object GeneratorSignal {
     *                 By default it's `Threading.defaultContext`.
     * @return         A new generator signal of integers.
     */
-  inline def counter(interval: FiniteDuration)
+  inline def counter(interval: FiniteDuration | (Int => Long))
                     (using ec: ExecutionContext): CloseableGeneratorSignal[Int] =
     generate(0, interval)(_ + 1)
 
-  inline def counterVariant(interval: Int => Long)
-                    (using ec: ExecutionContext): CloseableGeneratorSignal[Int] =
-    generateVariant(0, interval)(_ + 1)
+  inline def from[V](values: Iterable[V], interval: FiniteDuration | (V => Long))
+                    (using ec: ExecutionContext): FiniteGeneratorSignal[V] =
+    FiniteGeneratorSignal[V](values, interval)
 
-  inline def fromIterable[V](values: Iterable[V], interval: FiniteDuration)
-                            (using ec: ExecutionContext): FiniteGeneratorSignal[V] =
+  inline def from[V](generate: () => Option[V], interval: FiniteDuration | (V => Long))
+             (using ec: ExecutionContext): FiniteGeneratorSignal[V] = {
+    FiniteGeneratorSignal[V](generate, interval)
+  }
+
+  inline def from[V](values: LazyList[V], interval: FiniteDuration | (V => Long))
+                    (using ec: ExecutionContext): LazyListGeneratorSignal[V] =
+    LazyListGeneratorSignal[V](values, interval)
+}
+
+object FiniteGeneratorSignal {
+  inline def apply[V](values: Iterable[V], interval: FiniteDuration | (V => Long))
+                     (using ec: ExecutionContext): FiniteGeneratorSignal[V] =
     new FiniteGeneratorSignal[V](interval, values, (_: V) => false).tap(_.initialize())
 
-  inline def fromIterableVariant[V](values: Iterable[V], interval: V => Long)
-                            (using ec: ExecutionContext): FiniteGeneratorSignal[V] =
-    new FiniteGeneratorSignal[V](interval, values, (_: V) => false).tap(_.initialize())
-
-  def fromFunction[V](generate: () => Option[V], interval: FiniteDuration)
-                     (using ec: ExecutionContext): FiniteGeneratorSignal[V] = {
+  def apply[V](generate: () => Option[V], interval: FiniteDuration | (V => Long))
+              (using ec: ExecutionContext): FiniteGeneratorSignal[V] = {
     val it = Iterable.from(new Iterator[V]{
       private var value = generate()
       override def hasNext: Boolean = value.isDefined
@@ -284,22 +287,10 @@ object GeneratorSignal {
     })
     new FiniteGeneratorSignal[V](interval, it, (_: V) => false).tap(_.initialize())
   }
+}
 
-  def fromFunctionVariant[V](generate: () => Option[V], interval: V => Long)
-                     (using ec: ExecutionContext): FiniteGeneratorSignal[V] = {
-    val it = Iterable.from(new Iterator[V]{
-      private var value = generate()
-      override def hasNext: Boolean = value.isDefined
-      override def next(): V = value.get.tap { _ => value = generate() }
-    })
-    new FiniteGeneratorSignal[V](interval, it, (_: V) => false).tap(_.initialize())
-  }
-
-  inline def fromLazyList[V](values: LazyList[V], interval: FiniteDuration)
-                            (using ec: ExecutionContext): LazyListGeneratorSignal[V] =
-    new LazyListGeneratorSignal[V](interval, values, (_: V) => false).tap(_.initialize())
-
-  inline def fromLazyListVariant[V](values: LazyList[V], interval: V => Long)
-                            (using ec: ExecutionContext): LazyListGeneratorSignal[V] =
+object LazyListGeneratorSignal {
+  inline def apply[V](values: LazyList[V], interval: FiniteDuration | (V => Long))
+                     (using ec: ExecutionContext): LazyListGeneratorSignal[V] =
     new LazyListGeneratorSignal[V](interval, values, (_: V) => false).tap(_.initialize())
 }

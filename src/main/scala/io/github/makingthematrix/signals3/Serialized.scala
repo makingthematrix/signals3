@@ -30,7 +30,7 @@ object Serialized {
     */
   def apply[T](key: String)(body: => CloseableFuture[T]): CloseableFuture[T] = dispatcher {
     val future = locks.get(key).fold(body) { lock =>
-      CloseableFuture.lift(lock.recover { case _ => }).flatMap(_ => body)
+      CloseableFuture.from(lock.recover { case _ => }).flatMap(_ => body)
     }
     val lock = future.future
     locks += ((key, lock))

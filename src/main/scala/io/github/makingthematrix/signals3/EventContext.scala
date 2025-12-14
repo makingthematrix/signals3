@@ -1,7 +1,5 @@
 package io.github.makingthematrix.signals3
 
-import scala.collection.immutable.Set
-
 object EventContext {
   /** Creates a new default implementation of an [[EventContext]]
     *

@@ -171,27 +171,8 @@ object GeneratorStream {
     * @tparam E       The type of the generated event.
     * @return         A generator stream.
     */
-  inline def generate[E](interval: FiniteDuration)(body: => E)
+  inline def generate[E](interval: FiniteDuration | (() => Long))(body: => E)
                         (using ec: ExecutionContext): CloseableGeneratorStream[E] =
-    new CloseableGeneratorStream[E](interval, () => body, () => false).tap(_.initialize())
-
-  /**
-    * Creates a stream which generates a new event every `interval` by calling the `generate` function which
-    * returns an event and publishing it. In contrast to the simpler `generate` method, `generateVariant` allows to
-    * provide a function which will determine the interval.
-    *
-    * @param interval A function that returns the number of milliseconds to the next event generation (and to the first
-    *                 event as well).
-    * @param body     A block of code that creates a new event `E` every time it's called. The event will be resealed
-    *                 in the stream. If the code throws an exception, no event will be generated, but
-    *                 the generator will call it again, after `interval`. The exception will be ignored.
-    * @param ec       The execution context in which the generator works. Optional.
-    *                 By default it's `Threading.defaultContext`.
-    * @tparam E       The type of the generated event.
-    * @return         A generator stream.
-    */
-  inline def generateVariant[E](interval: () => Long)(body: => E)
-                               (using ec: ExecutionContext): CloseableGeneratorStream[E] =
     new CloseableGeneratorStream[E](interval, () => body, () => false).tap(_.initialize())
 
   /**
@@ -205,24 +186,8 @@ object GeneratorStream {
     * @tparam E       The type of the generated event.
     * @return         A generator stream.
     */
-  inline def repeat[E](event: E, interval: FiniteDuration)
+  inline def repeat[E](event: E, interval: FiniteDuration | (() => Long))
                       (using ec: ExecutionContext): CloseableGeneratorStream[E] =
-    new CloseableGeneratorStream[E](interval, () => event, () => false).tap(_.initialize())
-
-  /**
-    * Creates a stream which publishes the same event every given `interval`. In contrast to the simpler
-    * `repeat` method, `repeatVariant` allows to provide a function which will determine the interval.
-    *
-    * @param event    The event which will be published in the stream every `interval`.
-    * @param interval A function that returns the number of milliseconds to the next event generation (and to the first
-    *                 event as well).
-    * @param ec       The execution context in which the generator works. Optional.
-    *                 By default it's `Threading.defaultContext`.
-    * @tparam E The type of the generated event.
-    * @return A generator stream.
-    */
-  inline def repeatVariant[E](event: E, interval: () => Long)
-                             (using ec: ExecutionContext): CloseableGeneratorStream[E] =
     new CloseableGeneratorStream[E](interval, () => event, () => false).tap(_.initialize())
 
   /**
@@ -234,24 +199,30 @@ object GeneratorStream {
     *                 By default it's `Threading.defaultContext`.
     * @return A generator stream.
     */
-  inline def heartbeat(interval: FiniteDuration)
+  inline def heartbeat(interval: FiniteDuration | (() => Long))
                       (using ec: ExecutionContext): CloseableGeneratorStream[Unit] =
     repeat((), interval).tap(_.initialize())
 
-  inline def heartbeatVariant(interval: () => Long)
-                      (using ec: ExecutionContext): CloseableGeneratorStream[Unit] =
-    repeatVariant((), interval).tap(_.initialize())
+  inline def from[E](events: Iterable[E], interval: FiniteDuration | (() => Long))
+                    (using ec: ExecutionContext): FiniteGeneratorStream[E] =
+    FiniteGeneratorStream[E](events, interval)
 
-  inline def fromIterable[E](events: Iterable[E], interval: FiniteDuration)
+  inline def from[E](generate: () => Option[E], interval: FiniteDuration | (() => Long))
+                    (using ec: ExecutionContext): FiniteGeneratorStream[E] =
+    FiniteGeneratorStream[E](generate, interval)
+
+  inline def from[E](events: LazyList[E], interval: FiniteDuration | (() => Long))
+                    (using ec: ExecutionContext): LazyListGeneratorStream[E] =
+    LazyListGeneratorStream[E](events, interval)
+}
+
+object FiniteGeneratorStream {
+  inline def apply[E](events: Iterable[E], interval: FiniteDuration | (() => Long))
                      (using ec: ExecutionContext): FiniteGeneratorStream[E] =
     new FiniteGeneratorStream[E](interval, events, () => false).tap(_.initialize())
 
-  inline def fromIterableVariant[E](events: Iterable[E], interval: () => Long)
-                            (using ec: ExecutionContext): FiniteGeneratorStream[E] =
-    new FiniteGeneratorStream[E](interval, events, () => false).tap(_.initialize())
-
-  def fromFunction[E](generate: () => Option[E], interval: FiniteDuration)
-                     (using ec: ExecutionContext): FiniteGeneratorStream[E] = {
+  def apply[E](generate: () => Option[E], interval: FiniteDuration | (() => Long))
+              (using ec: ExecutionContext): FiniteGeneratorStream[E] = {
     val it = Iterable.from(new Iterator[E]{
       private var _next = generate()
       override def hasNext: Boolean = _next.isDefined
@@ -259,22 +230,10 @@ object GeneratorStream {
     })
     new FiniteGeneratorStream[E](interval, it, () => false).tap(_.initialize())
   }
+}
 
-  def fromFunctionVariant[E](generate: () => Option[E], interval: () => Long)
-                     (using ec: ExecutionContext): FiniteGeneratorStream[E] = {
-    val it = Iterable.from(new Iterator[E]{
-      private var _next = generate()
-      override def hasNext: Boolean = _next.isDefined
-      override def next(): E = _next.get.tap { _ => _next = generate() }
-    })
-    new FiniteGeneratorStream[E](interval, it, () => false).tap(_.initialize())
-  }
-
-  inline def fromLazyList[E](events: LazyList[E], interval: FiniteDuration)
+object LazyListGeneratorStream {
+  inline def apply[E](events: LazyList[E], interval: FiniteDuration | (() => Long))
                      (using ec: ExecutionContext): LazyListGeneratorStream[E] =
-    new LazyListGeneratorStream[E](interval, events, () => false).tap(_.initialize())
-
-  inline def fromLazyListVariant[E](events: LazyList[E], interval: () => Long)
-                            (using ec: ExecutionContext): LazyListGeneratorStream[E] =
     new LazyListGeneratorStream[E](interval, events, () => false).tap(_.initialize())
 }

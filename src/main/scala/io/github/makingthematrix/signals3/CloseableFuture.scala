@@ -1,7 +1,5 @@
 package io.github.makingthematrix.signals3
 
-import io.github.makingthematrix.signals3
-
 import java.util.{Timer, TimerTask}
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.*
@@ -361,7 +359,11 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext)
   */
 object CloseableFuture {
   extension [T](future: Future[T]) {
-    def toCloseable(using ec: ExecutionContext): CloseableFuture[T] = CloseableFuture.lift(future)
+    def toUncloseable(using ec: ExecutionContext): CloseableFuture[T] = CloseableFuture.from(future)
+  }
+
+  extension [T](promise: Promise[T]) {
+    def toCloseable(using ec: ExecutionContext): CloseableFuture[T] = CloseableFuture.from(promise)
   }
 
   given toFuture[T]: Conversion[CloseableFuture[T], Future[T]] with {
@@ -482,7 +484,7 @@ object CloseableFuture {
     * @tparam T The future's result type
     * @return A new **uncloseable** future wrapped over the original future
     */
-  inline final def lift[T](future: Future[T])(using ec: ExecutionContext): CloseableFuture[T] =
+  inline final def from[T](future: Future[T])(using ec: ExecutionContext): CloseableFuture[T] =
     new Uncloseable(future)
 
   /** Turns a `Promise[T]` into a **closeable** `CloseableFuture[T]`.
@@ -524,7 +526,7 @@ object CloseableFuture {
     *
     * @param interval The initial delay and the consecutive time interval between repeats.
     * @param body A task repeated every `interval`. If `body` throws an exception, the method will ignore it and
-    *             call `body` again, after interval`.
+    *             call `body` again, after `interval`.
     * @return A closeable future representing the whole process.
     */
   final def repeat(interval: FiniteDuration)(body: => Unit)(using ec: ExecutionContext): CloseableFuture[Unit] = {

@@ -35,7 +35,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
     def interval(): Long = 200L
     var counter = 0
     val isSuccess = Signal(false)
-    val stream = GeneratorStream.repeatVariant((), interval)
+    val stream = GeneratorStream.repeat((), interval _)
     stream.foreach { _ =>
       counter += 1
       if counter == 3 then isSuccess ! true
@@ -78,7 +78,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
     val now = System.currentTimeMillis
     val isSuccess = Signal(false)
 
-    val stream = GeneratorStream.generateVariant(fibDelay) {
+    val stream = GeneratorStream.generate(fibDelay _) {
       val res = b
       val t = a + b
       a = b
@@ -148,7 +148,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
     val t = System.currentTimeMillis()
     val buffer = mutable.ArrayBuffer[(Int, Long)]()
     val isSuccess = Signal.done()
-    val generator: FiniteGeneratorStream[Int] = GeneratorStream.fromIterable(numbers, 100.millis)
+    val generator: FiniteGeneratorStream[Int] = GeneratorStream.from(numbers, 100.millis)
     generator.onClose(isSuccess.done())
     generator.map(n => (n, System.currentTimeMillis() - t)).foreach((n,l) => buffer.addOne((n, l)))
 

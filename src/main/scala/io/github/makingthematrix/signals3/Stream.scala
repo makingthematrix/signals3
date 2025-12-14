@@ -151,14 +151,14 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
 
   inline final def :::(stream: Stream[E]): Stream[E] = join(stream)
   
-  inline final def join(future: Future[E]): Stream[E] = join(Stream.from(future))
+  inline final def join(future: Future[E])(using ec: ExecutionContext): Stream[E] = join(Stream.from(future))
 
   /**
    * TODO: Similarly to :::, this one shouldn't be here. Let's remove it from here and from Signal.
    * Instead, there should be a conversion between a Future and a FiniteStream of one element,
    * and :: can be implemented for FiniteStream as a special case of :::.
    * */
-  inline final def ::(future: Future[E]): Stream[E] = join(future)
+  inline final def ::(future: Future[E])(using ec: ExecutionContext): Stream[E] = join(future)
 
   /** A shorthand for registering a subscriber function in this stream which only purpose is to publish events emitted
     * by this stream in a given [[SourceStream]]. The subscriber function will be called in the execution context of the
@@ -257,6 +257,10 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
 }
 
 object Stream {
+  extension [E](f: Future[E]) {
+    inline def toStream(using ec: ExecutionContext): Stream[E] = Stream.from(f)
+  }
+
   object `::` {
     def unapply[E](stream: Stream[E])(using ec: ExecutionContext): (Future[E], Stream[E]) = (stream.head, stream.tail)
   }
@@ -318,24 +322,11 @@ object Stream {
   inline def from[E](signal: Signal[E]): Stream[E] = signal.onChanged
 
   /** Creates a stream from a future. The stream will emit one event if the future finishes with success, zero otherwise.
-    * TODO: It should be a FiniteStream, not a Stream.
     * @param future The `Future` treated as the source of the only event that can be emitted by the event source.
     * @param executionContext The `ExecutionContext` in which the event will be dispatched.
     * @tparam E The type of the event.
     * @return A new stream.
     */
-  inline def from[E](future: Future[E], executionContext: ExecutionContext): Stream[E] =
-    new Stream[E]().tap { stream =>
-      future.foreach { stream.dispatch(_, Some(executionContext)) }(using executionContext)
-    }
-
-  /** A shorthand for creating a stream from a future in the default execution context.
-    *
-    * @see [[Threading]]
-    *
-    * @param future The `Future` treated as the source of the only event that can be emitted by the event source.
-    * @tparam E The type of the event.
-    * @return A new stream.
-    */
-  inline def from[E](future: Future[E]): Stream[E] = from(future, Threading.defaultContext)
+  inline def from[E](future: Future[E])(using executionContext: ExecutionContext): TakeStream[E] =
+    TakeStream[E](future)(using executionContext)
 }

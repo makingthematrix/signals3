@@ -88,5 +88,5 @@ object RefreshingSignal {
     */
   inline def from[V](loader: => Future[V], refreshStream: Stream[?])
                     (using ec: ExecutionContext): RefreshingSignal[V] =
-    new RefreshingSignal(() => CloseableFuture.lift(loader), refreshStream)
+    new RefreshingSignal(() => CloseableFuture.from(loader), refreshStream)
 }

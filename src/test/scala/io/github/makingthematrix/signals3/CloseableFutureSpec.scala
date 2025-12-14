@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import CloseableFuture.{Closed, toCloseable, toFuture}
+import CloseableFuture.{Closed, toUncloseable, toFuture}
 
 import scala.language.implicitConversions
 import scala.util.chaining.scalaUtilChainingOps
@@ -14,7 +14,7 @@ class CloseableFutureSpec extends munit.FunSuite {
 
   test("Transform between a future and a closeable future") {
     val f1: Future[Unit] = Future.successful(())
-    val cf1 = f1.toCloseable
+    val cf1 = f1.toUncloseable
     cf1 match {
       case _: CloseableFuture[Unit] =>
       case null => fail("Future[Unit] should be transformed into CloseableFuture[Unit]")
@@ -26,7 +26,7 @@ class CloseableFutureSpec extends munit.FunSuite {
       case null => fail("CloseableFuture[Unit] should wrap over Future[Unit]")
     }
 
-    val cf2 = CloseableFuture.lift(f2)
+    val cf2 = CloseableFuture.from(f2)
     cf2 match {
       case _: CloseableFuture[Unit] =>
       case null => fail("Future[Unit] should be lifted into CloseableFuture[Unit]")
@@ -178,7 +178,7 @@ class CloseableFutureSpec extends munit.FunSuite {
       theFlag = true
     }
 
-    val cf1 = f1.toCloseable
+    val cf1 = f1.toUncloseable
     assert(!cf1.closeAndCheck())
 
     semaphore = true
