@@ -89,7 +89,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     * @return The current value of the signal.
     */
   final def currentValue: Option[V] = {
-    if !wired then disableAutowiring()
+    if (!wired) disableAutowiring()
     value
   }
 
@@ -570,12 +570,14 @@ object Signal {
       }
     }
 
-    override protected[signals3] def onSubscribe(): Unit = {
+    override protected[signals3] def onSubscribe(): Unit = monitor.synchronized {
       source.subscribe(this)
       changed(None) // refresh the subscriber with current value
     }
 
-    override protected[signals3] def onUnsubscribe(): Unit = source.unsubscribe(this)
+    override protected[signals3] def onUnsubscribe(): Unit = monitor.synchronized {
+      source.unsubscribe(this)
+    }
   }
 
   /** Creates a new [[SourceSignal]] of values of the type `V`. A usual entry point for the signals network.

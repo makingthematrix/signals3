@@ -342,7 +342,7 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext)
     */
   final def withAutoClosing(using eventContext: EventContext = EventContext.Global): Subscription =
     new BaseSubscription(WeakReference(eventContext)) {
-      override def onUnsubscribe(): Unit = {
+      override def onUnsubscribe(): Unit = monitor.synchronized {
         close()
         eventContext.unregister(this)
       }

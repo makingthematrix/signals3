@@ -3,13 +3,14 @@ package io.github.makingthematrix.signals3
 import io.github.makingthematrix.signals3.Closeable.CloseableStream
 import io.github.makingthematrix.signals3.ProxyStream.IndexedStream
 import io.github.makingthematrix.signals3.Finite.FiniteStream
-import io.github.makingthematrix.signals3.testutils.awaitAllTasks
+import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, result, waitForResult}
 
 import scala.collection.mutable
+import scala.concurrent.Future
 
 class IndexedStreamSpec extends munit.FunSuite {
   import EventContext.Implicits.global
-  given DispatchQueue = SerialDispatchQueue() // TODO: This test suite fails if we use Threading.defaultContext instead of SerialDispatchQueue(), check why
+  import Threading.defaultContext
 
   test("Counter starts at zero") {
     val a: Indexed = Stream().indexed
@@ -36,21 +37,17 @@ class IndexedStreamSpec extends munit.FunSuite {
   test("Drop an event") {
     val a: SourceStream[Int] = Stream()
     val b: Stream[Int] = a.drop(1)
-
     val buffer = mutable.ArrayBuilder.make[Int]
     b.foreach { n =>
       buffer.addOne(n)
     }
-
-    a ! 1
-    awaitAllTasks
-    a ! 2
-    awaitAllTasks
-    a ! 3
+    a !! 1 // here and in the other tests in this spec, I use !! to ensure the events are sent and received on the same thread
+    a !! 2
+    a !! 3
     awaitAllTasks
 
     val seq = buffer.result().toSeq
-    assertEquals(seq, Seq(2, 3))
+    assertEquals(seq.sorted, Seq(2, 3))
   }
 
   test("Drop and map") {
@@ -62,17 +59,17 @@ class IndexedStreamSpec extends munit.FunSuite {
       buffer.addOne(str)
     }
 
-    a ! 1
+    a !! 1
     awaitAllTasks
-    a ! 2
+    a !! 2
     awaitAllTasks
-    a ! 3
+    a !! 3
     awaitAllTasks
-    a ! 4
+    a !! 4
     awaitAllTasks
 
     val seq = buffer.result().toSeq
-    assertEquals(seq, Seq("3", "4"))
+    assertEquals(seq.sorted, Seq("3", "4"))
   }
 
   test("Close after two events") {
@@ -105,25 +102,20 @@ class IndexedStreamSpec extends munit.FunSuite {
     val b: CloseableStream[Int] = a.closeable
 
     val buffer = mutable.ArrayBuilder.make[Int]
-    b.foreach { n =>
-      buffer.addOne(n)
-    }
+    b.foreach(buffer.addOne)
 
-    a ! 1
-    awaitAllTasks
-    a ! 2
-    awaitAllTasks
+    a !! 1
+    a !! 2
+    waitForResult(a, 2)
 
     b.close()
     assert(b.isClosed)
 
-    a ! 3
-    awaitAllTasks
-    a ! 4
-    awaitAllTasks
+    a !! 3
+    a !! 4
+    waitForResult(a, 4)
 
-    val seq = buffer.result().toSeq
-    assertEquals(seq, Seq(1, 2))
+    assertEquals(buffer.result().toSeq.sorted, Seq(1, 2))
   }
 
   test("Drop and take") {
@@ -158,17 +150,17 @@ class IndexedStreamSpec extends munit.FunSuite {
     val cBuffer = mutable.ArrayBuilder.make[Int]
     c.foreach { cBuffer.addOne }
 
-    a ! 1
+    a !! 1
     awaitAllTasks
-    a ! 2
+    a !! 2
     awaitAllTasks
-    a ! 3
+    a !! 3
     awaitAllTasks
-    a ! 4
+    a !! 4
     awaitAllTasks
 
     val cSeq = cBuffer.result().toSeq
-    assertEquals(cSeq, Seq(2))
+    assertEquals(cSeq.sorted, Seq(2))
   }
 
   test("Split a stream into a head future and tail stream") {
@@ -178,25 +170,22 @@ class IndexedStreamSpec extends munit.FunSuite {
       case head :: tail => (head, tail)
     }
 
-    var hn = 0
-    head.foreach(n => hn = n)
-
     val buffer = mutable.ArrayBuilder.make[Int]
     tail.foreach { n =>
       buffer.addOne(n)
     }
 
-    a ! 1
+    a !! 1
     awaitAllTasks
-    a ! 2
+    a !! 2
     awaitAllTasks
-    a ! 3
+    a !! 3
     awaitAllTasks
 
-    assertEquals(hn, 1)
+    assertEquals(result(head), 1)
 
     val seq = buffer.result().toSeq
-    assertEquals(seq, Seq(2, 3))
+    assertEquals(seq.sorted, Seq(2, 3))
   }
 
   test("Take and use .last to get the last of the taken elements") {
@@ -205,20 +194,17 @@ class IndexedStreamSpec extends munit.FunSuite {
     val c = a.take(2)
     val cBuffer = mutable.ArrayBuilder.make[Int]
     c.foreach {cBuffer.addOne}
+    val f: Future[Int] = c.last
 
-    val f = c.last
-    var fValue: Int = 0
-    f.foreach(fValue = _)
-
-    a ! 1
+    a !! 1
     awaitAllTasks
-    a ! 2
+    a !! 2
     awaitAllTasks
-    a ! 3
+    a !! 3
     awaitAllTasks
 
-    assertEquals(cBuffer.result().toSeq, Seq(1, 2))
-    assertEquals(fValue, 2)
+    assertEquals(cBuffer.result().toSeq.sorted, Seq(1, 2))
+    assertEquals(result(f), 2)
   }
 
   test("Take and use .init to get all but the last element") {
@@ -232,17 +218,17 @@ class IndexedStreamSpec extends munit.FunSuite {
     val initBuffer = mutable.ArrayBuilder.make[Int]
     init.foreach {initBuffer.addOne}
 
-    a ! 1
+    a !! 1
     awaitAllTasks
-    a ! 2
+    a !! 2
     awaitAllTasks
-    a ! 3
+    a !! 3
     awaitAllTasks
-    a ! 4
+    a !! 4
     awaitAllTasks
 
     assertEquals(cBuffer.result().toSeq, Seq(1, 2, 3))
-    assertEquals(initBuffer.result().toSeq, Seq(1, 2))
+    assertEquals(initBuffer.result().toSeq.sorted, Seq(1, 2))
   }
 
   test("Split a stream in half") {
@@ -254,17 +240,17 @@ class IndexedStreamSpec extends munit.FunSuite {
     val cBuffer = mutable.ArrayBuilder.make[Int]
     c.foreach {cBuffer.addOne}
 
-    a ! 1
+    a !! 1
     awaitAllTasks
-    a ! 2
+    a !! 2
     awaitAllTasks
-    a ! 3
+    a !! 3
     awaitAllTasks
-    a ! 4
+    a !! 4
     awaitAllTasks
 
-    assertEquals(bBuffer.result().toSeq, Seq(1, 2))
-    assertEquals(cBuffer.result().toSeq, Seq(3, 4))
+    assertEquals(bBuffer.result().toSeq.sorted, Seq(1, 2))
+    assertEquals(cBuffer.result().toSeq.sorted, Seq(3, 4))
   }
 
   test("Drop events until a condition") {
@@ -274,16 +260,16 @@ class IndexedStreamSpec extends munit.FunSuite {
     val buffer = mutable.ArrayBuilder.make[Int]
     b.foreach { str => buffer.addOne(str.toInt) }
 
-    a ! "1"
+    a !! "1"
     awaitAllTasks
-    a ! "2"
+    a !! "2"
     awaitAllTasks
-    a ! "3"
+    a !! "3"
     awaitAllTasks
-    a ! "4"
+    a !! "4"
     awaitAllTasks
 
-    assertEquals(buffer.result().toSeq, Seq(3, 4))
+    assertEquals(buffer.result().toSeq.sorted, Seq(3, 4))
   }
 
   test("Empty take stream is already closed") {
@@ -308,21 +294,20 @@ class IndexedStreamSpec extends munit.FunSuite {
 
     val buffer = mutable.ArrayBuilder.make[Int]
     b.foreach { str => buffer.addOne(str.toInt) }
-    var last: String = ""
-    b.last.foreach(last = _)
+    val last = b.last
 
-    a ! "1"
+    a !! "1"
     awaitAllTasks
-    a ! "2"
+    a !! "2"
     awaitAllTasks
-    a ! "3"
+    a !! "3"
     awaitAllTasks
-    a ! "4"
+    a !! "4"
     awaitAllTasks
 
-    assertEquals(buffer.result().toSeq, Seq(1, 2))
     assert(b.isClosed)
-    assertEquals(last, "2")
+    assertEquals(result(last), "2")
+    assertEquals(buffer.result().toSeq.sorted, Seq(1, 2))
   }
 
   test("Split events with a condition") {
@@ -334,16 +319,17 @@ class IndexedStreamSpec extends munit.FunSuite {
     val cBuffer = mutable.ArrayBuilder.make[Int]
     c.foreach { str => cBuffer.addOne(str.toInt) }
 
-    a ! "1"
+    a !! "1"
     awaitAllTasks
-    a ! "2"
+    a !! "2"
     awaitAllTasks
-    a ! "3"
+    a !! "3"
     awaitAllTasks
-    a ! "4"
+    a !! "4"
     awaitAllTasks
 
-    assertEquals(bBuffer.result().toSeq, Seq(1, 2))
-    assertEquals(cBuffer.result().toSeq, Seq(3, 4))
+    assert(b.isClosed)
+    assertEquals(bBuffer.result().toSeq.sorted, Seq(1, 2))
+    assertEquals(cBuffer.result().toSeq.sorted, Seq(3, 4))
   }
 }

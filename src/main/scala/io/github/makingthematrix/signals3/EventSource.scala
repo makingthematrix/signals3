@@ -6,7 +6,7 @@ abstract class EventSource[E, S] {
   private object subscribersMonitor
 
   private var autowiring = true
-  @volatile private var subscribers = Set.empty[S]
+  private var subscribers = Set.empty[S]
 
   /** This method will be called on creating the first subscription or on `disableAutoWiring`.
     * If the implementing class stashes intermediate computation, this should trigger their execution.
@@ -77,13 +77,17 @@ abstract class EventSource[E, S] {
     *
     * @param call A function that will perform some action on each subscriber
     */
-  protected def notifySubscribers(call: S => Unit): Unit = subscribers.foreach(call)
+  protected def notifySubscribers(call: S => Unit): Unit = subscribersMonitor.synchronized {
+    subscribers.foreach(call)
+  }
 
   /** Checks if there are any subscribers registered in this `EventRelay`.
     *
     * @return true if any subscribers are registered, false otherwise
     */
-  inline final def hasSubscribers: Boolean = subscribers.nonEmpty
+  final def hasSubscribers: Boolean = subscribersMonitor.synchronized {
+    subscribers.nonEmpty
+  }
 
   /** Empties the set of subscribers and calls `unWire` if `disableAutowiring` wasn't called before.
     */

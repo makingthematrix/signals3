@@ -285,9 +285,13 @@ object Stream {
           case _ => f(event)
         }
 
-    override protected[signals3] def onSubscribe(): Unit = source.subscribe(this)
+    override protected[signals3] def onSubscribe(): Unit = monitor.synchronized {
+      source.subscribe(this)
+    }
 
-    override protected[signals3] def onUnsubscribe(): Unit = source.unsubscribe(this)
+    override protected[signals3] def onUnsubscribe(): Unit = monitor.synchronized {
+      source.unsubscribe(this)
+    }
   }
 
   /** Creates a new [[SourceStream]] of events of the type `E`. A usual entry point for the event streams network.

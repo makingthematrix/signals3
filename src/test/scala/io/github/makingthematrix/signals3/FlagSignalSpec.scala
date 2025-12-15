@@ -18,14 +18,14 @@ class FlagSignalSpec extends munit.FunSuite {
     taken.foreach(b => takenBuffer.addOne(b))
     // Emit just one change to reach 2 taken values (initial false, then true)
     a.set()   // false -> true
-    awaitAllTasks
+    waitForResult(taken, true)
 
     assertEquals(takenBuffer.result().toSeq, Seq(false, true))
     assertEquals(testutils.result(last), true)
 
     // Further changes should not be delivered to 'taken'
     a.toggle() // true -> false
-    awaitAllTasks
+    waitForResult(a, false)
     assertEquals(takenBuffer.result().toSeq, Seq(false, true))
   }
 
@@ -43,16 +43,17 @@ class FlagSignalSpec extends munit.FunSuite {
 
     // Produce exactly 2 changes so that 'taken' closes after collecting 3
     a.set()    // false -> true
-    awaitAllTasks
+    waitForResult(taken, true)
     a.toggle() // true -> false
-    awaitAllTasks
+    waitForResult(taken, false)
 
+    waitForResult(taken.isClosedSignal, true)
     assertEquals(takenBuffer.result().toSeq, Seq(false, true, false))
     assertEquals(initBuffer.result().toSeq, Seq(false, true))
 
     // Additional changes shouldn't be delivered to 'taken' nor 'init'
     a.set()    // false -> true
-    awaitAllTasks
+    waitForResult(a, true)
     assertEquals(takenBuffer.result().toSeq, Seq(false, true, false))
     assertEquals(initBuffer.result().toSeq, Seq(false, true))
   }
