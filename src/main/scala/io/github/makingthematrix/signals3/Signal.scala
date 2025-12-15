@@ -562,11 +562,10 @@ object Signal {
 
     override def changed(currentContext: Option[ExecutionContext]): Unit = synchronized {
       source.value.foreach { event =>
-        if subscribed then
-          executionContext match {
-            case Some(ec) if !currentContext.contains(ec) => Future(if subscribed then Try(f(event)))(using ec)
-            case _ => f(event)
-          }
+        if (subscribed) executionContext match {
+          case Some(ec) if !currentContext.contains(ec) => Future(if (subscribed) Try(f(event)))(using ec)
+          case _ => f(event)
+        }
       }
     }
 

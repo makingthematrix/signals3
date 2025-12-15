@@ -127,20 +127,15 @@ class IndexedStreamSpec extends munit.FunSuite {
       buffer.addOne(n)
     }
 
-    a ! 1
-    awaitAllTasks
-    a ! 2
-    awaitAllTasks
-    a ! 3
-    awaitAllTasks
+    a !! 1
+    a !! 2
+    a !! 3
+    waitForResult(b.isClosedSignal, true)
 
-    assert(b.isClosed)
+    a !! 4
+    waitForResult(a, 4)
 
-    a ! 4
-    awaitAllTasks
-
-    val seq = buffer.result().toSeq
-    assertEquals(seq, Seq(2, 3))
+    assertEquals(buffer.result().toSeq.sorted, Seq(2, 3))
   }
 
   test("Take and drop") {
