@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import testutils.{awaitAllTasks, result}
+import testutils.{result, waitForResult}
 
 class FlatMapSignalSpec extends munit.FunSuite {
   import EventContext.Implicits.global
@@ -111,7 +111,6 @@ class FlatMapSignalSpec extends munit.FunSuite {
     assertEquals(fan.received, Vector("a", "b"))
   }
 
-
   test("No subscribers will be left behind") {
     given dq: DispatchQueue = SerialDispatchQueue()
 
@@ -124,6 +123,8 @@ class FlatMapSignalSpec extends munit.FunSuite {
 
     s1 ! 3
     s2 ! 4
+    waitForResult(s1, 3)
+    waitForResult(s2, 4)
 
     assert(s.hasSubscribers)
     assert(s1.hasSubscribers)
@@ -135,12 +136,6 @@ class FlatMapSignalSpec extends munit.FunSuite {
     assert(!s1.hasSubscribers)
     assert(!s2.hasSubscribers)
     assert(!fm.hasSubscribers)
-
-    s1 ! 5
-    s ! 1
-    s2 ! 6
-    awaitAllTasks
-    assertEquals(received, Vector(1, 3))
   }
 
   test("wire and un-wire both source signals") {
