@@ -73,21 +73,20 @@ class IndexedSignalSpec extends munit.FunSuite {
 
     val buffer = mutable.ArrayBuilder.make[Int]
     b.foreach { str => buffer.addOne(str.toInt) }
-    var last: String = ""
-    b.last.foreach(last = _)
+    val last = b.last
 
-    a ! "1"
+    a !! "1"
     awaitAllTasks
-    a ! "2"
+    a !! "2"
     awaitAllTasks
-    a ! "3"
+    a !! "3"
     awaitAllTasks
-    a ! "4"
+    a !! "4"
     awaitAllTasks
 
+    assertEquals(result(last), "2")
     assertEquals(buffer.result().toSeq, Seq(1, 2))
     assert(b.isClosed)
-    assertEquals(last, "2")
   }
 
   test("Close after two changes") {

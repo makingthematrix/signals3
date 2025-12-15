@@ -73,37 +73,44 @@ trait Subscription {
   * @param context A weak reference to the event context within which the subscription lives.
   */
 abstract class BaseSubscription(context: WeakReference[EventContext]) extends Subscription {
-  @volatile protected[signals3] var subscribed = false
+  protected object monitor
+  protected[signals3] var subscribed = false
   private var enabled = false
   private var pauseWithContext = true
 
-  context.get.foreach(_.register(this))
+  monitor.synchronized { context.get.foreach(_.register(this)) }
 
   protected[signals3] def onSubscribe(): Unit
 
   protected[signals3] def onUnsubscribe(): Unit
 
-  def subscribe(): Unit = if enabled && !subscribed then {
-    subscribed = true
-    onSubscribe()
+  def subscribe(): Unit = monitor.synchronized {
+    if (enabled && !subscribed) {
+      subscribed = true
+      onSubscribe()
+    }
   }
 
-  def unsubscribe(): Unit = if subscribed && (pauseWithContext || !enabled) then {
-    subscribed = false
-    onUnsubscribe()
+  def unsubscribe(): Unit = monitor.synchronized {
+    if (subscribed && (pauseWithContext || !enabled)) {
+      subscribed = false
+      onUnsubscribe()
+    }
   }
 
-  def enable(): Unit = context.get.foreach { context =>
-    enabled = true
-    if context.isContextStarted then subscribe()
+  def enable(): Unit = monitor.synchronized {
+    context.get.foreach { context =>
+      enabled = true
+      if (context.isContextStarted) subscribe()
+    }
   }
 
-  def disable(): Unit = {
+  def disable(): Unit = monitor.synchronized {
     enabled = false
-    if subscribed then unsubscribe()
+    if (subscribed) unsubscribe()
   }
 
-  def destroy(): Unit = {
+  def destroy(): Unit = monitor.synchronized {
     disable()
     context.get.foreach(_.unregister(this))
   }

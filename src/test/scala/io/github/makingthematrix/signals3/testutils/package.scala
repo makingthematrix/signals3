@@ -87,12 +87,10 @@ package object testutils {
     if !tasksCompletedAfterWait then
       throw new TimeoutException(s"Background tasks didn't complete in ${timeout.toSeconds} seconds")
 
-  def tasksRemaining(using dq: DispatchQueue): Boolean = dq.hasRemainingTasks
-
   private def tasksCompletedAfterWait(using timeout: FiniteDuration = DefaultTimeout, dq: DispatchQueue) = {
     val start = System.currentTimeMillis()
     val before = start + timeout.toMillis
-    while tasksRemaining && System.currentTimeMillis() < before do Thread.sleep(10)
-    !tasksRemaining
+    while (dq.hasRemainingTasks && System.currentTimeMillis() < before) Thread.sleep(50)
+    !dq.hasRemainingTasks
   }
 }
