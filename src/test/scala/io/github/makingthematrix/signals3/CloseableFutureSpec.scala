@@ -62,21 +62,22 @@ class CloseableFutureSpec extends munit.FunSuite {
   }
 
   test(" A closeable future succeeds just like a standard one") {
-    var res = 0
+    val res = Signal(0)
 
     val p = Promise[Int]()
     val f = p.future
-    f.foreach { res = _ }
+    f.foreach { res ! _ }
 
-    val cf = CloseableFuture.from(p).tap { _.onClose { res = -1 } }
+    val cf = CloseableFuture.from(p).tap { _.onClose { res ! -1 } }
     awaitAllTasks
 
     p.success(1)
     assertEquals(result(f), 1)
+    waitForResult(res, 1)
 
     assert(!cf.closeAndCheck())
     await(cf)
-    assertEquals(res, 1) // closing doesn't change the result after the promise is completed
+    assert(waitForResult(res, 1)) // closing doesn't change the result after the promise is completed
   }
 
   test("A closeable future can be closed (wow! who would expect that)"){

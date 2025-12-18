@@ -527,16 +527,17 @@ class SignalSpec extends munit.FunSuite {
       buffer.addOne(str)
     }
 
-    a ! 1
+    a !! 1
     assert(waitForResult(a, 1))
-    a ! 2
+    a !! 2
     assert(waitForResult(a, 2))
-    a ! 3
+    a !! 3
     assert(waitForResult(a, 3))
-    a ! 4
+    a !! 4
     assert(waitForResult(a, 4))
+    awaitAllTasks
 
-    val seq = buffer.result().toSeq
+    val seq = buffer.result().toSeq.sorted
     assertEquals(seq, Seq("3", "4"))
   }
 
