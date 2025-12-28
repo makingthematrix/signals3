@@ -67,7 +67,7 @@ final class AggregatingSignal[E, V](loader: () => Future[V], sourceStream: Strea
   @volatile private var stash = Vector.empty[E]
 
   override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit = valueMonitor.synchronized {
-    if loadId.intValue() == 0 then
+    if (loadId.intValue() == 0)
       value.foreach(v => self.setValue(Some(updater(v, event)), currentContext))
     else
       stash :+= event

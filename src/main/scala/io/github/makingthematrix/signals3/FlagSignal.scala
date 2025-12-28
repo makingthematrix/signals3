@@ -15,15 +15,15 @@ final class FlagSignal(initialValue: Boolean) extends SourceSignal(Some(initialV
   inline def state: Boolean = value.contains(true)
 
   inline def setIf(p: Boolean)(using ec: ExecutionContext): Unit = if (p) set()
-  inline def set()(using ec: ExecutionContext): Unit = setValue(Some(true), Some(ec))
+  inline def set()(using ec: ExecutionContext): Unit = updateWith(Some(true), Some(ec))
   inline def onSet(body : => Unit)(using ec: ExecutionContext): Unit = foreach(_ => if (state) body)
 
   inline def clearIf(p: Boolean)(using ec: ExecutionContext): Unit = if (p) clear()
-  inline def clear()(using ec: ExecutionContext): Unit = setValue(Some(false), Some(ec))
+  inline def clear()(using ec: ExecutionContext): Unit = updateWith(Some(false), Some(ec))
   inline def onClear(body : => Unit)(using ec: ExecutionContext): Unit = foreach(_ => if (!state) body)
 
   inline def toggleIf(p: Boolean)(using ec: ExecutionContext): Unit = if (p) toggle()
-  inline def toggle()(using ec: ExecutionContext): Unit = setValue(Some(!state), Some(ec))
+  inline def toggle()(using ec: ExecutionContext): Unit = updateWith(Some(!state), Some(ec))
   inline def onToggle(body : => Unit)(using ec: ExecutionContext): Unit = foreach(_ => body)
 }
 

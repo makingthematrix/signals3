@@ -6,7 +6,7 @@ import testutils.*
 import scala.collection.mutable
 
 class FlagSignalSpec extends munit.FunSuite {
-  import Threading.defaultContext
+  import Serialized.dispatcher
 
   test("Take and use .last to get the last of the taken elements (FlagSignal)") {
     val a = FlagSignal() // starts with false
@@ -36,13 +36,15 @@ class FlagSignalSpec extends munit.FunSuite {
     val takenBuffer = mutable.ArrayBuilder.make[Boolean]
     taken.foreach(b => takenBuffer.addOne(b))
 
-    val init: Signal[Boolean] = taken.init
+    val init = taken.init
     val initBuffer = mutable.ArrayBuilder.make[Boolean]
     init.foreach(b => initBuffer.addOne(b))
 
     // Produce exactly 2 changes so that 'taken' closes after collecting 3
     a.set()    // false -> true
     waitForResult(taken, true)
+    waitForResult(init, true)
+    waitForResult(init.isClosedSignal, true)
     a.toggle() // true -> false
     waitForResult(taken, false)
 

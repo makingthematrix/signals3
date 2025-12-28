@@ -13,7 +13,7 @@ import scala.collection.immutable.Map
   * will be attached to the end of the ongoing processing and triggered only after it's done.
   */
 object Serialized {
-  private given dispatcher: DispatchQueue = SerialDispatchQueue("Serialized")
+  given dispatcher: DispatchQueue = SerialDispatchQueue("Serialized")
 
   private var locks = Map[String, Future[?]]()
 

@@ -291,7 +291,7 @@ class SignalSpec extends munit.FunSuite {
                                    dispatchExecutionContext: Option[ExecutionContext],
                                    actualExecutionContext: ExecutionContext
                                   )(subscribe: Signal[Int] => (Int => Unit) => Subscription = s => g => s.onCurrent(g)(using eventContext)): Unit =
-    concurrentUpdates(dispatches, several, (s, n) => s.setValue(Some(n), dispatchExecutionContext), actualExecutionContext, subscribe)
+    concurrentUpdates(dispatches, several, (s, n) => s.updateWith(Some(n), dispatchExecutionContext), actualExecutionContext, subscribe)
 
   private def concurrentMutations(dispatches: Int,
                                   several: Int,

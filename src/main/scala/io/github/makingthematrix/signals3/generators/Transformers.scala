@@ -273,7 +273,7 @@ object Transformers {
   def signalFromFuture[V](cFuture: CloseableFuture[V])
                          (using ec: ExecutionContext): CloseableSignal[V] =
     new Signal[V]() with Closeability(cFuture).tap { signal =>
-      cFuture.foreach { res => signal.setValue(Option(res), Some(ec)) }
+      cFuture.foreach { res => signal.updateWith(Option(res), Some(ec)) }
     }
 
   /** Creates a new closeable signal from a closeable stream and an initial value.

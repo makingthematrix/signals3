@@ -9,6 +9,8 @@ import scala.concurrent.duration.*
 class GeneratorSignalSpec extends munit.FunSuite {
   import EventContext.Implicits.global
   import Threading.defaultContext
+
+  def fibDelay(t: (Int, Int)): Long = t._2 * 200L
   
   test("fibonacci signal with generate") {
     val builder = mutable.ArrayBuilder.make[Int]
@@ -43,20 +45,18 @@ class GeneratorSignalSpec extends munit.FunSuite {
   }
   
   test("fibonacci signal with delays also in fibonacci") {
-    def fibDelay(t: (Int, Int)): Long = t._2 * 200L
-  
     val builder = mutable.ArrayBuilder.make[Int]
     val now = System.currentTimeMillis
     val isSuccess = Signal(false)
 
-    val signal = GeneratorSignal.generate((0, 1), fibDelay _) { case (a, b) => (b, a + b) }
+    val signal = GeneratorSignal.generate((0, 1), (t: (Int, Int)) => fibDelay(t)) { case (a, b) => (b, a + b) }
     signal.foreach { case (a, b) =>
       builder.addOne(b)
       isSuccess ! (b == 5)
     }
   
     waitForResult(isSuccess, true)
-  
+
     val totalTime = System.currentTimeMillis - now
     signal.close()
     awaitAllTasks
@@ -66,13 +66,11 @@ class GeneratorSignalSpec extends munit.FunSuite {
   }
 
   test("fibonacci signal with variant unfold with delays also in fibonacci") {
-    def fibDelay(t: (Int, Int)): Long = t._2 * 200L
-
     val builder = mutable.ArrayBuilder.make[Int]
     val now = System.currentTimeMillis
     val isSuccess = Signal(false)
     
-    val signal = GeneratorSignal.unfold((0, 1), fibDelay _) { case (a, b) => (b, a + b) -> b }
+    val signal = GeneratorSignal.unfold((0, 1), (t: (Int, Int)) => fibDelay(t)) { case (a, b) => (b, a + b) -> b }
     signal.foreach { b =>
       builder.addOne(b)
       isSuccess ! (b == 5)
