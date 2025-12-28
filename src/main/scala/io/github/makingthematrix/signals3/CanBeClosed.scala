@@ -25,7 +25,7 @@ protected[signals3] trait CanBeClosed {
 
   /**
    * Registers a block of code that should be called exactly once when the closeable is being closed.
-   * @param body
+   * @param body Logic that is going to be executed when the closeable is closed.
    */
   def onClose(body: => Unit): Unit =
     _onClose = (() => body) :: _onClose
@@ -34,6 +34,12 @@ protected[signals3] trait CanBeClosed {
 
   private var _onClose: List[() => Unit] = Nil
 
+  /**
+   * Returns a signal that works on a given [[ExecutionContext]]; it starts with the value set to `false` (unless it's
+   * created after the closeable is already closed) and it will be set to `true` when the closeable is closed.
+   * @param ec The execution context on which the signal will be executed.
+   * @return A signal that will be set to `true` when the closeable is closed.
+   */
   def isClosedSignal(using ec: ExecutionContext): Signal[Boolean] =
     DoneSignal().tap { signal => if (isClosed) signal.done() else onClose(signal.done()) }
 }

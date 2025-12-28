@@ -7,8 +7,9 @@ import scala.util.chaining.scalaUtilChainingOps
 import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration.*
 import testutils.*
+import io.github.makingthematrix.signals3.Closeable.{CloseableSignal, CloseableStream}
 
-class CloseableFutureSpec extends munit.FunSuite {
+class CloseableSpec extends munit.FunSuite {
   import EventContext.Implicits.global
   import Threading.defaultContext
 
@@ -481,4 +482,126 @@ class CloseableFutureSpec extends munit.FunSuite {
 
     assertEquals(result(cf2), "bar")
   }
+
+
+  // ===== CloseableStream tests =====
+
+  test("CloseableStream onClose is triggered exactly once") {
+    val src: SourceStream[Int] = Stream()
+    val cs: CloseableStream[Int] = src.closeable
+    val counter = Signal(0)
+
+    cs.onClose { counter.mutate(_ + 1) }
+
+    // Not closed initially
+    assert(!cs.isClosed)
+
+    // Close and verify onClose fired once
+    cs.close()
+    assert(cs.isClosed)
+    waitForResult(counter, 1)
+
+    // Close again: onClose must not fire again
+    cs.close()
+    awaitAllTasks
+    assert(waitForResult(counter, 1))
+  }
+
+  test("CloseableStream isClosedSignal flips to true when closed") {
+    val src: SourceStream[Int] = Stream()
+    val cs: CloseableStream[Int] = src.closeable
+
+    // Initially false
+    val closedSig1 = cs.isClosedSignal
+    assert(waitForResult(closedSig1, false))
+
+    // Close -> should become true
+    cs.close()
+    assert(waitForResult(closedSig1, true))
+
+    // New isClosedSignal created after closing should be immediately true
+    val closedSig2 = cs.isClosedSignal
+    assert(waitForResult(closedSig2, true))
+  }
+
+  test("CloseableStream: no events after close") {
+    val src: SourceStream[Int] = Stream()
+    val cs: CloseableStream[Int] = src.closeable
+
+    val received = Signal(Seq.empty[Int])
+    cs.foreach { n => received.mutate(_ :+ n) }
+
+    src !! 1
+    src !! 2
+    waitForResult(received, Seq(1, 2))
+
+    cs.close()
+    assert(cs.isClosed)
+
+    src !! 3
+    src !! 4
+    awaitAllTasks
+
+    // Ensure no new events after close
+    assert(waitForResult(received, Seq(1, 2)))
+  }
+
+  // ===== CloseableSignal tests =====
+
+  test("CloseableSignal onClose is triggered exactly once") {
+    val src: SourceSignal[Int] = Signal(0)
+    val cs: CloseableSignal[Int] = src.closeable
+    val counter = Signal(0)
+
+    cs.onClose { counter.mutate(_ + 1) }
+    assert(!cs.isClosed)
+
+    cs.close()
+    assert(cs.isClosed)
+    waitForResult(counter, 1)
+
+    cs.close()
+    awaitAllTasks
+    assert(waitForResult(counter, 1))
+  }
+
+  test("CloseableSignal isClosedSignal flips to true when closed") {
+    val src: SourceSignal[Int] = Signal(0)
+    val cs: CloseableSignal[Int] = src.closeable
+
+    val closedSig1 = cs.isClosedSignal
+    assert(waitForResult(closedSig1, false))
+
+    cs.close()
+    assert(waitForResult(closedSig1, true))
+
+    val closedSig2 = cs.isClosedSignal
+    assert(waitForResult(closedSig2, true))
+  }
+
+  test("CloseableSignal: value stops changing after close") {
+    val src: SourceSignal[Int] = Signal(0)
+    val cs: CloseableSignal[Int] = src.closeable
+
+    val received = Signal(Seq.empty[Int])
+    cs.foreach { v => received.mutate(_ :+ v) }
+
+    // Initial value 0 should be received
+    waitForResult(received, Seq(0))
+
+    src ! 1
+    waitForResult(received, Seq(0, 1))
+
+    cs.close()
+    assert(cs.isClosed)
+
+    // Further updates to source won't propagate to closeable signal
+    src ! 2
+    src ! 3
+    awaitAllTasks
+
+    assert(waitForResult(received, Seq(0, 1)))
+  }
+
+
 }
