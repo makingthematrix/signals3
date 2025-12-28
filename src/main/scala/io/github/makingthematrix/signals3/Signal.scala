@@ -51,6 +51,10 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
       setValue(f(value), currentContext)
     }
 
+  protected[signals3] def updateWith(v: Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
+    updateMonitor.synchronized {
+      setValue(v, currentContext)
+    }
   /** Sets the value of the signal to the new one.
     * The new value is an option of the value type. If the result is `None` the signal will become empty until the next update.
     * The subscribers will be notified of the update only if the new value is different from the current one. If yes, we will try to
@@ -64,7 +68,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     *         false if the new value is the same as the old one.
     */
   protected[signals3] def setValue(v: Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
-    if value != v then {
+    if (value != v) {
       value = v
       notifySubscribers(currentContext)
       true
@@ -422,7 +426,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     *
     * @param value The new value of the signal.
     */
-  protected[signals3] def publish(value: V): Unit = setValue(Some(value))
+  protected[signals3] def publish(value: V): Unit = updateWith(Some(value))
 
   /** Sets the value of the signal to the given value. Notifies the subscribers if the value actually changes.
     * if the subscription specify the execution context, that execution context will be used to execute the subscriber
@@ -432,7 +436,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     * @param currentContext The execution context that will be used to call the subscriber function if the subscription
     *                       does not say otherwise.
     */
-  protected def publish(value: V, currentContext: ExecutionContext): Unit = setValue(Some(value), Some(currentContext))
+  protected def publish(value: V, currentContext: ExecutionContext): Unit = updateWith(Some(value), Some(currentContext))
 
   /** Creates a boolean signal where the value is the result of comparison of current values in both the original signals.
     * This method uses Scala `equals` internally and for the sake of consistency with how `equals` works in Scala, 
@@ -844,7 +848,7 @@ object Signal {
   def from[V](future: Future[V], executionContext: ExecutionContext): Signal[V] =
     new Signal[V]().tap { signal =>
       future.foreach {
-        res => signal.setValue(Option(res), Some(executionContext))
+        res => signal.updateWith(Option(res), Some(executionContext))
       }(using executionContext)
     }
 

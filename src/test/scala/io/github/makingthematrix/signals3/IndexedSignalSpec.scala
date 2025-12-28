@@ -209,17 +209,17 @@ class IndexedSignalSpec extends munit.FunSuite {
     c.foreach {cBuffer.addOne}
 
     a ! 1
-    a ! 1
-    assert(waitForResult(a, 1))
+    assert(waitForResult(b, 1))
 
     a ! 2
-    assert(waitForResult(a, 2))
+    assert(waitForResult(b, 2))
+    waitForResult(b.isClosedSignal, true)
 
     a ! 3
-    assert(waitForResult(a, 3))
+    assert(waitForResult(c, 3))
 
     a ! 4
-    assert(waitForResult(a, 4))
+    assert(waitForResult(c, 4))
 
     assertEquals(bBuffer.result().toSeq, Seq(1, 2))
     assertEquals(cBuffer.result().toSeq, Seq(3, 4))

@@ -32,10 +32,9 @@ class GeneratorStreamSpec extends munit.FunSuite {
   }
 
   test("a made-up variant heartbeat stream") {
-    def interval(): Long = 200L
     var counter = 0
     val isSuccess = Signal(false)
-    val stream = GeneratorStream.repeat((), interval _)
+    val stream = GeneratorStream.repeat((), () => 200L)
     stream.foreach { _ =>
       counter += 1
       if counter == 3 then isSuccess ! true
@@ -72,13 +71,11 @@ class GeneratorStreamSpec extends munit.FunSuite {
     var a = 0
     var b = 1
 
-    def fibDelay(): Long = b * 200L
-
     val builder = mutable.ArrayBuilder.make[Int]
     val now = System.currentTimeMillis
     val isSuccess = Signal(false)
 
-    val stream = GeneratorStream.generate(fibDelay _) {
+    val stream = GeneratorStream.generate(() => b * 200L) {
       val res = b
       val t = a + b
       a = b

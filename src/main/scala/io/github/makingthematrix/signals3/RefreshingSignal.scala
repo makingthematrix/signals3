@@ -35,7 +35,7 @@ final class RefreshingSignal[V](loader: () => CloseableFuture[V], refreshStream:
     loadFuture = thisReload
     loader().onComplete {
       case Success(v) if loadFuture == thisReload =>
-        p.success(setValue(Some(v), Some(ec)))
+        p.success(updateWith(Some(v), Some(ec)))
       case Failure(ex) if loadFuture == thisReload =>
         p.failure(ex)
       case _ =>

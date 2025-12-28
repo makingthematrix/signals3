@@ -36,7 +36,7 @@ final private[signals3] class FlatMapSignal[A, B](source: Signal[A], f: A => Sig
         else false
       }
 
-      if changed then setValue(mapped.value)
+      if (changed) updateWith(mapped.value)
     }
   }
 
