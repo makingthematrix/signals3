@@ -10,7 +10,7 @@ import scala.util.chaining.scalaUtilChainingOps
  * @tparam T The type of the stream's event or the signal's value
  */
 protected[signals3] trait Finite[T] extends CanBeClosed {
-  protected final inline def close(): Unit = closeAndCheck()
+  protected[signals3] final inline def close(): Unit = closeAndCheck()
 
   protected var lastPromise: Option[Promise[T]] = None
   final lazy val last: Future[T] = Promise[T]().tap { p => lastPromise = Some(p) }.future

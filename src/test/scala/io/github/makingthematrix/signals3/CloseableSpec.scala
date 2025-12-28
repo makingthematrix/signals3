@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import CloseableFuture.{Closed, toUncloseable, toFuture}
+import CloseableFuture.{Closed, toUncloseable, toFuture, toCloseable}
 
 import scala.language.implicitConversions
 import scala.util.chaining.scalaUtilChainingOps
@@ -484,6 +484,42 @@ class CloseableSpec extends munit.FunSuite {
   }
 
 
+  // ===== CloseableFuture extension methods tests =====
+
+  test("Future.toUncloseable creates an uncloseable CloseableFuture") {
+    var ran = false
+
+    val p = Promise[Int]()
+    val f = p.future
+    f.foreach { _ => ran = true }
+
+    val cf = f.toUncloseable
+
+    // Not closeable; closing should return false and not affect the underlying future
+    assert(!cf.isCloseable)
+    assert(!cf.closeAndCheck())
+
+    p.success(123)
+    await(f)
+    assert(ran)
+  }
+
+  test("Promise.toCloseable creates a closeable future that can be closed") {
+    val closed = Signal(false)
+
+    val p = Promise[Int]()
+    val cf = p.toCloseable.tap(_.onClose { closed ! true })
+
+    assert(cf.isCloseable)
+    assert(cf.closeAndCheck())
+    await(cf)
+    assert(waitForResult(closed, true))
+
+    // Promise should be unusable after close
+    intercept[java.lang.IllegalStateException](p.success(42))
+  }
+
+
   // ===== CloseableStream tests =====
 
   test("CloseableStream onClose is triggered exactly once") {
@@ -529,7 +565,7 @@ class CloseableSpec extends munit.FunSuite {
     val cs: CloseableStream[Int] = src.closeable
 
     val received = Signal(Seq.empty[Int])
-    cs.foreach { n => received.mutate(_ :+ n) }
+    cs.foreach { case n: Int => received.mutate(_ :+ n) }
 
     src !! 1
     src !! 2
@@ -584,7 +620,7 @@ class CloseableSpec extends munit.FunSuite {
     val cs: CloseableSignal[Int] = src.closeable
 
     val received = Signal(Seq.empty[Int])
-    cs.foreach { v => received.mutate(_ :+ v) }
+    cs.foreach { case v: Int => received.mutate(_ :+ v) }
 
     // Initial value 0 should be received
     waitForResult(received, Seq(0))

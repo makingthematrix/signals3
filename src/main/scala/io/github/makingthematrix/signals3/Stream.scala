@@ -261,6 +261,10 @@ object Stream {
     inline def toStream(using ec: ExecutionContext): Stream[E] = Stream.from(f)
   }
 
+  extension [E](p: Promise[E]) {
+    inline def toStream(using ec: ExecutionContext): Stream[E] = Stream.from(p)
+  }
+
   object `::` {
     def unapply[E](stream: Stream[E])(using ec: ExecutionContext): (Future[E], Stream[E]) = (stream.head, stream.tail)
   }
@@ -332,5 +336,11 @@ object Stream {
     * @return A new stream.
     */
   inline def from[E](future: Future[E])(using executionContext: ExecutionContext): TakeStream[E] =
-    TakeStream[E](future)(using executionContext)
+    from(CloseableFuture.from(future))
+
+  inline def from[E](promise: Promise[E])(using executionContext: ExecutionContext): TakeStream[E] =
+    from(CloseableFuture.from(promise))
+
+  inline def from[E](cf: CloseableFuture[E])(using executionContext: ExecutionContext): TakeStream[E] =
+    TakeStream[E](cf)
 }

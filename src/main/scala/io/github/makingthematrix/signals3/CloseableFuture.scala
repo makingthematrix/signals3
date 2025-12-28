@@ -358,14 +358,33 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext)
   * @see https://github.com/wireapp/wire-signals/wiki/Overview
   */
 object CloseableFuture {
+  /**
+   * Creates a new `CloseableFuture` from the given future. The returned future will be closed when the given future
+   * completes. If the given future is already completed, the returned future will complete immediately.
+   *
+   * NOTE: The future will be in fact `Uncloseable`, as there is no way to close the underlying future.
+   * See also: [[TakeStream.apply]]
+   */
   extension [T](future: Future[T]) {
     def toUncloseable(using ec: ExecutionContext): CloseableFuture[T] = CloseableFuture.from(future)
   }
 
+  /**
+   * Creates a new `CloseableFuture` from the given promise. The returned future will be closed when the given promise
+   * is completed. If the given promise is already completed, the returned future will complete immediately.
+   *
+   * NOTE: Since the new `CloseableFuture` wraps around a `Promise`, it is actually possible to close it.
+   * See also: [[TakeStream.apply]]
+   */
   extension [T](promise: Promise[T]) {
     def toCloseable(using ec: ExecutionContext): CloseableFuture[T] = CloseableFuture.from(promise)
   }
 
+  /**
+   * Creates a new `CloseableFuture` from the given closeable future. The returned future will be closed when the given
+   * closeable future completes. If the given closeable future is already completed, the returned future will complete
+   * immediately.
+   */
   given toFuture[T]: Conversion[CloseableFuture[T], Future[T]] with {
     def apply(cf: CloseableFuture[T]): Future[T] = cf.future
   }
