@@ -80,17 +80,12 @@ private[signals3] object ProxySignal {
   }
     
   final class CloseableSignal[V](source: Signal[V]) extends ProxySignal[V](source) with Closeable {
-    @volatile private var closed = false
+    override def closeAndCheck(): Boolean = super.closeAndCheck()
 
-    override def closeAndCheck(): Boolean = {
-      closed = true
-      true
-    }
-
-    override def isClosed: Boolean = closed
+    override def isClosed: Boolean = super.isClosed
 
     override protected def computeValue(current: Option[V]): Option[V] =
-      if !closed then source.value else current
+      if !isClosed then source.value else current
   }
 
   final class TakeWhileSignal[V](source: Signal[V], p: V => Boolean)
