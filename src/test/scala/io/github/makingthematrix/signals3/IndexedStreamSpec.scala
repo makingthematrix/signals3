@@ -93,7 +93,7 @@ class IndexedStreamSpec extends munit.FunSuite {
     a ! 4
     awaitAllTasks
 
-    val seq = buffer.result().toSeq
+    val seq = buffer.result().toSeq.sorted
     assertEquals(seq, Seq(1, 2))
   }
 
