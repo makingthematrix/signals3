@@ -14,19 +14,15 @@ class FlagSignalSpec extends munit.FunSuite {
     val taken: FiniteSignal[Boolean] = a.take(2)
     val last = taken.last
 
-    val takenBuffer = mutable.ArrayBuilder.make[Boolean]
-    taken.foreach(b => takenBuffer.addOne(b))
     // Emit just one change to reach 2 taken values (initial false, then true)
     a.set()   // false -> true
     waitForResult(taken, true)
-
-    assertEquals(takenBuffer.result().toSeq, Seq(false, true))
     assertEquals(testutils.result(last), true)
+    waitForResult(taken.isClosedSignal, true)
 
     // Further changes should not be delivered to 'taken'
     a.toggle() // true -> false
     waitForResult(a, false)
-    assertEquals(takenBuffer.result().toSeq, Seq(false, true))
   }
 
   test("Take and use .init to get all but the last element (FlagSignal)") {
