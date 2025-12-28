@@ -73,28 +73,20 @@ class IndexedStreamSpec extends munit.FunSuite {
   }
 
   test("Close after two events") {
+    import Serialized.dispatcher
     val a: SourceStream[Int] = Stream()
     val b: FiniteStream[Int] = a.take(2)
 
-    val buffer = mutable.ArrayBuilder.make[Int]
-    b.foreach { n =>
-      buffer.addOne(n)
-    }
+    a !! 1
+    waitForResult(b, 1)
+    a !! 2
+    waitForResult(b, 2)
+    waitForResult(b.isClosedSignal, true)
 
-    a ! 1
-    awaitAllTasks
-    a ! 2
-    awaitAllTasks
-
-    assert(b.isClosed)
-
-    a ! 3
-    awaitAllTasks
-    a ! 4
-    awaitAllTasks
-
-    val seq = buffer.result().toSeq.sorted
-    assertEquals(seq, Seq(1, 2))
+    a !! 3
+    waitForResult(a, 3)
+    a !! 4
+    waitForResult(a, 4)
   }
 
   test("Close a stream manually") {
