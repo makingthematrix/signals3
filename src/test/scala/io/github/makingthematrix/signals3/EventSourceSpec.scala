@@ -1,5 +1,6 @@
 package io.github.makingthematrix.signals3
 
+import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.ExecutionContext
 
 class EventSourceSpec extends munit.FunSuite {
@@ -117,11 +118,11 @@ class EventSourceSpec extends munit.FunSuite {
   }
 
   test("NoAutowiring mixin wires immediately and never unwires on last unsubscribe") {
+    val onWireCount: AtomicInteger = new AtomicInteger(0)
+    val onUnwireCount: AtomicInteger = new AtomicInteger(0)
     class NoAutoStream[E] extends Stream[E] with EventSource.NoAutowiring {
-      @volatile var onWireCount = 0
-      @volatile var onUnwireCount = 0
-      override protected def onWire(): Unit = onWireCount += 1
-      override protected def onUnwire(): Unit = onUnwireCount += 1
+      override protected def onWire(): Unit = onWireCount.incrementAndGet()
+      override protected def onUnwire(): Unit = onUnwireCount.incrementAndGet()
     }
 
     val s = NoAutoStream[Int]()
@@ -132,6 +133,6 @@ class EventSourceSpec extends munit.FunSuite {
     s.subscribe(a)
     s.unsubscribe(a)
     // Autowiring was disabled by the mixin; removing last subscriber should not call onUnwire
-    assertEquals(s.onUnwireCount, 0)
+    assertEquals(onUnwireCount.get(), 0)
   }
 }
