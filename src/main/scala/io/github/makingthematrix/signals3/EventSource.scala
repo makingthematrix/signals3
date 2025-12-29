@@ -2,6 +2,14 @@ package io.github.makingthematrix.signals3
 
 import scala.concurrent.ExecutionContext
 
+/** A common superclass for all event sources, i.e. [[Stream]] and [[Signal]].
+ * It handles common logic around subscribing and unsubscribing, as well as the logic around triggering the subscribers.
+ * It also provides a method for disabling the automatic wiring of the event source, which can be useful if the computations
+ * performed by the subscribers are expensive and you want to avoid them until the first subscriber is registered.
+ *
+ * @tparam E Event/value type of the given event source
+ * @tparam S The subscriber type, i.e. [[Stream.EventSubscriber]] or [[Signal.SignalSubscriber]]
+ */
 abstract class EventSource[E, S] {
   private object subscribersMonitor
 
@@ -59,7 +67,7 @@ abstract class EventSource[E, S] {
   def subscribe(subscriber: S): Unit = subscribersMonitor.synchronized {
     val wiredAlready = wired
     subscribers += subscriber
-    if !wiredAlready then onWire()
+    if (!wiredAlready) onWire()
   }
 
   /** Removes a previously registered subscriber instance.
@@ -69,7 +77,7 @@ abstract class EventSource[E, S] {
     */
   def unsubscribe(subscriber: S): Unit = subscribersMonitor.synchronized {
     subscribers -= subscriber
-    if autowiring && !hasSubscribers then onUnwire()
+    if (autowiring && !hasSubscribers) onUnwire()
   }
 
   /** The class which implements this `EventRelay` can use this method to notify all the subscribers that a new event
@@ -93,7 +101,7 @@ abstract class EventSource[E, S] {
     */
   def unsubscribeAll(): Unit = subscribersMonitor.synchronized {
     subscribers = Set.empty
-    if autowiring then onUnwire()
+    if (autowiring) onUnwire()
   }
 
   /** Typically, a newly created event streams and signals are lazy in the sense that till there are no subscriptions to them,
@@ -108,18 +116,18 @@ abstract class EventSource[E, S] {
     */
   def disableAutowiring(): this.type = subscribersMonitor.synchronized {
     autowiring = false
-    if subscribers.isEmpty then onWire()
+    if (subscribers.isEmpty) onWire()
     this
   }
 
+  /** Returns true if the event source is currently wired to subscribers.
+   */
   inline final def wired: Boolean = hasSubscribers || !autowiring
 }
 
 object EventSource {
   /** By default, a new event source is initialized lazily, i.e. only when the first subscriber function is registered in it.
     * You can decorate it with `NoAutowiring` to enforce initialization.
-    *
-    * @see [[EventSource]]
     */
   trait NoAutowiring {
     self: EventSource[?, ?] =>
