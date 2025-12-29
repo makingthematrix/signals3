@@ -25,7 +25,7 @@ final private[signals3] class FlatMapSignal[A, B](source: Signal[A], f: A => Sig
     override def changed(currentContext: Option[ExecutionContext]): Unit = {
       val changed = wiringMonitor.synchronized {
         val next = source.value
-        if sourceValue != next then {
+        if (sourceValue != next) {
           sourceValue = next
 
           mapped.unsubscribe(FlatMapSignal.this)
@@ -44,7 +44,7 @@ final private[signals3] class FlatMapSignal[A, B](source: Signal[A], f: A => Sig
     source.subscribe(subscriber)
 
     val next = source.value
-    if sourceValue != next then {
+    if (sourceValue != next) {
       sourceValue = next
       mapped = next.map(f).getOrElse(Signal.empty[B])
     }
@@ -58,5 +58,5 @@ final private[signals3] class FlatMapSignal[A, B](source: Signal[A], f: A => Sig
     mapped.unsubscribe(this)
   }
 
-  override def changed(currentContext: Option[ExecutionContext]): Unit = setValue(mapped.value, currentContext)
+  override def changed(currentContext: Option[ExecutionContext]): Unit = updateWith(mapped.value, currentContext)
 }
