@@ -108,4 +108,137 @@ class FlagSignalSpec extends munit.FunSuite {
     assertEquals(res(0), Seq(false, true))
     assertEquals(res(1), Seq(false))
   }
+
+  test("state reflects current flag value") {
+    val a = FlagSignal() // starts false
+    assertEquals(a.state, false)
+
+    a.set()
+    waitForResult(a, true)
+    assertEquals(a.state, true)
+
+    a.clear()
+    waitForResult(a, false)
+    assertEquals(a.state, false)
+
+    a.toggle()
+    waitForResult(a, true)
+    assertEquals(a.state, true)
+  }
+
+  test("setIf/clearIf/toggleIf respect predicate") {
+    val a = FlagSignal() // false
+
+    a.setIf(false)
+    awaitAllTasks
+    assertEquals(a.state, false)
+
+    a.setIf(true)
+    waitForResult(a, true)
+    assertEquals(a.state, true)
+
+    a.clearIf(false)
+    awaitAllTasks
+    assertEquals(a.state, true)
+
+    a.clearIf(true)
+    waitForResult(a, false)
+    assertEquals(a.state, false)
+
+    a.toggleIf(false)
+    awaitAllTasks
+    assertEquals(a.state, false)
+
+    a.toggleIf(true)
+    waitForResult(a, true)
+    assertEquals(a.state, true)
+  }
+
+  test("onSet triggers when value becomes true (once per change)") {
+    val a = FlagSignal() // false
+    var count = 0
+    a.onSet { count += 1 }
+    // Flush initial callback (state is false, so no increment expected)
+    awaitAllTasks
+    assertEquals(count, 0)
+
+    a.set()
+    waitForResult(a, true)
+    awaitAllTasks
+    assertEquals(count, 1)
+
+    // Setting true again doesn't emit duplicate value
+    a.set()
+    awaitAllTasks
+    assertEquals(count, 1)
+
+    a.clear()
+    waitForResult(a, false)
+    awaitAllTasks
+    assertEquals(count, 1)
+
+    a.toggle() // false -> true
+    waitForResult(a, true)
+    awaitAllTasks
+    assertEquals(count, 2)
+  }
+
+  test("onClear triggers when value becomes false (includes initial false)") {
+    val a = FlagSignal() // false
+    var count = 0
+    a.onClear { count += 1 }
+
+    // Called for initial false (allow async delivery)
+    awaitAllTasks
+    assertEquals(count, 1)
+
+    a.set()
+    waitForResult(a, true)
+    assertEquals(count, 1)
+
+    a.clear()
+    waitForResult(a, false)
+    awaitAllTasks
+    assertEquals(count, 2)
+
+    // Clearing again (no value change) shouldn't call
+    a.clear()
+    awaitAllTasks
+    assertEquals(count, 2)
+
+    a.toggle() // false -> true
+    waitForResult(a, true)
+    awaitAllTasks
+    assertEquals(count, 2)
+
+    a.toggle() // true -> false
+    waitForResult(a, false)
+    awaitAllTasks
+    assertEquals(count, 3)
+  }
+
+  test("onToggle fires immediately and on each subsequent change") {
+    val a = FlagSignal() // false
+    var count = 0
+    a.onToggle { count += 1 }
+
+    // Immediate call on subscription with current value (allow async delivery)
+    awaitAllTasks
+    assertEquals(count, 1)
+
+    a.set()
+    waitForResult(a, true)
+    awaitAllTasks
+    assertEquals(count, 2)
+
+    a.clear()
+    waitForResult(a, false)
+    awaitAllTasks
+    assertEquals(count, 3)
+
+    a.toggle()
+    waitForResult(a, true)
+    awaitAllTasks
+    assertEquals(count, 4)
+  }
 }
