@@ -67,15 +67,15 @@ private[signals3] object ProxySignal {
     value = source.value
 
     override protected def computeValue(current: Option[V]): Option[V] = {
-      if source.value != current then inc()
+      if (source.value != current) inc()
       source.value
     }
   }
 
   final class DropSignal[V](source: Signal[V], drop: Int) extends IndexedSignal[V](source) {
     override protected def computeValue(current: Option[V]): Option[V] = {
-      if source.value != current then inc()
-      if counter > drop then source.value else current
+      val c = if (source.value != current) incAndGet() else counter
+      if (c > drop) source.value else current
     }
   }
     

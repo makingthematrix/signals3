@@ -105,7 +105,7 @@ private[signals3] object ProxyStream {
 
   final class DropStream[E](source: Stream[E], drop: Int) extends IndexedStream[E](source) {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      if counter < drop then inc() else dispatch(event, sourceContext)
+      if (counter < drop) inc() else dispatch(event, sourceContext)
   }
 
   final class DropWhileStream[E](source: Stream[E], p: E => Boolean) extends ProxyStream[E, E](source) {

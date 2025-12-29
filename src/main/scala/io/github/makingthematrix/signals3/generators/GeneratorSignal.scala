@@ -122,8 +122,7 @@ class LazyListGeneratorSignal[V](interval: FiniteDuration | (V => Long),
   override protected def onBeat(): Unit = {
     super.onBeat()
     if (!currentValue.exists(paused)) {
-      val v =  values(counter)
-      inc()
+      val v =  values(getAndInc())
       publish(v, ec)
     }
   }
