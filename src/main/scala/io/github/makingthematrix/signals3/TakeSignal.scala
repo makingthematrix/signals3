@@ -17,8 +17,8 @@ final class TakeSignal[V](source: Signal[V], take: Int)
     else current
 
   private def takeOne(value: V): Unit = {
-    inc()
-    if (counter < take) publish(value)
+    val c = incAndGet()
+    if (c < take) publish(value)
     else {
       close()
       lastPromise match {

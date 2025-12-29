@@ -1,7 +1,20 @@
 package io.github.makingthematrix.signals3
 
-trait Indexed {
-  @volatile private var _counter = 0
-  inline def counter: Int = _counter
-  protected def inc(): Unit = _counter += 1
+import java.util.concurrent.atomic.AtomicInteger
+
+/** A trait that keeps track of the number of events published so far. */
+private[signals3] trait Indexed {
+  private val _counter: AtomicInteger = new AtomicInteger(0)
+
+  /** The number of events published so far. */
+  inline def counter: Int = _counter.get()
+
+  /** Increments the counter by one. */
+  inline protected def inc(): Unit = _counter.incrementAndGet()
+
+  /** Increments the counter by one and returns the new value. */
+  inline protected def incAndGet(): Int = _counter.incrementAndGet()
+
+  /** Increments the counter by one and returns the previous value. */
+  inline protected def getAndInc(): Int = _counter.getAndIncrement()
 }
