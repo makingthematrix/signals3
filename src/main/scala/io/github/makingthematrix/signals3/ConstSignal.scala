@@ -8,6 +8,7 @@ import scala.concurrent.ExecutionContext
   * Using const signals in flatMap chains should have better performance compared to source signals with the same value.
   * Since the value never changes, the subscriber function will be called only in the moment of subscription, but never
   * after that, so there's no need to keep the subscription.
+ * ConstSignal implements [[CanBeClosed]] but it's treated as if it was always closed.
   */
 final private[signals3] class ConstSignal[V] (private val v: Option[V])
   extends Signal[V](v) with NoAutowiring with CanBeClosed {
