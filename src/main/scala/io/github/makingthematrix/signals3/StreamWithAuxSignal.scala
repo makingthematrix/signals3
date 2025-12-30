@@ -5,7 +5,7 @@ import Signal.SignalSubscriber
 
 import scala.concurrent.ExecutionContext
 
-/** a stream coupled with an auxiliary signal.
+/** A stream coupled with an auxiliary signal.
   * You can use it if you want to repeat some computations based on the current value of the signal every time when an event
   * is published in the source stream.
   * ```

@@ -878,5 +878,6 @@ object Signal {
 
   private[signals3] def done(): DoneSignal = new DoneSignal()
 
-  def flag(): FlagSignal = FlagSignal()
+  /** A signal which holds no value and never changes. */
+  inline def flag(): FlagSignal = FlagSignal()
 }

@@ -240,6 +240,56 @@ class IndexedStreamSpec extends munit.FunSuite {
     assertEquals(cBuffer.result().toSeq.sorted, Seq(3, 4))
   }
 
+  // ===== TakeStream companion constructors =====
+
+  test("TakeStream.apply(Future) publishes exactly one event and does not auto-close") {
+    val buffer = mutable.ArrayBuilder.make[Int]
+
+    val p = scala.concurrent.Promise[Int]()
+    val fut = p.future
+    val ts = TakeStream(fut)
+    ts.foreach(buffer.addOne)
+
+    val f = ts.head
+    p.success(123)
+    // Ensure the single event arrives via the next/head future
+    assertEquals(result(f), 123)
+
+    assertEquals(buffer.result().toSeq, Seq(123))
+    // Current implementation does not auto-close on success in the companion path
+    assert(!ts.isClosed)
+  }
+
+  test("TakeStream.apply(Promise) publishes when the promise succeeds and remains open") {
+    val buffer = mutable.ArrayBuilder.make[Int]
+
+    val p = scala.concurrent.Promise[Int]()
+    val ts = TakeStream(p)
+    ts.foreach(buffer.addOne)
+
+    val f = ts.head
+    p.success(7)
+    assertEquals(result(f), 7)
+
+    assertEquals(buffer.result().toSeq, Seq(7))
+    assert(!ts.isClosed)
+  }
+
+  test("TakeStream.apply(CloseableFuture) closes the stream on failure and emits nothing") {
+    val buffer = mutable.ArrayBuilder.make[Int]
+
+    val cf = CloseableFuture.failed[Int](new RuntimeException("boom"))
+    val ts = TakeStream(cf)
+    ts.foreach(buffer.addOne)
+
+    // Companion should close the stream on failure
+    assert(waitForResult(ts.isClosedSignal, true))
+    awaitAllTasks
+
+    assertEquals(buffer.result().toSeq, Seq.empty[Int])
+    assert(ts.isClosed)
+  }
+
   test("Drop events until a condition") {
     val a: SourceStream[String] = Stream()
     val b = a.dropWhile(str => str.toInt < 3)
