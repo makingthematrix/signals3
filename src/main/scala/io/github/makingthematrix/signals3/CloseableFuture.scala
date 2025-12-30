@@ -3,7 +3,7 @@ package io.github.makingthematrix.signals3
 import java.util.{Timer, TimerTask}
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.*
-import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.duration.{Duration, FiniteDuration, MILLISECONDS}
 import scala.language.implicitConversions
 import scala.ref.WeakReference
 import scala.util.control.NoStackTrace
@@ -551,14 +551,14 @@ object CloseableFuture {
   final def repeat(interval: FiniteDuration)(body: => Unit)(using ec: ExecutionContext): CloseableFuture[Unit] = {
     val intervalMillis = interval.toMillis
     @volatile var last = System.currentTimeMillis
-    def calcInterval(): Long = {
+    def calcInterval(): FiniteDuration = {
       val now = System.currentTimeMillis
       val error = now - last - intervalMillis
       last = now
-      intervalMillis - (error / 2L) - 1L
+      FiniteDuration.apply(intervalMillis - (error / 2L) - 1L, MILLISECONDS)
     }
 
-    if intervalMillis <= 0L then
+    if (intervalMillis <= 0L)
       successful(Try(body))
     else
       repeatVariant(calcInterval)(body)
@@ -576,9 +576,9 @@ object CloseableFuture {
     *             call `body` again, after `interval`.
     * @return A closeable future representing the whole process.
     */
-  final def repeatVariant(interval: () => Long)(body: => Unit)(using ec: ExecutionContext): CloseableFuture[Unit] =
+  final def repeatVariant(interval: () => FiniteDuration)(body: => Unit)(using ec: ExecutionContext): CloseableFuture[Unit] =
     new ActuallyCloseable(Promise[Unit]()) {
-      inline def sched(t: Long): TimerTask = schedule(() => { Try(body); startNewTimeoutLoop() }, t)
+      inline def sched(t: FiniteDuration): TimerTask = schedule(() => { Try(body); startNewTimeoutLoop() }, t.toMillis)
 
       @volatile private var closed: Boolean = false
       @volatile private var task: TimerTask = sched(interval())
