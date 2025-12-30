@@ -1,5 +1,6 @@
 package io.github.makingthematrix.signals3
 
+import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.ExecutionContext
 import scala.util.chaining.scalaUtilChainingOps
 
@@ -7,21 +8,21 @@ import scala.util.chaining.scalaUtilChainingOps
  * A common supertrait for [[CloseableFuture]] and all streams and signals that can be closed at some point,
  * either by the user or by internal logic.
  */
-protected[signals3] trait CanBeClosed {
-  @volatile private var closed: Boolean = false
+trait CanBeClosed {
+  private val closed: AtomicBoolean = new AtomicBoolean(false)
 
   /**
    * Checks if the stream/signal is already closed.
    * @return `true` if the stream/signal is already closed, `false` if it's not. Note that if the stream/signal failed,
    *         the result can be unreliable.
    */
-  def isClosed: Boolean = closed
+  def isClosed: Boolean = closed.get()
 
-  protected def closeAndCheck(): Boolean = if (!closed) {
-    closed = true
-    callOnClose()
-    true
-  } else false
+  protected def closeAndCheck(): Boolean =
+    if (!closed.getAndSet(true)) {
+      callOnClose()
+      true
+    } else false
 
   /**
    * Registers a block of code that should be called exactly once when the closeable is being closed.
