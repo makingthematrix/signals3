@@ -3,6 +3,7 @@ package io.github.makingthematrix.signals3.generators
 import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, waitForResult}
 import io.github.makingthematrix.signals3.{EventContext, Signal, Threading}
 
+import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 import scala.concurrent.duration.*
 
@@ -34,7 +35,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
   test("a made-up variant heartbeat stream") {
     var counter = 0
     val isSuccess = Signal(false)
-    val stream = GeneratorStream.repeat((), () => 200L)
+    val stream = GeneratorStream.repeat((), () => FiniteDuration(200L, TimeUnit.MILLISECONDS))
     stream.foreach { _ =>
       counter += 1
       if counter == 3 then isSuccess ! true
@@ -75,7 +76,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
     val now = System.currentTimeMillis
     val isSuccess = Signal(false)
 
-    val stream = GeneratorStream.generate(() => b * 200L) {
+    val stream = GeneratorStream.generate(() => FiniteDuration(b * 200L, TimeUnit.MILLISECONDS)) {
       val res = b
       val t = a + b
       a = b

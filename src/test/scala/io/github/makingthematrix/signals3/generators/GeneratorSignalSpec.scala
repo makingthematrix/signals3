@@ -1,8 +1,9 @@
 package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, waitForResult}
-import io.github.makingthematrix.signals3.{EventContext, DoneSignal, Signal, Threading}
+import io.github.makingthematrix.signals3.{DoneSignal, EventContext, Signal, Threading}
 
+import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 import scala.concurrent.duration.*
 
@@ -10,7 +11,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
   import EventContext.Implicits.global
   import Threading.defaultContext
 
-  def fibDelay(t: (Int, Int)): Long = t._2 * 200L
+  def fibDelay(t: (Int, Int)): FiniteDuration = FiniteDuration(t._2 * 200L, TimeUnit.MILLISECONDS)
   
   test("fibonacci signal with generate") {
     val builder = mutable.ArrayBuilder.make[Int]

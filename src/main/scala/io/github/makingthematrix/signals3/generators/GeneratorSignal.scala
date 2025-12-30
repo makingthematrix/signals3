@@ -9,7 +9,7 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 import scala.util.chaining.scalaUtilChainingOps
 
-trait VPausable[V] {
+protected trait VPausable[V] {
   val paused: V => Boolean
 }
 
@@ -34,13 +34,13 @@ trait VPausable[V] {
   * @tparam V       The type of the signal's value.
   */
 
-abstract class GeneratorSignal[V](init : V, interval: FiniteDuration | (V => Long))
+abstract class GeneratorSignal[V](init : V, interval: FiniteDuration | (V => FiniteDuration))
                                  (using ec: ExecutionContext)
   extends Signal[V](Some(init)) with NoAutowiring {
 
   protected lazy val beat: CloseableFuture[Unit] = (interval match {
     case intv: FiniteDuration => CloseableFuture.repeat(intv)
-    case intv: (V => Long)    => CloseableFuture.repeatVariant(() => intv(currentValue.getOrElse(init)))
+    case intv: (V => FiniteDuration)    => CloseableFuture.repeatVariant(() => intv(currentValue.getOrElse(init)))
   }) { onBeat() }
 
   private var isInitialized = false
@@ -59,7 +59,7 @@ abstract class GeneratorSignal[V](init : V, interval: FiniteDuration | (V => Lon
 
 class CloseableGeneratorSignal[V](init: V,
                                   update: V => V,
-                                  interval: FiniteDuration | (V => Long),
+                                  interval: FiniteDuration | (V => FiniteDuration),
                                   override val paused: V => Boolean)
                                  (using ec: ExecutionContext)
   extends GeneratorSignal[V](init, interval) with Closeable with VPausable[V] {
@@ -83,7 +83,7 @@ class CloseableGeneratorSignal[V](init: V,
   override inline def onClose(body: => Unit): Unit = beat.onClose(body)
 }
 
-class FiniteGeneratorSignal[V](interval: FiniteDuration | (V => Long),
+class FiniteGeneratorSignal[V](interval: FiniteDuration | (V => FiniteDuration),
                                val values: Iterable[V],
                                override val paused: V => Boolean)
                               (using ec: ExecutionContext)
@@ -112,7 +112,7 @@ class FiniteGeneratorSignal[V](interval: FiniteDuration | (V => Long),
   lazy val init: FiniteSignal[V] = this.take(values.size - 1)
 }
 
-class LazyListGeneratorSignal[V](interval: FiniteDuration | (V => Long),
+class LazyListGeneratorSignal[V](interval: FiniteDuration | (V => FiniteDuration),
                                  val values: LazyList[V],
                                  override val paused: V => Boolean)
                                 (using ec: ExecutionContext)
@@ -168,7 +168,7 @@ object GeneratorSignal {
     * @tparam V       The type of the signal's value.
     * @return         A new generator signal.
     */
-  inline def generate[V](init: V, interval: FiniteDuration | (V => Long))(update: V => V)
+  inline def generate[V](init: V, interval: FiniteDuration | (V => FiniteDuration))(update: V => V)
                         (using ec: ExecutionContext): CloseableGeneratorSignal[V] =
     new CloseableGeneratorSignal[V](init, update, interval, (_: V) => false).tap(_.initialize())
 
@@ -234,7 +234,7 @@ object GeneratorSignal {
     * @tparam Z       The type of the generator's published value.
     * @return         A new generator signal.
     */
-  inline def unfold[V, Z](init: V, interval: V => Long)(update: V => (V, Z))
+  inline def unfold[V, Z](init: V, interval: V => FiniteDuration)(update: V => (V, Z))
                          (using ec: ExecutionContext): CloseableSignal[Z] =
     Transformers.map[(V, Z), Z](
       new CloseableGeneratorSignal[(V, Z)](
@@ -254,30 +254,30 @@ object GeneratorSignal {
     *                 By default it's `Threading.defaultContext`.
     * @return         A new generator signal of integers.
     */
-  inline def counter(interval: FiniteDuration | (Int => Long))
+  inline def counter(interval: FiniteDuration | (Int => FiniteDuration))
                     (using ec: ExecutionContext): CloseableGeneratorSignal[Int] =
     generate(0, interval)(_ + 1)
 
-  inline def from[V](values: Iterable[V], interval: FiniteDuration | (V => Long))
+  inline def from[V](values: Iterable[V], interval: FiniteDuration | (V => FiniteDuration))
                     (using ec: ExecutionContext): FiniteGeneratorSignal[V] =
     FiniteGeneratorSignal[V](values, interval)
 
-  inline def from[V](generate: () => Option[V], interval: FiniteDuration | (V => Long))
+  inline def from[V](generate: () => Option[V], interval: FiniteDuration | (V => FiniteDuration))
              (using ec: ExecutionContext): FiniteGeneratorSignal[V] = {
     FiniteGeneratorSignal[V](generate, interval)
   }
 
-  inline def from[V](values: LazyList[V], interval: FiniteDuration | (V => Long))
+  inline def from[V](values: LazyList[V], interval: FiniteDuration | (V => FiniteDuration))
                     (using ec: ExecutionContext): LazyListGeneratorSignal[V] =
     LazyListGeneratorSignal[V](values, interval)
 }
 
 object FiniteGeneratorSignal {
-  inline def apply[V](values: Iterable[V], interval: FiniteDuration | (V => Long))
+  inline def apply[V](values: Iterable[V], interval: FiniteDuration | (V => FiniteDuration))
                      (using ec: ExecutionContext): FiniteGeneratorSignal[V] =
     new FiniteGeneratorSignal[V](interval, values, (_: V) => false).tap(_.initialize())
 
-  def apply[V](generate: () => Option[V], interval: FiniteDuration | (V => Long))
+  def apply[V](generate: () => Option[V], interval: FiniteDuration | (V => FiniteDuration))
               (using ec: ExecutionContext): FiniteGeneratorSignal[V] = {
     val it = Iterable.from(new Iterator[V]{
       private var value = generate()
@@ -289,7 +289,7 @@ object FiniteGeneratorSignal {
 }
 
 object LazyListGeneratorSignal {
-  inline def apply[V](values: LazyList[V], interval: FiniteDuration | (V => Long))
+  inline def apply[V](values: LazyList[V], interval: FiniteDuration | (V => FiniteDuration))
                      (using ec: ExecutionContext): LazyListGeneratorSignal[V] =
     new LazyListGeneratorSignal[V](interval, values, (_: V) => false).tap(_.initialize())
 }
