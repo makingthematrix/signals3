@@ -47,7 +47,3 @@ class SourceStream[E] extends Stream[E] {
   @targetName("twobang")
   inline def !!(event: E)(using ec: ExecutionContext): Unit = publish(event, ec)
 }
-
-object SourceStream {
-  def apply[E](): SourceStream[E] = new SourceStream
-}

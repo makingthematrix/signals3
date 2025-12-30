@@ -9,10 +9,20 @@ import scala.util.chaining.scalaUtilChainingOps
  * after a given number of events.
  * @tparam T The type of the stream's event or the signal's value
  */
-protected[signals3] trait Finite[T] extends CanBeClosed {
+trait Finite[T] extends CanBeClosed {
   protected[signals3] final inline def close(): Unit = closeAndCheck()
 
   protected var lastPromise: Option[Promise[T]] = None
+
+  /**
+   * A future that will be completed with the last event published to the stream or signal.
+   *
+   * Take note that `Finite` does not declare `init`, i.e. a stream of all events except the last one.
+   * This is because while we can be sure what was the last event before closing the stream/signal, in most implementations
+   * we get to know it only after the stream/signal is closed. To be able to reliably push events into `init`, we would need
+   * to know it beforehand.
+   * See [[TakeStream]] and [[TakeSignal]] for examples of classes that implement `init`.
+   */
   final lazy val last: Future[T] = Promise[T]().tap { p => lastPromise = Some(p) }.future
 }
   
