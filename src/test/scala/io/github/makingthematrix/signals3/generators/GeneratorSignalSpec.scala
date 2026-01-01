@@ -159,4 +159,139 @@ class GeneratorSignalSpec extends munit.FunSuite {
     Thread.sleep(500L)
     val res2 = arr.result().toSeq
     assertEquals(res1, res2)
-  }}
+  }
+
+  test("counter with function interval emits increasing values") {
+    var last = 0
+    val done = Signal(false)
+    val signal = GeneratorSignal.counter((n: Int) => (100 + n * 50).millis)
+
+    signal.foreach { n =>
+      last = n
+      if n >= 4 then done ! true
+    }
+
+    waitForResult(done, true)
+    signal.close()
+    awaitAllTasks
+    assertEquals(last, 4)
+  }
+
+  test("from(Iterable[V], interval) publishes all values and then closes") {
+    val values = Seq(10, 20, 30, 40)
+    val buf = mutable.ArrayBuffer[Int]()
+    val finished = Signal(false)
+    val sig = GeneratorSignal.from(values, 50.millis)
+
+    sig.foreach { v =>
+      buf.addOne(v)
+      if v == values.last then finished ! true
+    }
+
+    waitForResult(finished, true)
+    awaitAllTasks
+    assert(sig.isClosed)
+    // FiniteGeneratorSignal starts with the first value; foreach records subsequent changes as they occur.
+    // The collected sequence should contain all values, in order, ending with the last one.
+    assertEquals(buf.toSeq, values)
+  }
+
+  test("from(() => Option[V], interval) emits until None and then closes") {
+    var n = 0
+    val buf = mutable.ArrayBuffer[Int]()
+    val finished = Signal(false)
+    val sig = GeneratorSignal.from(() => {
+      n += 1
+      if n <= 5 then Some(n) else None
+    }, 40.millis)
+
+    sig.onClose(finished ! true)
+    sig.foreach(buf.addOne)
+
+    waitForResult(finished, true)
+    awaitAllTasks
+    assert(sig.isClosed)
+    assertEquals(buf.toSeq, Seq(1, 2, 3, 4, 5))
+  }
+
+  test("FiniteGeneratorSignal.apply(() => Option[V], interval) works the same") {
+    var n = 0
+    val buf = mutable.ArrayBuffer[Int]()
+    val finished = Signal(false)
+    val sig: FiniteGeneratorSignal[Int] = FiniteGeneratorSignal(() => {
+      n += 1
+      if n <= 3 then Some(n) else None
+    }, 60.millis)
+
+    sig.onClose(finished ! true)
+    sig.foreach(buf.addOne)
+
+    waitForResult(finished, true)
+    awaitAllTasks
+    assert(sig.isClosed)
+    assertEquals(buf.toSeq, Seq(1, 2, 3))
+  }
+
+  test("from(LazyList[V], interval) with take collects first N values") {
+    val buf = mutable.ArrayBuffer[Int]()
+    val done = Signal(false)
+    val sig = GeneratorSignal.from(LazyList.from(1), 30.millis)
+    val firstFive = sig.take(5)
+
+    firstFive.foreach { v =>
+      buf.addOne(v)
+      if v == 5 then done ! true
+    }
+
+    waitForResult(done, true)
+    assertEquals(buf.toSeq, Seq(1, 2, 3, 4, 5))
+  }
+
+  test("FiniteGeneratorSignal.init publishes all but the last value") {
+    val values = Seq(7, 9, 11, 13)
+    val bufInit = mutable.ArrayBuffer[Int]()
+    val finishedInit = Signal(false)
+    val sig = GeneratorSignal.from(values, 40.millis)
+
+    sig.init.foreach { v =>
+      bufInit.addOne(v)
+      if v == values.init.last then finishedInit ! true
+    }
+
+    waitForResult(finishedInit, true)
+    // Also ensure the underlying generator completes
+    val allDone = Signal(false)
+    sig.onClose(allDone ! true)
+    waitForResult(allDone, true)
+    awaitAllTasks
+
+    assertEquals(bufInit.toSeq, values.init)
+    assert(sig.isClosed)
+  }
+
+  test("CloseableGeneratorSignal.onClose is invoked on close") {
+    var closed = false
+    val sig = GeneratorSignal(0, (n: Int) => n + 1, 80.millis)
+    sig.onClose { closed = true }
+
+    val done = Signal(false)
+    var cnt = 0
+    sig.foreach { _ =>
+      cnt += 1
+      if cnt == 2 then done ! true
+    }
+
+    waitForResult(done, true)
+    sig.close()
+    awaitAllTasks
+    assert(sig.isClosed)
+    assert(closed)
+  }
+
+  test("closing the generator signal twice returns false") {
+    val sig = GeneratorSignal.counter(100.millis)
+    assert(sig.closeAndCheck())
+    assert(sig.isClosed)
+    assert(!sig.closeAndCheck())
+  }
+}

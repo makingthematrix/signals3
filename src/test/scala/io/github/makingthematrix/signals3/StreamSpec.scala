@@ -68,7 +68,7 @@ class StreamSpec extends munit.FunSuite {
     val promise = Promise[Int]()
     val resPromise = Promise[Int]()
 
-    Stream.from(promise.future).onCurrent { event =>
+    Stream.apply(promise.future).onCurrent { event =>
       assertEquals(event, 1)
       resPromise.success(event)
     }
@@ -82,7 +82,7 @@ class StreamSpec extends munit.FunSuite {
     val promise = Promise[Int]()
     val resPromise = Promise[Int]()
 
-    Stream.from(promise.future).onCurrent { event => resPromise.success(event) }
+    Stream.apply(promise.future).onCurrent { event => resPromise.success(event) }
 
     promise.failure(new IllegalArgumentException)
 
@@ -223,7 +223,7 @@ class StreamSpec extends munit.FunSuite {
 
   test("create a stream from a signal") {
     val signal = Signal[Int]()
-    val stream = Stream.from(signal)
+    val stream = Stream.apply(signal)
 
     val expected = Signal(0)
     val eventReceived = Signal(false)
@@ -247,7 +247,7 @@ class StreamSpec extends munit.FunSuite {
 
   test("create a stream from a future") {
     val promise = Promise[Int]()
-    val stream = Stream.from(promise.future)
+    val stream = Stream.apply(promise.future)
 
     val received = Signal(0)
     stream.foreach { n =>
@@ -261,7 +261,7 @@ class StreamSpec extends munit.FunSuite {
   test("create a stream from a future on a separate execution context") {
     given dq: DispatchQueue = SerialDispatchQueue()
     val promise = Promise[Int]()
-    val stream = Stream.from(promise.future)(using dq)
+    val stream = Stream.apply(promise.future)(using dq)
 
     val received = Signal(0)
     stream.foreach { n =>

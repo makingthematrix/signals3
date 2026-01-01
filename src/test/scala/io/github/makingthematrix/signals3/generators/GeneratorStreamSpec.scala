@@ -157,4 +157,124 @@ class GeneratorStreamSpec extends munit.FunSuite {
     assertEquals(res.map(_._1), numbers)
     assert(res.map(_._2).zip(res.tail.map(_._2)).forall((a, b) => b >= a))
   }
+
+  test("heartbeat stream with function interval") {
+    var counter = 0
+    val isSuccess = Signal(false)
+    val stream = GeneratorStream.heartbeat(() => 200.millis)
+    stream.foreach { _ =>
+      counter += 1
+      if counter == 3 then isSuccess ! true
+    }
+    waitForResult(isSuccess, true)
+    stream.close()
+    awaitAllTasks
+    assert(stream.isClosed)
+  }
+
+  test("repeat with constant interval publishes repeatedly") {
+    var counter = 0
+    val isSuccess = Signal(false)
+    val stream = GeneratorStream.repeat("tick", 100.millis)
+    stream.foreach { s =>
+      assertEquals(s, "tick")
+      counter += 1
+      if counter == 5 then isSuccess ! true
+    }
+    waitForResult(isSuccess, true)
+    stream.close()
+    awaitAllTasks
+    assert(stream.isClosed)
+  }
+
+  test("from(() => Option[E], interval) emits until None and then closes") {
+    var n = 0
+    val buffer = mutable.ArrayBuffer[Int]()
+    val finished = Signal(false)
+    val gen = GeneratorStream.from(() => {
+      n += 1
+      if n <= 5 then Some(n) else None
+    }, 50.millis)
+
+    gen.onClose(finished ! true)
+    gen.foreach(buffer.addOne)
+
+    waitForResult(finished, true)
+    awaitAllTasks
+    assert(gen.isClosed)
+    assertEquals(buffer.toSeq, Seq(1,2,3,4,5))
+  }
+
+  test("FiniteGeneratorStream.apply(() => Option[E], interval) works the same") {
+    var n = 0
+    val buffer = mutable.ArrayBuffer[Int]()
+    val finished = Signal(false)
+    val gen: FiniteGeneratorStream[Int] = FiniteGeneratorStream(() => {
+      n += 1
+      if n <= 3 then Some(n) else None
+    }, 60.millis)
+
+    gen.onClose(finished ! true)
+    gen.foreach(buffer.addOne)
+
+    waitForResult(finished, true)
+    awaitAllTasks
+    assert(gen.isClosed)
+    assertEquals(buffer.toSeq, Seq(1,2,3))
+  }
+
+  test("from(LazyList[E], interval) with take collects first N elements") {
+    val buffer = mutable.ArrayBuffer[Int]()
+    val done = Signal(false)
+    val gen = GeneratorStream.from(LazyList.from(1), 40.millis)
+    val firstFive = gen.take(5)
+
+    firstFive.foreach { n =>
+      buffer.addOne(n)
+      if n == 5 then done ! true
+    }
+
+    waitForResult(done, true)
+    assertEquals(buffer.toSeq, Seq(1,2,3,4,5))
+  }
+
+  test("FiniteGeneratorStream.init publishes all but the last element") {
+    val numbers = Seq(10,20,30,40)
+    val bufInit = mutable.ArrayBuffer[Int]()
+    val finished = Signal(false)
+    val gen = GeneratorStream.from(numbers, 50.millis)
+
+    gen.init.foreach { n =>
+      bufInit.addOne(n)
+      if n == numbers.init.last then finished ! true
+    }
+
+    waitForResult(finished, true)
+    // wait for the underlying finite generator to complete as well
+    val allDone = Signal(false)
+    gen.onClose(allDone ! true)
+    waitForResult(allDone, true)
+    awaitAllTasks
+
+    assertEquals(bufInit.toSeq, numbers.init)
+    assert(gen.isClosed)
+  }
+
+  test("CloseableGeneratorStream.onClose is invoked on close") {
+    var closed = false
+    val stream = GeneratorStream(() => 1, 100.millis)
+    stream.onClose { closed = true }
+    // consume a few events then close
+    val done = Signal(false)
+    var counter = 0
+    stream.foreach { _ =>
+      counter += 1
+      if counter == 2 then done ! true
+    }
+    waitForResult(done, true)
+    stream.close()
+    awaitAllTasks
+    assert(stream.isClosed)
+    assert(closed)
+  }
 }

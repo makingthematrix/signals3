@@ -151,7 +151,7 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
 
   inline final def :::(stream: Stream[E]): Stream[E] = join(stream)
   
-  inline final def join(future: Future[E])(using ec: ExecutionContext): Stream[E] = join(Stream.from(future))
+  inline final def join(future: Future[E])(using ec: ExecutionContext): Stream[E] = join(Stream.apply(future))
 
   /**
    * TODO: Similarly to :::, this one shouldn't be here. Let's remove it from here and from Signal.
@@ -258,11 +258,11 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
 
 object Stream {
   extension [E](f: Future[E]) {
-    inline def toStream(using ec: ExecutionContext): Stream[E] = Stream.from(f)
+    inline def toStream(using ec: ExecutionContext): Stream[E] = Stream.apply(f)
   }
 
   extension [E](p: Promise[E]) {
-    inline def toStream(using ec: ExecutionContext): Stream[E] = Stream.from(p)
+    inline def toStream(using ec: ExecutionContext): Stream[E] = Stream.apply(p)
   }
 
   object `::` {
@@ -327,20 +327,34 @@ object Stream {
     * @tparam E The type of events.
     * @return A new stream, emitting an event corresponding to the value of the original signal.
     */
-  inline def from[E](signal: Signal[E]): Stream[E] = signal.onChanged
+  inline def apply[E](signal: Signal[E]): Stream[E] = signal.onChanged
 
   /** Creates a stream from a future. The stream will emit one event if the future finishes with success, zero otherwise.
-    * @param future The `Future` treated as the source of the only event that can be emitted by the event source.
-    * @param executionContext The `ExecutionContext` in which the event will be dispatched.
+    * @param future The [[Future]] treated as the source of the only event that can be emitted by the event source.
+    * @param executionContext The [[ExecutionContext]] in which the event will be dispatched.
     * @tparam E The type of the event.
     * @return A new stream.
     */
-  inline def from[E](future: Future[E])(using executionContext: ExecutionContext): TakeStream[E] =
-    from(CloseableFuture.from(future))
+  inline def apply[E](future: Future[E])(using executionContext: ExecutionContext): TakeStream[E] =
+    apply(CloseableFuture.from(future))
 
-  inline def from[E](promise: Promise[E])(using executionContext: ExecutionContext): TakeStream[E] =
-    from(CloseableFuture.from(promise))
+  /** Creates a stream from a promise. The stream will emit one event if the promise finishes with success, zero otherwise.
+   *
+   * @param promise          The [[Promise]] treated as the source of the only event that can be emitted by the event source.
+   * @param executionContext The [[ExecutionContext]] in which the event will be dispatched.
+   * @tparam E The type of the event.
+   * @return A new stream.
+   */
+  inline def apply[E](promise: Promise[E])(using executionContext: ExecutionContext): TakeStream[E] =
+    apply(CloseableFuture.from(promise))
 
-  inline def from[E](cf: CloseableFuture[E])(using executionContext: ExecutionContext): TakeStream[E] =
+  /** Creates a stream from a cancellable future. The stream will emit one event if the future finishes with success,
+   * zero otherwise.
+   * @param cf The [[CancellableFuture]] treated as the source of the only event that can be emitted by the event source.
+   * @param executionContext The [[ExecutionContext]] in which the event will be dispatched.
+   * @tparam E The type of the event.
+   * @return A new stream.
+   */
+  inline def apply[E](cf: CloseableFuture[E])(using executionContext: ExecutionContext): TakeStream[E] =
     TakeStream[E](cf)
 }
