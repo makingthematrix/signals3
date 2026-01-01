@@ -52,10 +52,10 @@ object TakeStream {
    * Creates a new `TakeStream` of length 1 from the given [[Promise]].
    * If the promise fails, the stream will be closed immediately.
    *
-   * @param future When the promise completes, its result will be published in the stream.
-   * @param ec     The execution context in which the promise is executed.
-   * @tparam E The type of the stream's result.
-   * @return A new `TakeStream` of length 1.
+   * @param promise When the promise completes, its result will be published in the stream.
+   * @param ec      The execution context in which the promise is executed.
+   * @tparam E      The type of the stream's result.
+   * @return        A new `TakeStream` of length 1.
    */
   inline def apply[E](promise: Promise[E])(using ec: ExecutionContext): TakeStream[E] =
     apply(CloseableFuture.from(promise))
@@ -64,8 +64,8 @@ object TakeStream {
    * Creates a new `TakeStream` of length 1 from the given [[CloseableFuture]].
    * If the future is closed or fails, the stream will be closed immediately.
    *
-   * @param future When the future completes, its result will be published in the stream.
-   * @param ec     The execution context in which the future is executed.
+   * @param cf When the future completes, its result will be published in the stream.
+   * @param ec The execution context in which the future is executed.
    * @tparam E The type of the stream's result.
    * @return A new `TakeStream` of length 1.
    */
