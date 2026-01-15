@@ -348,9 +348,9 @@ object Stream {
   inline def apply[E](promise: Promise[E])(using executionContext: ExecutionContext): TakeStream[E] =
     apply(CloseableFuture.from(promise))
 
-  /** Creates a stream from a cancellable future. The stream will emit one event if the future finishes with success,
+  /** Creates a stream from a closeable future. The stream will emit one event if the future finishes with success,
    * zero otherwise.
-   * @param cf The [[CancellableFuture]] treated as the source of the only event that can be emitted by the event source.
+   * @param cf The [[CloseableFuture]] treated as the source of the only event that can be emitted by the event source.
    * @param executionContext The [[ExecutionContext]] in which the event will be dispatched.
    * @tparam E The type of the event.
    * @return A new stream.

@@ -35,8 +35,8 @@ abstract class GeneratorStream[E](interval: FiniteDuration | (() => FiniteDurati
 
   protected lazy val beat: CloseableFuture[Unit] =
     (interval match {
-       case intv: FiniteDuration         => CloseableFuture.repeat(intv)
-       case intv: (() => FiniteDuration) => CloseableFuture.repeatVariant(intv)
+       case intv: FiniteDuration         => CloseableFuture.repeat(intv)(_)
+       case intv: (() => FiniteDuration) => CloseableFuture.repeatVariant(intv)(_)
     }) {
       onBeat()
     }
