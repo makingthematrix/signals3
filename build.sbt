@@ -1,4 +1,4 @@
-val _scalaVersion = "3.7.4"
+val _scalaVersion = "3.8.0"
 
 organization := "io.github.makingthematrix"
 name := "signals3"
@@ -23,7 +23,6 @@ val scala3Options = Seq(
   "-Wunused:imports",
   "-no-indent", "-rewrite"
 )
-
 
 scmInfo := Some(
   ScmInfo(
@@ -51,6 +50,9 @@ lazy val root = (project in file("."))
   )
 
 testFrameworks += new TestFramework("munit.Framework")
+Test / parallelExecution := true
+fork := true
+Test / fork := true
 
 // TODO: Rewrite this to use the new Sonatype publication mechanism
 publishMavenStyle := true
