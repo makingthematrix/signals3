@@ -113,7 +113,7 @@ class BaseEventContext extends EventContext {
   override def register(subscription: Subscription): Boolean = lock.synchronized {
     if (!destroyed && !subscriptions.contains(subscription)) {
       subscriptions += subscription
-      if started then subscription.subscribe()
+      if (started) subscription.subscribe()
       true
     }
     else false

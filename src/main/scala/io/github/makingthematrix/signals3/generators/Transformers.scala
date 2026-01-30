@@ -40,7 +40,7 @@ object Transformers {
     sources.foreach(_.onClose {
       synchronized {
         open -= 1
-        if open == 0 then callOnCloseList.foreach(_())
+        if (open == 0) callOnCloseList.foreach(_())
       }
     })
 

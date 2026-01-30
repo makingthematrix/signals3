@@ -182,16 +182,12 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
     case _ => new IndexedStream[E](this)
   }
 
-  final def drop(n: Int): Stream[E] =
-    if n <= 0 then this
-    else new DropStream[E](this, n)
+  final def drop(n: Int): Stream[E] = if (n <= 0) this else new DropStream[E](this, n)
+  inline final def dropWhile(p: E => Boolean): Stream[E] = new DropWhileStream[E](this, p)
 
   final def take(n: Int): TakeStream[E] =
-    if n <= 0 then EmptyTakeStream.asInstanceOf[TakeStream[E]]
-    else new TakeStream[E](this, n)
-
+    if (n <= 0) EmptyTakeStream.asInstanceOf[TakeStream[E]] else new TakeStream[E](this, n)
   inline final def takeWhile(p: E => Boolean): FiniteStream[E] = new TakeWhileStream[E](this, p)
-  inline final def dropWhile(p: E => Boolean): Stream[E] = new DropWhileStream[E](this, p)
 
   inline final def splitAt(n: Int): (FiniteStream[E], Stream[E]) = (take(n), drop(n))
   inline final def splitAt(p: E => Boolean): (FiniteStream[E], Stream[E]) = (takeWhile(p), dropWhile(p))
@@ -284,9 +280,9 @@ object Stream {
     extends BaseSubscription(context) with EventSubscriber[E] {
 
     override def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
-      if subscribed then
+      if (subscribed)
         executionContext match {
-          case Some(ec) if !currentContext.contains(ec) => Future(if subscribed then Try(f(event)))(using ec)
+          case Some(ec) if !currentContext.contains(ec) => Future(if (subscribed) Try(f(event)))(using ec)
           case _ => f(event)
         }
 

@@ -34,7 +34,7 @@ class StreamSpec extends munit.FunSuite {
     var flatMapCalledCount = 0
     var lastReceivedElement: Option[String] = None
     val subscription = a.flatMap { _ =>
-      val count = if flatMapCalledCount == 0 then b else c
+      val count = if (flatMapCalledCount == 0) b else c
       flatMapCalledCount += 1
       count
     }.onCurrent {
@@ -278,12 +278,8 @@ class StreamSpec extends munit.FunSuite {
     val source = Stream[Int]()
 
     val mappedSync = source.mapSync { n =>
-      if n % 2 == 0 then Future {
-        Thread.sleep(500)
-        n + 100
-      } else Future {
-        n + 100
-      }
+      if (n % 2 == 0) Future { Thread.sleep(500); n + 100 }
+      else Future { n + 100 }
     }
 
     val resultsSync = Signal(Seq.empty[Int])
@@ -314,8 +310,8 @@ class StreamSpec extends munit.FunSuite {
     val waitForMe = Promise[Unit]()
 
     def add(n: Int, toEven: Boolean) = {
-      if toEven then evenResults :+= n else oddResults :+= n
-      if evenResults.length + oddResults.length == numbers.length then waitForMe.success(())
+      if (toEven) evenResults :+= n else oddResults :+= n
+      if (evenResults.length + oddResults.length == numbers.length) waitForMe.success(())
     }
 
     evenEvents.foreach(add(_, toEven = true))
@@ -342,7 +338,7 @@ class StreamSpec extends munit.FunSuite {
 
     oddEvents.foreach { n =>
       oddResults :+= n
-      if oddResults.length == 5 then waitForMe.success(())
+      if (oddResults.length == 5) waitForMe.success(())
     }
 
     numbers.foreach(source ! _)
@@ -365,7 +361,7 @@ class StreamSpec extends munit.FunSuite {
 
     scanned.foreach { n =>
       oddResults :+= n
-      if oddResults.length == numbers.length then waitForMe.success(())
+      if (oddResults.length == numbers.length) waitForMe.success(())
     }
 
     numbers.foreach(source ! _)
@@ -471,7 +467,7 @@ class StreamSpec extends munit.FunSuite {
     val a: SourceStream[String] = Stream()
     var lastFirstLetter: Option[Char] = None
     val b: Stream[Seq[String]] = a.groupBy { str =>
-      val res = if lastFirstLetter.isEmpty then false else !lastFirstLetter.contains(str.head)
+      val res = if (lastFirstLetter.isEmpty) false else !lastFirstLetter.contains(str.head)
       lastFirstLetter = Some(str.head)
       res
     }

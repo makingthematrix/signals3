@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, waitForResult}
-import io.github.makingthematrix.signals3.{EventContext, Signal, Threading}
+import io.github.makingthematrix.signals3.{EventContext, FlagSignal, Signal, Threading}
 
 import java.util.concurrent.TimeUnit
 import scala.collection.mutable
@@ -17,7 +17,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
     val stream = GeneratorStream.heartbeat(200.millis)
     stream.foreach { _ =>
       counter += 1
-      if counter == 3 then isSuccess ! true
+      if (counter == 3) isSuccess ! true
     }
     waitForResult(isSuccess, true)
     stream.close()
@@ -38,7 +38,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
     val stream = GeneratorStream.repeat((), () => FiniteDuration(200L, TimeUnit.MILLISECONDS))
     stream.foreach { _ =>
       counter += 1
-      if counter == 3 then isSuccess ! true
+      if (counter == 3) isSuccess ! true
     }
     waitForResult(isSuccess, true)
     stream.close()
@@ -119,7 +119,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
     var pausedOn = 0L
 
     def paused(): Boolean =
-      if counter == 2 && pausedOn == 0L then {
+      if (counter == 2 && pausedOn == 0L) {
         pausedOn = System.currentTimeMillis
         true
       }
@@ -164,7 +164,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
     val stream = GeneratorStream.heartbeat(() => 200.millis)
     stream.foreach { _ =>
       counter += 1
-      if counter == 3 then isSuccess ! true
+      if (counter == 3) isSuccess ! true
     }
     waitForResult(isSuccess, true)
     stream.close()
@@ -179,7 +179,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
     stream.foreach { s =>
       assertEquals(s, "tick")
       counter += 1
-      if counter == 5 then isSuccess ! true
+      if (counter == 5) isSuccess ! true
     }
     waitForResult(isSuccess, true)
     stream.close()
@@ -193,7 +193,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
     val finished = Signal(false)
     val gen = GeneratorStream.from(() => {
       n += 1
-      if n <= 5 then Some(n) else None
+      if (n <= 5) Some(n) else None
     }, 50.millis)
 
     gen.onClose(finished ! true)
@@ -211,7 +211,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
     val finished = Signal(false)
     val gen: FiniteGeneratorStream[Int] = FiniteGeneratorStream(() => {
       n += 1
-      if n <= 3 then Some(n) else None
+      if (n <= 3) Some(n) else None
     }, 60.millis)
 
     gen.onClose(finished ! true)
@@ -225,13 +225,13 @@ class GeneratorStreamSpec extends munit.FunSuite {
 
   test("from(LazyList[E], interval) with take collects first N elements") {
     val buffer = mutable.ArrayBuffer[Int]()
-    val done = Signal(false)
+    val done = FlagSignal()
     val gen = GeneratorStream.from(LazyList.from(1), 40.millis)
     val firstFive = gen.take(5)
 
     firstFive.foreach { n =>
       buffer.addOne(n)
-      if n == 5 then done ! true
+      done.setIf(n == 5)
     }
 
     waitForResult(done, true)
@@ -241,15 +241,15 @@ class GeneratorStreamSpec extends munit.FunSuite {
   test("FiniteGeneratorStream.init publishes all but the last element") {
     val numbers = Seq(10,20,30,40)
     val bufInit = mutable.ArrayBuffer[Int]()
-    val finished = Signal(false)
+    val done = FlagSignal()
     val gen = GeneratorStream.from(numbers, 50.millis)
 
     gen.init.foreach { n =>
       bufInit.addOne(n)
-      if n == numbers.init.last then finished ! true
+      done.setIf(n == numbers.init.last)
     }
 
-    waitForResult(finished, true)
+    waitForResult(done, true)
     // wait for the underlying finite generator to complete as well
     val allDone = Signal(false)
     gen.onClose(allDone ! true)
@@ -265,11 +265,11 @@ class GeneratorStreamSpec extends munit.FunSuite {
     val stream = GeneratorStream(() => 1, 100.millis)
     stream.onClose { closed = true }
     // consume a few events then close
-    val done = Signal(false)
+    val done = FlagSignal()
     var counter = 0
     stream.foreach { _ =>
       counter += 1
-      if counter == 2 then done ! true
+      done.setIf(counter == 2)
     }
     waitForResult(done, true)
     stream.close()

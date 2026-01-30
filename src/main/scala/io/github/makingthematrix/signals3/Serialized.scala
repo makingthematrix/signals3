@@ -34,7 +34,7 @@ object Serialized {
     }
     val lock = future.future
     locks += ((key, lock))
-    future.onComplete { _ => if locks.get(key).contains(lock) then locks -= key }
+    future.onComplete { _ => if (locks.get(key).contains(lock)) locks -= key }
     future
   }.flatten
 
@@ -53,7 +53,7 @@ object Serialized {
       lock.recover { case _ => }.flatMap(_ => body)
     }
     locks += ((key, future))
-    future.onComplete { _ => if locks.get(key).contains(future) then locks -= key }
+    future.onComplete { _ => if (locks.get(key).contains(future)) locks -= key }
     future
   }
 }

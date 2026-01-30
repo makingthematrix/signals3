@@ -315,7 +315,7 @@ class SignalSpec extends munit.FunSuite {
 
       val subscriber = subscribe(signal) { i =>
         lastSent = i
-        if received.incrementAndGet() == dispatches + 1 then p.trySuccess({})
+        if (received.incrementAndGet() == dispatches + 1) p.trySuccess({})
       }
 
       (1 to dispatches).foreach(n => Future(f(signal, n))(using actualExecutionContext))
@@ -634,8 +634,8 @@ class SignalSpec extends munit.FunSuite {
     val waitForMe = Promise[Unit]()
 
     def add(n: Int, toEven: Boolean) = {
-      if toEven then evenResults :+= n else oddResults :+= n
-      if evenResults.length + oddResults.length == numbers.length then waitForMe.success(())
+      if (toEven) evenResults :+= n else oddResults :+= n
+      if (evenResults.length + oddResults.length == numbers.length) waitForMe.success(())
     }
 
     evenNumbers.foreach(add(_, toEven = true))
@@ -1205,7 +1205,7 @@ class SignalSpec extends munit.FunSuite {
     val c = s.closeable
     c.foreach(capture)
     Seq(1, 2, 0, 1).foreach { n =>
-      if n == 0 then c.close()
+      if (n == 0) c.close()
       s ! n
       waitForResult(s, n)
     }
@@ -1242,7 +1242,7 @@ class SignalSpec extends munit.FunSuite {
     val a: SourceSignal[String] = Signal[String]()
     var lastFirstLetter: Option[Char] = None
     val b: Signal[Seq[String]] = a.groupBy { str =>
-      val res = if lastFirstLetter.isEmpty then false else !lastFirstLetter.contains(str.head)
+      val res = if (lastFirstLetter.isEmpty) false else !lastFirstLetter.contains(str.head)
       lastFirstLetter = Some(str.head)
       res
     }
