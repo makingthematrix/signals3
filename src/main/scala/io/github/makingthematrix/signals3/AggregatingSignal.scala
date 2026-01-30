@@ -25,7 +25,7 @@ object AggregatingSignal {
     * @return A new aggregating signal with the value type `V`.
     */
   def apply[E, V](loader: () => Future[V], sourceStream: Stream[E], updater: (V, E) => V)
-                 (using ec: ExecutionContext): AggregatingSignal[E, V]
+                 (using ExecutionContext): AggregatingSignal[E, V]
     = new AggregatingSignal(loader, sourceStream, updater)
 }
 

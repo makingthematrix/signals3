@@ -26,11 +26,10 @@ protected trait EPausable {
   * @param interval Time to the next event generation (to the first event as well). Might be either a [[FiniteDuration]]
   *                 or a function that returns [[FiniteDuration]]. In the second case, the function will be
   *                 called on initialization, and then after each generated event.
-  * @param ec       The execution context in which the generator works.
   * @tparam E       The type of the generated event.
   */
 abstract class GeneratorStream[E](interval: FiniteDuration | (() => FiniteDuration))
-                                 (using ec: ExecutionContext)
+                                 (using ExecutionContext)
   extends Stream[E] with NoAutowiring {
 
   protected lazy val beat: CloseableFuture[Unit] =
@@ -70,13 +69,12 @@ abstract class GeneratorStream[E](interval: FiniteDuration | (() => FiniteDurati
  *                 will call the `generate` function again, after `interval`. The exception will be ignored.
  * @param paused   A function called on each event to check if the generator is paused. If it returns `true`,
  *                 the `generate` function will not be called.
- * @param ec       The execution context in which the generator works.
  * @tparam E       The type of the generated event.
  */
 class CloseableGeneratorStream[E](interval: FiniteDuration | (() => FiniteDuration),
                                   generate: () => E,
                                   override val paused: () => Boolean)
-                                 (using ec: ExecutionContext)
+                                 (using ExecutionContext)
   extends GeneratorStream[E](interval) with Closeable with EPausable {
 
   override protected def onBeat(): Unit = {
@@ -121,13 +119,12 @@ class CloseableGeneratorStream[E](interval: FiniteDuration | (() => FiniteDurati
  *                 be closed.
  * @param paused   A function called on each event to check if the generator is paused. If it returns `true`,
  *                 the generator will pause going through the events collection.
- * @param ec       The execution context in which the generator works.
  * @tparam E       The type of the generated event.
  */
 class FiniteGeneratorStream[E](interval: FiniteDuration | (() => FiniteDuration),
                                val events: Iterable[E],
                                override val paused : () => Boolean)
-                              (using ec: ExecutionContext)
+                              (using ExecutionContext)
   extends GeneratorStream[E](interval) with Finite[E] with Indexed with EPausable {
   private val it = events.iterator
   override def isClosed: Boolean = super.isClosed || it.isEmpty
@@ -172,13 +169,12 @@ class FiniteGeneratorStream[E](interval: FiniteDuration | (() => FiniteDuration)
  *                 always have the next event to emit.
  * @param paused   A function called on each event to check if the generator is paused. If it returns `true`,
  *                 the generator will pause going through the events collection.
- * @param ec       The execution context in which the generator works.
  * @tparam E       The type of the generated event.
  */
 class LazyListGeneratorStream[E](interval: FiniteDuration | (() => FiniteDuration),
                                  val events: LazyList[E],
                                  override val paused : () => Boolean)
-                                (using ec: ExecutionContext)
+                                (using ExecutionContext)
   extends GeneratorStream[E](interval) with Indexed with EPausable {
 
   override protected def onBeat(): Unit = {
@@ -202,15 +198,13 @@ object GeneratorStream {
     * @param interval Time to the next event generation (to the first event as well). 
     * @param paused   A function called on each event to check if the generator is paused. If it returns `true`,
     *                 the `generate` function will not be called. Optional. By default the generator is never paused.
-    * @param ec       The execution context in which the generator works. Optional. 
-    *                 By default it's `Threading.defaultContext`.
     * @tparam E       The type of the generated event.
     * @return         A new generator stream.
     */
   def apply[E](generate: () => E,
                interval: FiniteDuration,
                paused  : () => Boolean = () => false)
-              (using ec: ExecutionContext): CloseableGeneratorStream[E] =
+              (using ExecutionContext): CloseableGeneratorStream[E] =
     new CloseableGeneratorStream[E](interval, generate, paused).tap(_.initialize())
 
   /**
@@ -222,13 +216,12 @@ object GeneratorStream {
     * @param body     A block of code that creates a new event `E` every time it's called. The event will be published
     *                 in the stream. If the code throws an exception, no event will be generated, but the generator 
     *                 will call it again, after `interval`. The exception will be ignored.
-    * @param ec       The execution context in which the generator works. Optional.
     *                 By default it's `Threading.defaultContext`.
     * @tparam E       The type of the generated event.
     * @return         A generator stream.
     */
   inline def generate[E](interval: FiniteDuration | (() => FiniteDuration))(body: => E)
-                        (using ec: ExecutionContext): CloseableGeneratorStream[E] =
+                        (using ExecutionContext): CloseableGeneratorStream[E] =
     new CloseableGeneratorStream[E](interval, () => body, () => false).tap(_.initialize())
 
   /**
@@ -237,12 +230,11 @@ object GeneratorStream {
     * @param event    The event which will be published in the stream every `interval`
     * @param interval Time to the next event generation (and to the first event as well). See [[CloseableFuture.repeat]]
     *                 for explanation how Signals3 tries to ensure that intervals are constant.
-    * @param ec       The execution context in which the generator works.
     * @tparam E       The type of the generated event.
     * @return         A generator stream.
     */
   inline def repeat[E](event: E, interval: FiniteDuration | (() => FiniteDuration))
-                      (using ec: ExecutionContext): CloseableGeneratorStream[E] =
+                      (using ExecutionContext): CloseableGeneratorStream[E] =
     new CloseableGeneratorStream[E](interval, () => event, () => false).tap(_.initialize())
 
   /**
@@ -250,11 +242,10 @@ object GeneratorStream {
     *
     * @param interval Time to the next event generation (and to the first event as well). See [[CloseableFuture.repeat]]
     *                 for explanation how Signals3 tries to ensure that intervals are constant.
-    * @param ec       The execution context in which the generator works.
     * @return         A generator stream.
     */
   inline def heartbeat(interval: FiniteDuration | (() => FiniteDuration))
-                      (using ec: ExecutionContext): CloseableGeneratorStream[Unit] =
+                      (using ExecutionContext): CloseableGeneratorStream[Unit] =
     repeat((), interval).tap(_.initialize())
 
   /**
@@ -262,12 +253,11 @@ object GeneratorStream {
    * @param events A finite collection of events.
    * @param interval Time to the next event generation (and to the first event as well). See [[CloseableFuture.repeat]]
    *                 for explanation how Signals3 tries to ensure that intervals are constant.
-   * @param ec       The execution context in which the generator works.
    * @tparam E       The type of the generated event.
    * @return         A generator stream.
    */
   inline def from[E](events: Iterable[E], interval: FiniteDuration | (() => FiniteDuration))
-                    (using ec: ExecutionContext): FiniteGeneratorStream[E] =
+                    (using ExecutionContext): FiniteGeneratorStream[E] =
     FiniteGeneratorStream[E](events, interval)
 
   /**
@@ -276,12 +266,11 @@ object GeneratorStream {
    * @param generate A function that returns an event or `None` if the stream should be closed.
    * @param interval Time to the next event generation (and to the first event as well). See [[CloseableFuture.repeat]]
    *                 for explanation how Signals3 tries to ensure that intervals are constant.
-   * @param ec       The execution context in which the generator works.
    * @tparam E       The type of the generated event.
    * @return         A generator stream.
    */
   inline def from[E](generate: () => Option[E], interval: FiniteDuration | (() => FiniteDuration))
-                    (using ec: ExecutionContext): FiniteGeneratorStream[E] =
+                    (using ExecutionContext): FiniteGeneratorStream[E] =
     FiniteGeneratorStream[E](generate, interval)
 
   /**
@@ -289,12 +278,11 @@ object GeneratorStream {
    * @param events   A lazy list of events.
    * @param interval Time to the next event generation (and to the first event as well). See [[CloseableFuture.repeat]]
    *                 for explanation how Signals3 tries to ensure that intervals are constant.
-   * @param ec       The execution context in which the generator works.
    * @tparam E       The type of the generated event.
    * @return         A generator stream.
    */
   inline def from[E](events: LazyList[E], interval: FiniteDuration | (() => FiniteDuration))
-                    (using ec: ExecutionContext): LazyListGeneratorStream[E] =
+                    (using ExecutionContext): LazyListGeneratorStream[E] =
     LazyListGeneratorStream[E](events, interval)
 }
 
@@ -305,12 +293,11 @@ object FiniteGeneratorStream {
    * @param events   A finite collection of events.
    * @param interval Time to the next event generation (and to the first event as well). See [[CloseableFuture.repeat]]
    *                 for explanation how Signals3 tries to ensure that intervals are constant.
-   * @param ec       The execution context in which the generator works.
    * @tparam E       The type of the generated event.
    * @return         A generator stream.
    */
   inline def apply[E](events: Iterable[E], interval: FiniteDuration | (() => FiniteDuration))
-                     (using ec: ExecutionContext): FiniteGeneratorStream[E] =
+                     (using ExecutionContext): FiniteGeneratorStream[E] =
     new FiniteGeneratorStream[E](interval, events, () => false).tap(_.initialize())
 
   /**
@@ -320,12 +307,11 @@ object FiniteGeneratorStream {
    * @param generate A function that returns an event or `None` if the stream should be closed.
    * @param interval Time to the next event generation (and to the first event as well). See [[CloseableFuture.repeat]]
    *                 for explanation how Signals3 tries to ensure that intervals are constant.
-   * @param ec       The execution context in which the generator works.
    * @tparam E The type of the generated event.
    * @return A generator stream.
    */
   def apply[E](generate: () => Option[E], interval: FiniteDuration | (() => FiniteDuration))
-              (using ec: ExecutionContext): FiniteGeneratorStream[E] = {
+              (using ExecutionContext): FiniteGeneratorStream[E] = {
     val it = Iterable.from(new Iterator[E]{
       private var _next = generate()
       override def hasNext: Boolean = _next.isDefined
@@ -342,11 +328,10 @@ object LazyListGeneratorStream {
    * @param events   A lazy list of events.
    * @param interval Time to the next event generation (and to the first event as well). See [[CloseableFuture.repeat]]
    *                 for explanation how Signals3 tries to ensure that intervals are constant.
-   * @param ec       The execution context in which the generator works.
    * @tparam E       The type of the generated event.
    * @return         A generator stream.
    */
   inline def apply[E](events: LazyList[E], interval: FiniteDuration | (() => FiniteDuration))
-                     (using ec: ExecutionContext): LazyListGeneratorStream[E] =
+                     (using ExecutionContext): LazyListGeneratorStream[E] =
     new LazyListGeneratorStream[E](interval, events, () => false).tap(_.initialize())
 }

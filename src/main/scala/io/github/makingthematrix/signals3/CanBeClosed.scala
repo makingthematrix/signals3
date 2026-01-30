@@ -41,6 +41,6 @@ trait CanBeClosed {
    * @param ec The execution context on which the signal will be executed.
    * @return A signal that will be set to `true` when the closeable is closed.
    */
-  def isClosedSignal(using ec: ExecutionContext): Signal[Boolean] =
+  def isClosedSignal(using ExecutionContext): Signal[Boolean] =
     DoneSignal().tap { signal => if (isClosed) signal.done() else onClose(signal.done()) }
 }

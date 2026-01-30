@@ -90,14 +90,14 @@ class BaseEventContext extends EventContext {
   private var subscriptions = Set.empty[Subscription]
 
   override def start(): Unit = lock.synchronized {
-    if !started then {
+    if (!started) {
       started = true
       subscriptions.foreach(_.subscribe())
     }
   }
 
   override def stop(): Unit = lock.synchronized {
-    if started then {
+    if (started) {
       started = false
       subscriptions.foreach(_.unsubscribe())
     }
@@ -111,7 +111,7 @@ class BaseEventContext extends EventContext {
   }
 
   override def register(subscription: Subscription): Boolean = lock.synchronized {
-    if !destroyed && !subscriptions.contains(subscription) then {
+    if (!destroyed && !subscriptions.contains(subscription)) {
       subscriptions += subscription
       if started then subscription.subscribe()
       true

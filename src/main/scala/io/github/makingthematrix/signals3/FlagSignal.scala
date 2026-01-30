@@ -18,23 +18,23 @@ final class FlagSignal(initialValue: Boolean) extends SourceSignal(Some(initialV
   /**  Sets the value of the signal to `true` */
   inline def set()(using ec: ExecutionContext): Unit = updateWith(Some(true), Some(ec))
   /** A utility method for setting the value of the signal to `true` only if the given predicate evaluates to `true` */
-  inline def setIf(p: Boolean)(using ec: ExecutionContext): Unit = if (p) set()
+  inline def setIf(p: Boolean)(using ExecutionContext): Unit = if (p) set()
   /** Registers a block of code that will be called when the signal's value changes to `true` */
-  inline def onSet(body : => Unit)(using ec: ExecutionContext): Unit = foreach(_ => if (state) body)
+  inline def onSet(body : => Unit)(using ExecutionContext): Unit = foreach(_ => if (state) body)
 
   /** Sets the value of the signal to `false` */
   inline def clear()(using ec: ExecutionContext): Unit = updateWith(Some(false), Some(ec))
   /** A utility method for setting the value of the signal to `false` only if the given predicate evaluates to `true` */
-  inline def clearIf(p: Boolean)(using ec: ExecutionContext): Unit = if (p) clear()
+  inline def clearIf(p: Boolean)(using ExecutionContext): Unit = if (p) clear()
   /** Registers a block of code that will be called when the signal's value changes to `false` */
-  inline def onClear(body : => Unit)(using ec: ExecutionContext): Unit = foreach(_ => if (!state) body)
+  inline def onClear(body : => Unit)(using ExecutionContext): Unit = foreach(_ => if (!state) body)
 
   /** Toggles the value of the signal between `true` and `false` */
   inline def toggle()(using ec: ExecutionContext): Unit = updateWith(Some(!state), Some(ec))
   /** A utility method for toggling the value of the signal only if the given predicate evaluates to `true` */
-  inline def toggleIf(p: Boolean)(using ec: ExecutionContext): Unit = if (p) toggle()
+  inline def toggleIf(p: Boolean)(using ExecutionContext): Unit = if (p) toggle()
   /** Registers a block of code that will be called when the signal's value changes to the opposite of its current value */
-  inline def onToggle(body : => Unit)(using ec: ExecutionContext): Unit = foreach(_ => body)
+  inline def onToggle(body : => Unit)(using ExecutionContext): Unit = foreach(_ => body)
 }
 
 object FlagSignal {
