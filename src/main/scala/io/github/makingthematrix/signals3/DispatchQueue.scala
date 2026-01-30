@@ -228,9 +228,9 @@ class LimitedDispatchQueue private[signals3] (concurrencyLimit: Int, parent: Exe
     // TODO: Is it ok to call this method in a loop without any delay? Shouldn't it sleep for a moment between calls?
     @tailrec
     private def dispatchExecutor(): Unit =
-      if runningCount.getAndIncrement() < concurrencyLimit then
+      if (runningCount.getAndIncrement() < concurrencyLimit)
         parent.execute(this)
-      else if runningCount.decrementAndGet() < concurrencyLimit && !queue.isEmpty then
+      else if (runningCount.decrementAndGet() < concurrencyLimit && !queue.isEmpty)
         dispatchExecutor() // to prevent race condition when executor has just finished
 
     override def run(): Unit = {
@@ -243,12 +243,10 @@ class LimitedDispatchQueue private[signals3] (concurrencyLimit: Int, parent: Exe
           catch {
             case cause: Throwable => reportFailure(cause)
           }
-          if counter < LimitedDispatchQueue.MaxBatchSize then executeBatch(counter + 1)
+          if (counter < LimitedDispatchQueue.MaxBatchSize) executeBatch(counter + 1)
       }
-
       executeBatch()
-
-      if runningCount.decrementAndGet() < concurrencyLimit && !queue.isEmpty then dispatchExecutor()
+      if (runningCount.decrementAndGet() < concurrencyLimit && !queue.isEmpty) dispatchExecutor()
     }
   }
 

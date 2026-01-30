@@ -75,18 +75,11 @@ object RefreshingSignal {
     *               If the execution fails or is cancelled, the value of the signal won't be updated.
     * @param refreshStream a stream publishing events which will trigger new executions of the `loader`. If a new
     *                      event comes before the previous call to `loader` finishes, the previous call will be cancelled.
-    * @param ec The execution context in which the `loader` is executed.
     * @tparam V The value type of the signal and the result of the `loader` closeable future.
     * @return A new refreshing signal with the value of the type `V`.
     */
   def apply[V](loader: () => CloseableFuture[V], refreshStream: Stream[?])
-              (using ec: ExecutionContext): RefreshingSignal[V] =
+              (using ExecutionContext): RefreshingSignal[V] =
     new RefreshingSignal(loader, refreshStream)
 
-  /** A version of the `apply` method where the loader is a regular Scala future. It will be wrapped in a closeable future
-    * on the first execution.
-    */
-  inline def from[V](loader: => Future[V], refreshStream: Stream[?])
-                    (using ec: ExecutionContext): RefreshingSignal[V] =
-    new RefreshingSignal(() => CloseableFuture.from(loader), refreshStream)
 }

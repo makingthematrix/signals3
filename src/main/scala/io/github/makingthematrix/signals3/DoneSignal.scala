@@ -7,8 +7,8 @@ import scala.concurrent.ExecutionContext
  * implement [[CanBeClosed]] itself as that would lead to circular compilation.
  */
 private[signals3] final class DoneSignal extends Signal(Some(false)) {
-  inline def doneIf(p: Boolean)(using ec: ExecutionContext): Unit = if (p) done()
   inline def done()(using ec: ExecutionContext): Unit = updateWith(Some(true), Some(ec))
+  inline def doneIf(p: Boolean)(using ExecutionContext): Unit = if (p) done()
   inline def state: Boolean = value.contains(true)
-  inline def onDone(body : => Unit)(using ec: ExecutionContext): Unit = foreach(_ => body)
+  inline def onDone(body : => Unit)(using ExecutionContext): Unit = foreach(_ => body)
 }

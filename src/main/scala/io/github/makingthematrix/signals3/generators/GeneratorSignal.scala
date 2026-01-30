@@ -29,17 +29,16 @@ protected trait VPausable[V] {
   * @param interval Time to the next event generation (to the first event as well). Might be either a `FiniteDuration`
   *                 or a function that returns the number of milliseconds. In the second case, the function will be
   *                 called on initialization, and then after each generated event.
-  * @param ec       The execution context in which the generator works.
   * @tparam V       The type of the signal's value.
   */
 
 abstract class GeneratorSignal[V](init : V, interval: FiniteDuration | (V => FiniteDuration))
-                                 (using ec: ExecutionContext)
+                                 (using ExecutionContext)
   extends Signal[V](Some(init)) with NoAutowiring {
 
   protected lazy val beat: CloseableFuture[Unit] = (interval match {
-    case intv: FiniteDuration => CloseableFuture.repeat(intv)
-    case intv: (V => FiniteDuration)    => CloseableFuture.repeatVariant(() => intv(currentValue.getOrElse(init)))
+    case intv: FiniteDuration        => CloseableFuture.repeat(intv)(_)
+    case intv: (V => FiniteDuration) => CloseableFuture.repeatVariant(() => intv(currentValue.getOrElse(init)))(_)
   }) { onBeat() }
 
   private val isInitialized: AtomicBoolean = new AtomicBoolean(false)
@@ -207,8 +206,6 @@ object GeneratorSignal {
     * @param interval Time to the next update.
     * @param paused   A function called on each event to check if the generator is paused. If it returns `true`,
     *                 the `generate` function will not be called. Optional. By default the generator is never paused.
-    * @param ec       The execution context in which the generator works. Optional.
-    *                 By default it's `Threading.defaultContext`.
     * @tparam V       The type of the signal's value.
     * @return         A new generator signal.
     */
@@ -216,7 +213,7 @@ object GeneratorSignal {
                update  : V => V,
                interval: FiniteDuration,
                paused  : V => Boolean = (_: V) => false)
-              (using ec: ExecutionContext): CloseableGeneratorSignal[V] =
+              (using ExecutionContext): CloseableGeneratorSignal[V] =
     new CloseableGeneratorSignal[V](init, update, interval, paused).tap(_.initialize())
 
   /**
@@ -229,13 +226,12 @@ object GeneratorSignal {
     *                 a new (or the same) value.
     *                 If the code throws an exception, no event will be generated, but the generator will call it again,
     *                 with the same current value, after `interval`. The exception will be ignored.
-    * @param ec       The execution context in which the generator works. Optional.
     *                 By default it's `Threading.defaultContext`.
     * @tparam V       The type of the signal's value.
     * @return         A new generator signal.
     */
   inline def generate[V](init: V, interval: FiniteDuration | (V => FiniteDuration))(update: V => V)
-                        (using ec: ExecutionContext): CloseableGeneratorSignal[V] =
+                        (using ExecutionContext): CloseableGeneratorSignal[V] =
     new CloseableGeneratorSignal[V](init, update, interval, (_: V) => false).tap(_.initialize())
 
 
@@ -263,14 +259,13 @@ object GeneratorSignal {
     *                 published if it is different from the old one. If the `update` methods throws an exception,
     *                 the value will not be updated, but the generator will call the `update` function again, with
     *                 the same current value, after `interval`. The exception will be ignored.
-    * @param ec       The execution context in which the generator works. Optional.
     *                 By default it's `Threading.defaultContext`.
     * @tparam V       The type of the generator's internal value.
     * @tparam Z       The type of the generator's published value.
     * @return         A new generator signal.
     */
   inline def unfold[V, Z](init: V, interval: FiniteDuration)(update: V => (V, Z))
-                         (using ec: ExecutionContext): CloseableSignal[Z] =
+                         (using ExecutionContext): CloseableSignal[Z] =
     Transformers.map[(V, Z), Z](
       new CloseableGeneratorSignal[(V, Z)](update(init), { (v, _) => update(v) }, interval, _ => false).tap(_.initialize())
     )(_._2)
@@ -294,14 +289,13 @@ object GeneratorSignal {
     *                 published if it is different from the old one. If the `update` methods throws an exception,
     *                 the value will not be updated, but the generator will call the `update` function again, with
     *                 the same current value, after `interval`. The exception will be ignored.
-    * @param ec       The execution context in which the generator works. Optional.
     *                 By default it's `Threading.defaultContext`.
     * @tparam V       The type of the generator's internal value.
     * @tparam Z       The type of the generator's published value.
     * @return         A new generator signal.
     */
   inline def unfold[V, Z](init: V, interval: V => FiniteDuration)(update: V => (V, Z))
-                         (using ec: ExecutionContext): CloseableSignal[Z] =
+                         (using ExecutionContext): CloseableSignal[Z] =
     Transformers.map[(V, Z), Z](
       new CloseableGeneratorSignal[(V, Z)](
         update(init),
@@ -316,12 +310,11 @@ object GeneratorSignal {
     * by one.
     *
     * @param interval Time to the next update.
-    * @param ec       The execution context in which the generator works. Optional.
     *                 By default it's `Threading.defaultContext`.
     * @return         A new generator signal of integers.
     */
   inline def counter(interval: FiniteDuration | (Int => FiniteDuration))
-                    (using ec: ExecutionContext): CloseableGeneratorSignal[Int] =
+                    (using ExecutionContext): CloseableGeneratorSignal[Int] =
     generate(0, interval)(_ + 1)
 
   /**
@@ -330,12 +323,11 @@ object GeneratorSignal {
    * @param values   A finite collection of values. The first value becomes the initial value of the signal.
    * @param interval Time to the next value change. See [[CloseableFuture.repeat]]
    *                 for explanation how Signals3 tries to ensure that intervals are constant.
-   * @param ec       The execution context in which the generator works.
    * @tparam V       The type of the value.
    * @return         A generator signal.
    */
   inline def from[V](values: Iterable[V], interval: FiniteDuration | (V => FiniteDuration))
-                    (using ec: ExecutionContext): FiniteGeneratorSignal[V] =
+                    (using ExecutionContext): FiniteGeneratorSignal[V] =
     FiniteGeneratorSignal[V](values, interval)
 
   /**
@@ -346,12 +338,11 @@ object GeneratorSignal {
    *                 The first value becomes the initial value of the signal.
    * @param interval Time to the next value change. See [[CloseableFuture.repeat]]
    *                 for explanation how Signals3 tries to ensure that intervals are constant.
-   * @param ec       The execution context in which the generator works.
    * @tparam V The type of the value.
    * @return A generator signal.
    */
   inline def from[V](generate: () => Option[V], interval: FiniteDuration | (V => FiniteDuration))
-             (using ec: ExecutionContext): FiniteGeneratorSignal[V] = {
+             (using ExecutionContext): FiniteGeneratorSignal[V] = {
     FiniteGeneratorSignal[V](generate, interval)
   }
 
@@ -361,12 +352,11 @@ object GeneratorSignal {
    * @param values A lazy list of values. The first value becomes the initial value of the signal.
    * @param interval Time to the next value change. See [[CloseableFuture.repeat]]
    *                 for explanation how Signals3 tries to ensure that intervals are constant.
-   * @param ec       The execution context in which the generator works.
    * @tparam V The type of the value.
    * @return A generator signal.
    */
   inline def from[V](values: LazyList[V], interval: FiniteDuration | (V => FiniteDuration))
-                    (using ec: ExecutionContext): LazyListGeneratorSignal[V] =
+                    (using ExecutionContext): LazyListGeneratorSignal[V] =
     LazyListGeneratorSignal[V](values, interval)
 }
 
@@ -377,12 +367,11 @@ object FiniteGeneratorSignal {
    * @param values   A finite collection of values. The first value becomes the initial value of the signal.
    * @param interval Time to the next value change. See [[CloseableFuture.repeat]]
    *                 for explanation how Signals3 tries to ensure that intervals are constant.
-   * @param ec       The execution context in which the generator works.
    * @tparam V The type of the value.
    * @return A generator signal.
    */
   inline def apply[V](values: Iterable[V], interval: FiniteDuration | (V => FiniteDuration))
-                     (using ec: ExecutionContext): FiniteGeneratorSignal[V] =
+                     (using ExecutionContext): FiniteGeneratorSignal[V] =
     new FiniteGeneratorSignal[V](interval, values, (_: V) => false).tap(_.initialize())
 
   /**
@@ -393,12 +382,11 @@ object FiniteGeneratorSignal {
    *                 The first value becomes the initial value of the signal.
    * @param interval Time to the next value change. See [[CloseableFuture.repeat]]
    *                 for explanation how Signals3 tries to ensure that intervals are constant.
-   * @param ec       The execution context in which the generator works.
    * @tparam V The type of the value.
    * @return A generator signal.
    */
   def apply[V](generate: () => Option[V], interval: FiniteDuration | (V => FiniteDuration))
-              (using ec: ExecutionContext): FiniteGeneratorSignal[V] = {
+              (using ExecutionContext): FiniteGeneratorSignal[V] = {
     val it = Iterable.from(new Iterator[V]{
       private var value = generate()
       override def hasNext: Boolean = value.isDefined
@@ -415,11 +403,10 @@ object LazyListGeneratorSignal {
    * @param values   A lazy list of values. The first value becomes the initial value of the signal.
    * @param interval Time to the next value change. See [[CloseableFuture.repeat]]
    *                 for explanation how Signals3 tries to ensure that intervals are constant.
-   * @param ec       The execution context in which the generator works.
    * @tparam V The type of the value.
    * @return A generator signal.
    */
   inline def apply[V](values: LazyList[V], interval: FiniteDuration | (V => FiniteDuration))
-                     (using ec: ExecutionContext): LazyListGeneratorSignal[V] =
+                     (using ExecutionContext): LazyListGeneratorSignal[V] =
     new LazyListGeneratorSignal[V](interval, values, (_: V) => false).tap(_.initialize())
 }
