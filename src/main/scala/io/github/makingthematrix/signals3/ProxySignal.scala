@@ -38,7 +38,7 @@ private[signals3] object ProxySignal {
 
     override protected def computeValue(current: Option[Seq[V]]): Option[Seq[V]] = {
       source.value.foreach(buffer.addOne)
-      if buffer.size == n then {
+      if (buffer.size == n) {
         val res = buffer.toSeq
         buffer.clear()
         Some(res)
@@ -51,12 +51,14 @@ private[signals3] object ProxySignal {
     private val buffer = scala.collection.mutable.ArrayBuffer.empty[V]
 
     override protected def computeValue(current: Option[Seq[V]]): Option[Seq[V]] = {
-      val res = if buffer.nonEmpty && source.value.exists(groupBy) then {
-        val seq = buffer.toSeq
-        buffer.clear()
-        Some(seq)
-      }
-      else current
+      val res =
+        if (buffer.nonEmpty && source.value.exists(groupBy)) {
+          val seq = buffer.toSeq
+          buffer.clear()
+          Some(seq)
+        } else {
+          current
+        }
       source.value.foreach(buffer.addOne)
       res
     }
@@ -80,17 +82,10 @@ private[signals3] object ProxySignal {
   }
     
   final class CloseableSignal[V](source: Signal[V]) extends ProxySignal[V](source) with Closeable {
-    override def closeAndCheck(): Boolean = super.closeAndCheck()
-
-    override def isClosed: Boolean = super.isClosed
-
-    override protected def computeValue(current: Option[V]): Option[V] =
-      if !isClosed then source.value else current
+    override protected def computeValue(current: Option[V]): Option[V] = if (!isClosed) source.value else current
   }
 
-  final class TakeWhileSignal[V](source: Signal[V], p: V => Boolean)
-    extends ProxySignal[V](source) with Finite[V] {
-
+  final class TakeWhileSignal[V](source: Signal[V], p: V => Boolean) extends ProxySignal[V](source) with Finite[V] {
     computeValue(source.value)
 
     override protected def computeValue(current: Option[V]): Option[V] =
@@ -109,9 +104,8 @@ private[signals3] object ProxySignal {
   final class DropWhileSignal[V](source: Signal[V], p: V => Boolean) extends ProxySignal[V](source) {
     @volatile private var dropping = true
     override protected def computeValue(current: Option[V]): Option[V] = {
-      if dropping && source.value != current then
-        dropping = source.value.exists(p)
-      if !dropping then source.value else current
+      if (dropping && source.value != current) dropping = source.value.exists(p)
+      if (!dropping) source.value else current
     }
   }
 
@@ -187,13 +181,13 @@ private[signals3] object ProxySignal {
     override protected[signals3] def update(f: Option[V] => Option[V], currentContext: Option[ExecutionContext]): Boolean = {
       val changed = updateMonitor.synchronized {
         val next = f(value)
-        if value.map(select) != next.map(select) then {
+        if (value.map(select) != next.map(select)) {
           value = next
           true
         }
         else false
       }
-      if changed then notifySubscribers(currentContext)
+      if (changed) notifySubscribers(currentContext)
       changed
     }
 
@@ -209,7 +203,7 @@ private[signals3] object ProxySignal {
   class SequenceSignal[V](sources: Signal[V]*) extends ProxySignal[Seq[V]](sources*) {
     override protected def computeValue(current: Option[Seq[V]]): Option[Seq[V]] = {
       val res = sources.map(_.value)
-      if res.exists(_.isEmpty) then None else Some(res.flatten)
+      if (res.exists(_.isEmpty)) None else Some(res.flatten)
     }
   }
       

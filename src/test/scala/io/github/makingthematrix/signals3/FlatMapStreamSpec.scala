@@ -67,8 +67,8 @@ class FlatMapStreamSpec extends munit.FunSuite {
 
     val result = for {
       b1  <- switch
-      b2  <- if b1 then switch1 else switch2
-      res <- if b2 then source1 else source2
+      b2  <- if (b1) switch1 else switch2
+      res <- if (b2) source1 else source2
     }
     yield res
 

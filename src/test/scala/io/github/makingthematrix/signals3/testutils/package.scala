@@ -25,7 +25,7 @@ package object testutils {
   def compareAndSet[A](ref: AtomicReference[A])(updater: A => A): A = {
     val current = ref.get
     val updated = updater(current)
-    if ref.compareAndSet(current, updated) then updated
+    if (ref.compareAndSet(current, updated)) updated
     else compareAndSet(ref)(updater)
   }
 
@@ -84,7 +84,7 @@ package object testutils {
     * performing a series of actions)
     */
   def awaitAllTasks(using timeout: FiniteDuration = DefaultTimeout, dq: DispatchQueue): Unit =
-    if !tasksCompletedAfterWait then
+    if (!tasksCompletedAfterWait)
       throw new TimeoutException(s"Background tasks didn't complete in ${timeout.toSeconds} seconds")
 
   private def tasksCompletedAfterWait(using timeout: FiniteDuration = DefaultTimeout, dq: DispatchQueue) = {

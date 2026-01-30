@@ -83,7 +83,7 @@ class CloseableGeneratorSignal[V](init: V,
   extends GeneratorSignal[V](init, interval) with Closeable with VPausable[V] {
   override protected def onBeat(): Unit = {
     super.onBeat()
-    if !currentValue.exists(paused) && !isClosed then currentValue.foreach(v => publish(update(v), ec))
+    if (!currentValue.exists(paused) && !isClosed) currentValue.foreach(v => publish(update(v), ec))
   }
 
   /**

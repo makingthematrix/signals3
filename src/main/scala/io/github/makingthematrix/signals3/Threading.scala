@@ -23,7 +23,7 @@ object Threading {
 
   private var instance = Option.empty[DispatchQueue]
   private lazy val defaultQueue = 
-    DispatchQueue(if virtualThreadsSupported() then Virtual else Unlimited, ExecutionContext.global)
+    DispatchQueue(if (virtualThreadsSupported) Virtual else Unlimited, ExecutionContext.global)
 
   /** The default dispatch queue for Wire Signals is lazily initialized, meaning that at the start of the app,
     * before it is used for the first time, you can provide a dispatch queue of your own to act as the default one.
@@ -53,7 +53,7 @@ object Threading {
    *
    * @return true if virtual threads are supported, false otherwise
    */
-  private def virtualThreadsSupported(): Boolean = 
+  private def virtualThreadsSupported: Boolean =
     Try(classOf[Thread].getMethod("ofVirtual")).isSuccess // tries to access the Thread.ofVirtual() method which exists only in Java 21+
 }
   

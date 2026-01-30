@@ -44,13 +44,13 @@ private[signals3] object ProxyStream {
   class CollectStream[E, V](source: Stream[E], pf: PartialFunction[E, V])
     extends ProxyStream[E, V](source) {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      if pf.isDefinedAt(event) then dispatch(pf(event), sourceContext)
+      if (pf.isDefinedAt(event)) dispatch(pf(event), sourceContext)
   }
   
   class FilterStream[E](source: Stream[E], predicate: E => Boolean)
     extends ProxyStream[E, E](source) {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      if predicate(event) then dispatch(event, sourceContext)
+      if (predicate(event)) dispatch(event, sourceContext)
   }
   
   class JoinStream[E](sources: Stream[E]*)
@@ -75,7 +75,7 @@ private[signals3] object ProxyStream {
 
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
       buffer.addOne(event)
-      if buffer.size == n then {
+      if (buffer.size == n) {
         val res = buffer.toSeq
         buffer.clear()
         dispatch(res, sourceContext)
@@ -87,10 +87,10 @@ private[signals3] object ProxyStream {
     private val buffer = ArrayBuffer.empty[E]
 
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
-      if groupBy(event) then {
+      if (groupBy(event)) {
         val res = buffer.toSeq
         buffer.clear()
-        if res.nonEmpty then dispatch(res, sourceContext)
+        if (res.nonEmpty) dispatch(res, sourceContext)
       } // end if
       buffer.addOne(event)
     }
@@ -111,8 +111,8 @@ private[signals3] object ProxyStream {
   final class DropWhileStream[E](source: Stream[E], p: E => Boolean) extends ProxyStream[E, E](source) {
     @volatile private var dropping = true
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
-      if dropping then dropping = p(event)
-      if !dropping then dispatch(event, sourceContext)
+      if (dropping) dropping = p(event)
+      if (!dropping) dispatch(event, sourceContext)
     }
   }
 
@@ -127,7 +127,7 @@ private[signals3] object ProxyStream {
     private var previousEvent: Option[E] = None
 
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = if (!isClosed) {
-      if !p(event) then {
+      if (!p(event)) {
         close()
         (lastPromise, previousEvent) match {
           case (Some(p), Some(pe)) if !p.isCompleted => p.trySuccess(pe)

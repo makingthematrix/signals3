@@ -159,7 +159,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
 
     override def changed(ec: Option[ExecutionContext]): Unit = stream.synchronized {
       self.value.foreach { current =>
-        if !prev.contains(current) then {
+        if (!prev.contains(current)) {
           dispatch((prev, current), ec)
           prev = Some(current)
         }
@@ -527,16 +527,12 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     case _ => new CloseableSignal[V](this)
   }
 
-  final def drop(n: Int): Signal[V] =
-    if n <= 0 then this
-    else new DropSignal[V](this, n)
-
+  final def drop(n: Int): Signal[V] = if (n <= 0) this else new DropSignal[V](this, n)
   final inline def dropWhile(p: V => Boolean): Signal[V] = new DropWhileSignal[V](this, p)
 
   final def take(n: Int): TakeSignal[V] =
-    if n <= 0 then EmptyTakeSignal.asInstanceOf[TakeSignal[V]]
+    if (n <= 0) EmptyTakeSignal.asInstanceOf[TakeSignal[V]]
     else new TakeSignal[V](this, n)
-
   final inline def takeWhile(p: V => Boolean): FiniteSignal[V] = new TakeWhileSignal[V](this, p)
 
   final inline def splitAt(n: Int): (FiniteSignal[V], Signal[V]) = (take(n), drop(n))

@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, waitForResult}
-import io.github.makingthematrix.signals3.{DoneSignal, EventContext, Signal, Threading}
+import io.github.makingthematrix.signals3.{DoneSignal, EventContext, FlagSignal, Signal, Threading}
 
 import java.util.concurrent.TimeUnit
 import scala.collection.mutable
@@ -107,13 +107,12 @@ class GeneratorSignalSpec extends munit.FunSuite {
     var pausedOn = 0L
 
     def paused(counter: Int): Boolean =
-      if counter == 2 && pausedOn == 0L then {
+      if (counter == 2 && pausedOn == 0L) {
         pausedOn = System.currentTimeMillis
         true
-      }
-      else
+      } else {
         System.currentTimeMillis - pausedOn < 300L
-
+      }
     val signal2 = GeneratorSignal(0, (n: Int) => n + 1, 200.millis, paused)
 
     signal2.foreach { counter =>
@@ -163,12 +162,12 @@ class GeneratorSignalSpec extends munit.FunSuite {
 
   test("counter with function interval emits increasing values") {
     var last = 0
-    val done = Signal(false)
+    val done = FlagSignal()
     val signal = GeneratorSignal.counter((n: Int) => (100 + n * 50).millis)
 
     signal.foreach { n =>
       last = n
-      if n >= 4 then done ! true
+      done.setIf(n >= 4)
     }
 
     waitForResult(done, true)
@@ -180,15 +179,15 @@ class GeneratorSignalSpec extends munit.FunSuite {
   test("from(Iterable[V], interval) publishes all values and then closes") {
     val values = Seq(10, 20, 30, 40)
     val buf = mutable.ArrayBuffer[Int]()
-    val finished = Signal(false)
+    val done = FlagSignal()
     val sig = GeneratorSignal.from(values, 50.millis)
 
     sig.foreach { v =>
       buf.addOne(v)
-      if v == values.last then finished ! true
+      done.setIf(v == values.last)
     }
 
-    waitForResult(finished, true)
+    waitForResult(done, true)
     awaitAllTasks
     assert(sig.isClosed)
     // FiniteGeneratorSignal starts with the first value; foreach records subsequent changes as they occur.
@@ -202,7 +201,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
     val finished = Signal(false)
     val sig = GeneratorSignal.from(() => {
       n += 1
-      if n <= 5 then Some(n) else None
+      if (n <= 5) Some(n) else None
     }, 40.millis)
 
     sig.onClose(finished ! true)
@@ -220,7 +219,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
     val finished = Signal(false)
     val sig: FiniteGeneratorSignal[Int] = FiniteGeneratorSignal(() => {
       n += 1
-      if n <= 3 then Some(n) else None
+      if (n <= 3) Some(n) else None
     }, 60.millis)
 
     sig.onClose(finished ! true)
@@ -234,13 +233,13 @@ class GeneratorSignalSpec extends munit.FunSuite {
 
   test("from(LazyList[V], interval) with take collects first N values") {
     val buf = mutable.ArrayBuffer[Int]()
-    val done = Signal(false)
+    val done = FlagSignal()
     val sig = GeneratorSignal.from(LazyList.from(1), 30.millis)
     val firstFive = sig.take(5)
 
     firstFive.foreach { v =>
       buf.addOne(v)
-      if v == 5 then done ! true
+      done.setIf(v == 5)
     }
 
     waitForResult(done, true)
@@ -250,12 +249,12 @@ class GeneratorSignalSpec extends munit.FunSuite {
   test("FiniteGeneratorSignal.init publishes all but the last value") {
     val values = Seq(7, 9, 11, 13)
     val bufInit = mutable.ArrayBuffer[Int]()
-    val finishedInit = Signal(false)
+    val finishedInit = FlagSignal()
     val sig = GeneratorSignal.from(values, 40.millis)
 
     sig.init.foreach { v =>
       bufInit.addOne(v)
-      if v == values.init.last then finishedInit ! true
+      finishedInit.setIf(v == values.init.last)
     }
 
     waitForResult(finishedInit, true)
@@ -273,12 +272,11 @@ class GeneratorSignalSpec extends munit.FunSuite {
     var closed = false
     val sig = GeneratorSignal(0, (n: Int) => n + 1, 80.millis)
     sig.onClose { closed = true }
-
-    val done = Signal(false)
+    val done = FlagSignal()
     var cnt = 0
     sig.foreach { _ =>
       cnt += 1
-      if cnt == 2 then done ! true
+      done.setIf(cnt == 2)
     }
 
     waitForResult(done, true)

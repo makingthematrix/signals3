@@ -258,18 +258,19 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext)
 
     future.onComplete { res =>
       closeSelf = None
-      if !p.isCompleted then res match {
-        case Failure(t) if pf.isDefinedAt(t) =>
-          val future = pf.applyOrElse(t, (_: Throwable) => this)
-          closeSelf = Some(() => future.close())
-          future.onComplete { res =>
-            closeSelf = None
-            p.tryComplete(res)
-          }
-          if p.isCompleted then future.close()
-        case other =>
-          p.tryComplete(other)
-      }
+      if (!p.isCompleted)
+        res match {
+          case Failure(t) if pf.isDefinedAt(t) =>
+            val future = pf.applyOrElse(t, (_: Throwable) => this)
+            closeSelf = Some(() => future.close())
+            future.onComplete { res =>
+              closeSelf = None
+              p.tryComplete(res)
+            }
+            if (p.isCompleted) future.close()
+          case other =>
+            p.tryComplete(other)
+        }
     }
 
     new ActuallyCloseable(p) {
@@ -477,7 +478,7 @@ object CloseableFuture {
   private final class PromiseCompletingRunnable[T](body: => T) extends Runnable {
     val promise: Promise[T] = Promise[T]()
 
-    override def run(): Unit = if !promise.isCompleted then promise.tryComplete(Try(body))
+    override def run(): Unit = if (!promise.isCompleted) promise.tryComplete(Try(body))
   }
 
   /** Creates `CloseableFuture[T]` from the given function with the result type of `T`.
@@ -597,7 +598,7 @@ object CloseableFuture {
     new TimerTask {
       override def run(): Unit = f()
     }.tap {
-      timer.schedule(_, if delay > 0L then delay else 1L)
+      timer.schedule(_, if (delay > 0L) delay else 1L)
     }
 
   /** A utility method that combines `delay` with `map`.
@@ -660,7 +661,7 @@ object CloseableFuture {
         case Success(t) =>
           synchronized {
             results.append((i, t))
-            if results.size == futures.size then promise.trySuccess(results.sortBy(_._1).map(_._2).toVector)
+            if (results.size == futures.size) promise.trySuccess(results.sortBy(_._1).map(_._2).toVector)
           }
         case Failure(ex) => promise.tryFailure(ex)
       }
@@ -710,7 +711,7 @@ object CloseableFuture {
   def traverseSequential[T, U](in: Iterable[T])(f: T => CloseableFuture[U])
                               (using ExecutionContext): CloseableFuture[Iterable[U]] = {
     def processNext(remaining: Iterable[T], acc: List[U] = Nil): CloseableFuture[Iterable[U]] =
-      if remaining.isEmpty then CloseableFuture.successful(acc.reverse)
+      if (remaining.isEmpty) CloseableFuture.successful(acc.reverse)
       else f(remaining.head).flatMap(res => processNext(remaining.tail, res :: acc))
 
     processNext(in)
@@ -734,7 +735,7 @@ object CloseableFuture {
 
     new ActuallyCloseable(p) {
       override def closeAndCheck(): Boolean =
-        if super.closeAndCheck() then {
+        if (super.closeAndCheck()) {
           Future { f1.close(); f2.close() }(using ec)
           true
         }

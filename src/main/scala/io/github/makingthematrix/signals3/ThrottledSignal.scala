@@ -32,16 +32,18 @@ final class ThrottledSignal[V](val source: Signal[V], val delay: FiniteDuration)
   private def syncNotifySubscribers(fromThrottle: Boolean)(using context: ExecutionContext): Unit = synchronized {
     inline def newThrottle = delayed(delay)(syncNotifySubscribers(fromThrottle = true))
 
-    if throttle.isEmpty then throttle = Some(newThrottle)
-    else if !fromThrottle then ignoredEvent = true
+    if (throttle.isEmpty) throttle = Some(newThrottle)
+    else if (!fromThrottle) ignoredEvent = true
     else {
       super.notifySubscribers(Some(context))
-      throttle.foreach(t => if !t.future.isCompleted then t.close())
-      throttle = if ignoredEvent then {
-        ignoredEvent = false
-        Some(newThrottle) // if we ignored an event, let's notify subscribers again, just to be sure the signal is up to date.
-      }
-      else None
+      throttle.foreach(t => if (!t.future.isCompleted) t.close())
+      throttle =
+        if (ignoredEvent) {
+          ignoredEvent = false
+          Some(newThrottle) // if we ignored an event, let's notify subscribers again, just to be sure the signal is up to date.
+        } else {
+          None
+        }
     }
   }
 }
