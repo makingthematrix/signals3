@@ -9,7 +9,7 @@ ThisBuild / versionScheme := Some("semver-spec")
 Test / scalaVersion := _scalaVersion
 ThisBuild / description := "A lightweight event streaming library for Scala"
 
-ThisBuild / version := "1.2.0-M2"
+ThisBuild / version := "1.2.0-M3"
 
 val standardOptions = Seq(
   "-deprecation",
