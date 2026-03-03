@@ -1,4 +1,4 @@
-val _scalaVersion = "3.8.1"
+val _scalaVersion = "3.8.2"
 
 ThisBuild / organization := "io.github.makingthematrix"
 name := "signals3"
