@@ -4,9 +4,10 @@ import Stream.{EmptyTakeStream, EventSubscriber, StreamSubscription}
 import Finite.FiniteStream
 import ProxyStream.*
 
+import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.ref.WeakReference
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 import scala.util.chaining.scalaUtilChainingOps
 
 /** A stream of type `E` dispatches events (of type `E`) to all functions of type `(E) => Unit` which were registered in
@@ -66,6 +67,10 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
   override def onCurrent(body: E => Unit)
                         (using eventContext: EventContext = EventContext.Global): Subscription =
     new StreamSubscription[E](this, body, None)(using WeakReference(eventContext)).tap(_.enable())
+
+  private var fallbackStrategy: FallbackStrategy = FallbackStrategy.Rethrow()
+
+  inline protected def eval[V](f: () => V): Either[FallbackDecision, V] = Stream.eval(f, fallbackStrategy, 0)
 
   /** Creates a new `Stream[V]` by mapping events of the type `E` emitted by the original stream.
     *
@@ -348,4 +353,16 @@ object Stream {
    * @return A new stream.
    */
   inline def apply[E](cf: CloseableFuture[E])(using ExecutionContext): TakeStream[E] = TakeStream[E](cf)
+
+  import FallbackStrategy.*
+  import FallbackDecision.*
+  @tailrec
+  private def eval[V](f: () => V, fs: FallbackStrategy, retry: Int): Either[FallbackDecision, V] = (Try(f()), fs, retry) match {
+    case (Success(value), _, _)                    => Right(value)
+    case (Failure(ex), fs, n) if fs.retryTimes > n => fs.triggerSideEffect(ex); eval(f, fs, n + 1)
+    case (Failure(ex), fs: Rethrow, _)             => fs.triggerSideEffect(ex); Left(RETHROW(ex))
+    case (Failure(ex), fs: Ignore, _)              => fs.triggerSideEffect(ex); Left(IGNORE)
+    case (Failure(ex), fs: Close, _)               => fs.triggerSideEffect(ex); Left(CLOSE)
+    case (Failure(ex), fs: UseDefault[V], _)       => fs.triggerSideEffect(ex); Right(fs.defValue)
+  }
 }
