@@ -1,5 +1,6 @@
 package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.ProxyStream.mergeStrategies
 import io.github.makingthematrix.signals3.Stream.EventSubscriber
 
 import scala.collection.mutable.ArrayBuffer
@@ -15,7 +16,7 @@ import scala.util.{Failure, Success}
   * @tparam E The type of the events emitted by the stream constructed from the sources.
   */
 abstract private[signals3] class ProxyStream[A, E](sources: Stream[A]*)
-  extends Stream[E] with EventSubscriber[A] {
+  extends Stream[E](mergeStrategies(sources)) with EventSubscriber[A] {
   /** When the first subscriber is registered in this stream, subscribe the stream to all its sources. */
   override protected[signals3] def onWire(): Unit = sources.foreach(_.subscribe(this))
 
@@ -24,9 +25,12 @@ abstract private[signals3] class ProxyStream[A, E](sources: Stream[A]*)
 }
 
 private[signals3] object ProxyStream {
+  private inline def mergeStrategies[E](sources: Seq[Stream[E]]): FallbackStrategy =
+    FallbackStrategy.merge(sources.map(_.fallbackStrategy))
+
   class MapStream[E, V](source: Stream[E], f: E => V) extends ProxyStream[E, V](source) {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      dispatch(f(event), sourceContext)
+      dispatch(() => f(event), sourceContext)
   }
 
   class FutureStream[E, V](source: Stream[E], f: E => Future[V])

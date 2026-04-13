@@ -1,5 +1,5 @@
 package io.github.makingthematrix.signals3
-import testutils.awaitAllTasks
+import testutils.waitForResult
 
 class FallbackStrategySpec extends munit.FunSuite {
   import Threading.defaultContext
@@ -13,19 +13,18 @@ class FallbackStrategySpec extends munit.FunSuite {
 
     var res = 0
     out.foreach { n =>
-      println(s"Received: $n")
       res += n
     }
     in ! 1
     interceptMessage("Map and throw exception")(in ! 2)
     in ! 3
 
-    awaitAllTasks
+    waitForResult(out, 3)
     assertEquals(res, 4)
   }
 
   test("Map and throw exception with IGNORE") {
-    val in = SourceStream[Int]()
+    val in = SourceStream[Int](FallbackStrategy.ignore)
     val out = in.map {
       case 2 => throw new RuntimeException("Map and throw exception")
       case n => n
@@ -33,14 +32,13 @@ class FallbackStrategySpec extends munit.FunSuite {
 
     var res = 0
     out.foreach { n =>
-      println(s"Received: $n")
       res += n
     }
     in ! 1
     in ! 2
     in ! 3
 
-    awaitAllTasks
+    waitForResult(out, 3)
     assertEquals(res, 4)
   }
 }

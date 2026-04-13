@@ -11,7 +11,7 @@ import scala.concurrent.ExecutionContext
   *
   * @tparam E the type of the event
   */
-class SourceStream[E] extends Stream[E] {
+class SourceStream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.Rethrow()) extends Stream[E](fallbackStrategy) {
   /** Publishes the event to all subscribers.
     *
     * @see [[Stream.publish]]
@@ -23,9 +23,14 @@ class SourceStream[E] extends Stream[E] {
     */
   override def publish(event: E): Unit = dispatch(event, None)
 
+  override def publish(f: () => E): Unit = dispatch(f, None)
+
   /** An alias for the `publish` method with no explicit execution context. */
   @targetName("bang")
   inline def !(event: E): Unit = publish(event)
+
+  @targetName("bang")
+  inline def !(f: () => E): Unit = publish(f)
 
   /** Publishes the event to all subscriber, using the given execution context.
     *
@@ -37,6 +42,8 @@ class SourceStream[E] extends Stream[E] {
     */
   def publish(event: E, ec: ExecutionContext): Unit = dispatch(event, Some(ec))
 
+  def publish(f: () => E, ec: ExecutionContext): Unit = dispatch(f, Some(ec))
+
   /** A version of the `publish` method which takes the implicit execution context for dispatching.
     *
     * The difference between `!!` and `!` (and also between the two `publish` methods) is that even if the source's
@@ -46,4 +53,7 @@ class SourceStream[E] extends Stream[E] {
     */
   @targetName("twobang")
   inline def !!(event: E)(using ec: ExecutionContext): Unit = publish(event, ec)
+
+  @targetName("twobang")
+  inline def !!(f: () => E)(using ec: ExecutionContext): Unit = publish(f, ec)
 }
