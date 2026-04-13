@@ -3,11 +3,10 @@ package io.github.makingthematrix.signals3
 import Stream.{EmptyTakeStream, EventSubscriber, StreamSubscription}
 import Finite.FiniteStream
 import ProxyStream.*
-
-import scala.annotation.tailrec
+import io.github.makingthematrix.signals3.FallbackDecision.{CLOSE, IGNORE, RETHROW}
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.ref.WeakReference
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 import scala.util.chaining.scalaUtilChainingOps
 
 /** A stream of type `E` dispatches events (of type `E`) to all functions of type `(E) => Unit` which were registered in
@@ -23,7 +22,7 @@ import scala.util.chaining.scalaUtilChainingOps
   *
   * @see `ExecutionContext`
   */
-class Stream[E] extends EventSource[E, EventSubscriber[E]] {
+class Stream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.Rethrow()) extends EventSource[E, EventSubscriber[E]](fallbackStrategy) {
   /** Dispatches the event to all subscribers.
     *
     * @param event The event to be dispatched.
@@ -35,11 +34,23 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
   protected[signals3] def dispatch(event: E, executionContext: Option[ExecutionContext]): Unit =
     notifySubscribers(_.onEvent(event, executionContext))
 
+  protected[signals3] def dispatch(f: () => E, executionContext: Option[ExecutionContext]): Unit = FallbackStrategy.eval(f, fallbackStrategy) match {
+    case Right(event) => dispatch(event, executionContext)
+    case Left(RETHROW(ex)) => throw ex
+    case Left(IGNORE) =>
+    case Left(CLOSE) => this match {
+      case stream: CloseableStream[_] => stream.close()
+      case _ => // acts like IGNORE
+    }
+  }
+
   /** Publishes the event to all subscribers using the current execution context.
     *
     * @param event The event to be published.
     */
   protected[signals3] def publish(event: E): Unit = dispatch(event, None)
+
+  protected[signals3] def publish(f: () => E): Unit = dispatch(f, None)
 
   /** Registers a subscriber in a specified execution context and returns the subscription. An optional event context can also
     * be provided by the user for managing the subscription instead of doing it manually. When an event is published in
@@ -68,9 +79,6 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
                         (using eventContext: EventContext = EventContext.Global): Subscription =
     new StreamSubscription[E](this, body, None)(using WeakReference(eventContext)).tap(_.enable())
 
-  private var fallbackStrategy: FallbackStrategy = FallbackStrategy.Rethrow()
-
-  inline protected def eval[V](f: () => V): Either[FallbackDecision, V] = Stream.eval(f, fallbackStrategy, 0)
 
   /** Creates a new `Stream[V]` by mapping events of the type `E` emitted by the original stream.
     *
@@ -353,16 +361,4 @@ object Stream {
    * @return A new stream.
    */
   inline def apply[E](cf: CloseableFuture[E])(using ExecutionContext): TakeStream[E] = TakeStream[E](cf)
-
-  import FallbackStrategy.*
-  import FallbackDecision.*
-  @tailrec
-  private def eval[V](f: () => V, fs: FallbackStrategy, retry: Int): Either[FallbackDecision, V] = (Try(f()), fs, retry) match {
-    case (Success(value), _, _)                    => Right(value)
-    case (Failure(ex), fs, n) if fs.retryTimes > n => fs.triggerSideEffect(ex); eval(f, fs, n + 1)
-    case (Failure(ex), fs: Rethrow, _)             => fs.triggerSideEffect(ex); Left(RETHROW(ex))
-    case (Failure(ex), fs: Ignore, _)              => fs.triggerSideEffect(ex); Left(IGNORE)
-    case (Failure(ex), fs: Close, _)               => fs.triggerSideEffect(ex); Left(CLOSE)
-    case (Failure(ex), fs: UseDefault[V], _)       => fs.triggerSideEffect(ex); Right(fs.defValue)
-  }
 }
