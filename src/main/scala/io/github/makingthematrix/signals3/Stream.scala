@@ -34,23 +34,24 @@ class Stream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.Rethrow())
   protected[signals3] def dispatch(event: E, executionContext: Option[ExecutionContext]): Unit =
     notifySubscribers(_.onEvent(event, executionContext))
 
-  protected[signals3] def dispatch(f: () => E, executionContext: Option[ExecutionContext]): Unit = FallbackStrategy.eval(f, fallbackStrategy) match {
-    case Right(event) => dispatch(event, executionContext)
-    case Left(RETHROW(ex)) => throw ex
-    case Left(IGNORE) =>
-    case Left(CLOSE) => this match {
-      case stream: CloseableStream[_] => stream.close()
-      case _ => // acts like IGNORE
-    }
-  }
-
   /** Publishes the event to all subscribers using the current execution context.
     *
     * @param event The event to be published.
     */
   protected[signals3] def publish(event: E): Unit = dispatch(event, None)
 
+  protected[signals3] def dispatch(f: () => E, executionContext: Option[ExecutionContext]): Unit = evalAndRun(f)(dispatch(_, executionContext))
   protected[signals3] def publish(f: () => E): Unit = dispatch(f, None)
+
+  protected[signals3] def evalAndRun(f: () => E)(run: E => Unit): Unit = FallbackStrategy.eval(f, fallbackStrategy) match {
+    case Right(event)      => run(event)
+    case Left(RETHROW(ex)) => throw ex
+    case Left(IGNORE)      =>
+    case Left(CLOSE)       => this match {
+      case stream: Closeable => stream.close()
+      case _ => // act like IGNORE
+    }
+  }
 
   /** Registers a subscriber in a specified execution context and returns the subscription. An optional event context can also
     * be provided by the user for managing the subscription instead of doing it manually. When an event is published in

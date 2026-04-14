@@ -1,9 +1,10 @@
 package io.github.makingthematrix.signals3
 
-import io.github.makingthematrix.signals3.FallbackStrategy.SideEffect
-
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
+import scala.math.max
+
+import io.github.makingthematrix.signals3.FallbackStrategy.SideEffect
 
 enum FallbackStrategy(val retryTimes: Int, val sideEffects: List[SideEffect]) {
   case Rethrow(override val retryTimes: Int = 0, override val sideEffects: List[SideEffect] = Nil) extends FallbackStrategy(retryTimes, sideEffects)
@@ -20,13 +21,15 @@ enum FallbackDecision {
 }
 
 object FallbackStrategy {
+  import FallbackDecision.*
+
   val rethrow: FallbackStrategy = Rethrow()
   val ignore: FallbackStrategy = Ignore()
   val close: FallbackStrategy = Close()
   def useDefault[T](defValue: T): FallbackStrategy = UseDefault(defValue)
 
   type SideEffect = Throwable => Unit
-  import FallbackDecision.*
+
   @tailrec @unchecked
   def eval[V](f: () => V, fs: FallbackStrategy, retry: Int = 0): Either[FallbackDecision, V] = (Try(f()), fs, retry) match {
     case (Success(value), _, _)                    => Right(value)
@@ -37,7 +40,6 @@ object FallbackStrategy {
     case (Failure(ex), fs: UseDefault[V], _)       => fs.triggerSideEffects(ex); Right(fs.defValue)
   }
 
-  import scala.math.max
   // UseDefault > Ignore > Close > Rethrow
   def merge(fs: Seq[FallbackStrategy]): FallbackStrategy = fs.reduce {
     case (a, b) if a == b                      => a

@@ -33,6 +33,13 @@ private[signals3] object ProxyStream {
       dispatch(() => f(event), sourceContext)
   }
 
+  /**
+    * TODO: FutureStream handles exceptions differently than other streams. I need to decide what to do with it re FallbackStrategy.
+    * @param source The stream from which events are taken.
+    * @param f A function which takes an event from the source stream and returns a [[Future]] with its result.
+    * @tparam E The type of the events emitted by the stream constructed from the sources.
+    * @tparam V The type of the result of the future returned by the function.
+    */
   class FutureStream[E, V](source: Stream[E], f: E => Future[V])
     extends ProxyStream[E, V](source) {
     private val key = java.util.UUID.randomUUID()
@@ -48,13 +55,18 @@ private[signals3] object ProxyStream {
   class CollectStream[E, V](source: Stream[E], pf: PartialFunction[E, V])
     extends ProxyStream[E, V](source) {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      if (pf.isDefinedAt(event)) dispatch(pf(event), sourceContext)
+      if (pf.isDefinedAt(event)) dispatch(() => pf(event), sourceContext)
   }
   
   class FilterStream[E](source: Stream[E], predicate: E => Boolean)
     extends ProxyStream[E, E](source) {
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      if (predicate(event)) dispatch(event, sourceContext)
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
+      val f: () => E = () => if (predicate(event)) event else null.asInstanceOf[E]
+      evalAndRun(f) {
+        case null =>
+        case _ => dispatch(event, sourceContext)
+      }
+    }
   }
   
   class JoinStream[E](sources: Stream[E]*)
