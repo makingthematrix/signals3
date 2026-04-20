@@ -3,7 +3,7 @@ package io.github.makingthematrix.signals3
 import Stream.{EmptyTakeStream, EventSubscriber, StreamSubscription}
 import Finite.FiniteStream
 import ProxyStream.*
-import io.github.makingthematrix.signals3.FallbackDecision.{CLOSE, IGNORE, RETHROW}
+import io.github.makingthematrix.signals3.FallbackDecision.{IGNORE, RETHROW}
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.ref.WeakReference
 import scala.util.Try
@@ -47,10 +47,6 @@ class Stream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.Rethrow())
     case Right(event)      => run(event)
     case Left(RETHROW(ex)) => throw ex
     case Left(IGNORE)      =>
-    case Left(CLOSE)       => this match {
-      case stream: Closeable => stream.close()
-      case _ => // act like IGNORE
-    }
   }
 
   /** Registers a subscriber in a specified execution context and returns the subscription. An optional event context can also
