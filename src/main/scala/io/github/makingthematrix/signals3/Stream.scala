@@ -31,20 +31,17 @@ class Stream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.Rethrow())
     *                         the subscriber, the subscriber will be called immediately. Otherwise, a future working in the subscriber's
     *                         execution context will be created.
     */
-  protected[signals3] def dispatch(event: E, executionContext: Option[ExecutionContext]): Unit =
-    notifySubscribers(_.onEvent(event, executionContext))
+  protected[signals3] def dispatch(event: => E, executionContext: Option[ExecutionContext]): Unit =
+    evalAndRun(event)(e => notifySubscribers(_.onEvent(e, executionContext)))
 
   /** Publishes the event to all subscribers using the current execution context.
     *
     * @param event The event to be published.
     */
-  protected[signals3] def publish(event: E): Unit = dispatch(event, None)
+  protected[signals3] def publish(event: => E): Unit = dispatch(event, None)
 
-  protected[signals3] def dispatch(f: () => E, executionContext: Option[ExecutionContext]): Unit = evalAndRun(f)(dispatch(_, executionContext))
-  protected[signals3] def publish(f: () => E): Unit = dispatch(f, None)
-
-  protected[signals3] def evalAndRun(f: () => E)(run: E => Unit): Unit = FallbackStrategy.eval(f, fallbackStrategy) match {
-    case Right(event)      => run(event)
+  protected[signals3] def evalAndRun(event: => E)(run: E => Unit): Unit = FallbackStrategy.eval(event, fallbackStrategy) match {
+    case Right(e)          => run(e)
     case Left(RETHROW(ex)) => throw ex
     case Left(IGNORE)      =>
   }

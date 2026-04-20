@@ -30,7 +30,7 @@ private[signals3] object ProxyStream {
 
   class MapStream[E, V](source: Stream[E], f: E => V) extends ProxyStream[E, V](source) {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      dispatch(() => f(event), sourceContext)
+      dispatch(f(event), sourceContext)
   }
 
   /**
@@ -55,16 +55,15 @@ private[signals3] object ProxyStream {
   class CollectStream[E, V](source: Stream[E], pf: PartialFunction[E, V])
     extends ProxyStream[E, V](source) {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      if (pf.isDefinedAt(event)) dispatch(() => pf(event), sourceContext)
+      if (pf.isDefinedAt(event)) dispatch(pf(event), sourceContext)
   }
   
   class FilterStream[E](source: Stream[E], predicate: E => Boolean)
     extends ProxyStream[E, E](source) {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
-      val f: () => E = () => if (predicate(event)) event else null.asInstanceOf[E]
-      evalAndRun(f) {
+      evalAndRun(if (predicate(event)) event else null.asInstanceOf[E]) {
         case null =>
-        case _ => dispatch(event, sourceContext)
+        case _    => dispatch(event, sourceContext)
       }
     }
   }
