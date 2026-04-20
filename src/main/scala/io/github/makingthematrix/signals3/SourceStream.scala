@@ -21,16 +21,11 @@ class SourceStream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.Reth
     *      exposes this method for public use.
     * @param event The event to be published.
     */
-  override def publish(event: E): Unit = dispatch(event, None)
-
-  override def publish(f: () => E): Unit = dispatch(f, None)
+  override def publish(event: => E): Unit = dispatch(event, None)
 
   /** An alias for the `publish` method with no explicit execution context. */
   @targetName("bang")
-  inline def !(event: E): Unit = publish(event)
-
-  @targetName("bang")
-  inline def !(f: () => E): Unit = publish(f)
+  inline def !(event: => E): Unit = publish(event)
 
   /** Publishes the event to all subscriber, using the given execution context.
     *
@@ -40,9 +35,7 @@ class SourceStream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.Reth
     *           the execution context used to register the subscriber, the subscriber will be called immediately. Otherwise,
     *           a future working in the subscriber's execution context will be created and `ec` will be ignored.
     */
-  def publish(event: E, ec: ExecutionContext): Unit = dispatch(event, Some(ec))
-
-  def publish(f: () => E, ec: ExecutionContext): Unit = dispatch(f, Some(ec))
+  def publish(event: => E, ec: ExecutionContext): Unit = dispatch(event, Some(ec))
 
   /** A version of the `publish` method which takes the implicit execution context for dispatching.
     *
@@ -52,8 +45,5 @@ class SourceStream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.Reth
     * execution context the call will be synchronous. This may be desirable in some cases, but please use with caution.
     */
   @targetName("twobang")
-  inline def !!(event: E)(using ec: ExecutionContext): Unit = publish(event, ec)
-
-  @targetName("twobang")
-  inline def !!(f: () => E)(using ec: ExecutionContext): Unit = publish(f, ec)
+  inline def !!(event: => E)(using ec: ExecutionContext): Unit = publish(event, ec)
 }

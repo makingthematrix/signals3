@@ -29,7 +29,7 @@ object FallbackStrategy {
   type SideEffect = Throwable => Unit
 
   @tailrec @unchecked
-  def eval[V](f: () => V, fs: FallbackStrategy, retry: Int = 0): Either[FallbackDecision, V] = (Try(f()), fs, retry) match {
+  def eval[V](f: => V, fs: FallbackStrategy, retry: Int = 0): Either[FallbackDecision, V] = (Try(f), fs, retry) match {
     case (Success(value), _, _)                    => Right(value)
     case (Failure(ex), fs, n) if fs.retryTimes > n => fs.triggerSideEffects(ex); eval(f, fs, n + 1)
     case (Failure(ex), fs: Rethrow, _)             => fs.triggerSideEffects(ex); Left(RETHROW(ex))
