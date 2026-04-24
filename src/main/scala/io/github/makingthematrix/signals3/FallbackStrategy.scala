@@ -26,7 +26,7 @@ object FallbackStrategy {
 
   type SideEffect = Throwable => Unit
 
-  @tailrec @unchecked
+  @tailrec
   def eval[V](f: => V, fs: FallbackStrategy, retry: Int = 0): Either[FallbackDecision, V] = (Try(f), fs, retry) match {
     case (Success(value), _, _)                    => Right(value)
     case (Failure(ex), fs, n) if fs.retryTimes > n => fs.triggerSideEffects(ex); eval(f, fs, n + 1)
@@ -34,12 +34,12 @@ object FallbackStrategy {
     case (Failure(ex), fs: Ignore, _)              => fs.triggerSideEffects(ex); Left(IGNORE)
   }
 
-  // UseDefault > Ignore > Close > Rethrow
+  // Ignore > Rethrow
   def merge[T, S](fs: Seq[FallbackStrategy]): FallbackStrategy = fs.reduce {
     case (a, b) if a == b => a
     case (a: Rethrow, b: Rethrow) => a.copy(retryTimes = max(a.retryTimes, b.retryTimes), sideEffects = a.sideEffects ++ b.sideEffects)
-    case (a: Rethrow, b: Ignore) => b.copy(sideEffects = a.sideEffects ++ b.sideEffects)
-    case (a: Ignore, b: Ignore) => a.copy(retryTimes = max(a.retryTimes, b.retryTimes), sideEffects = a.sideEffects ++ b.sideEffects)
-    case (a: Ignore, b: Rethrow) => a.copy(sideEffects = a.sideEffects ++ b.sideEffects)
+    case (a: Rethrow, b: Ignore)  => b.copy(sideEffects = a.sideEffects ++ b.sideEffects)
+    case (a: Ignore, b: Ignore)   => a.copy(retryTimes = max(a.retryTimes, b.retryTimes), sideEffects = a.sideEffects ++ b.sideEffects)
+    case (a: Ignore, b: Rethrow)  => a.copy(sideEffects = a.sideEffects ++ b.sideEffects)
   }
 }

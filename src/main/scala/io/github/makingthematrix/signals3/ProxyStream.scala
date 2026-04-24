@@ -5,7 +5,6 @@ import io.github.makingthematrix.signals3.Stream.EventSubscriber
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.chaining.scalaUtilChainingOps
 import scala.util.{Failure, Success}
 
 /** A superclass for all event streams which compose other event streams into one.
@@ -43,16 +42,21 @@ private[signals3] object ProxyStream {
     private val key = java.util.UUID.randomUUID()
   
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      Serialized.future(key.toString)(f(event)).andThen {
-        case Success(v)                         => dispatch(v, sourceContext)
-        case Failure(_: NoSuchElementException) => // do nothing to allow Future.filter/collect
-        case Failure(_)                         =>
-      }(using sourceContext.getOrElse(Threading.defaultContext))
+      evalAndRun(f(event)) {
+        Serialized.future(key.toString)(_).andThen {
+          case Success(v) => dispatch(v, sourceContext)
+          case Failure(_: NoSuchElementException) => // do nothing to allow Future.filter/collect
+          case Failure(_) =>
+        }(using sourceContext.getOrElse(Threading.defaultContext))
+      }
   }
   
   class CollectStream[E, V](source: Stream[E], pf: PartialFunction[E, V]) extends ProxyStream[E, V](source) {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      if (pf.isDefinedAt(event)) dispatch(pf(event), sourceContext)
+      evalAndRun(pf.lift(event)) {
+        case Some(v) => dispatch(v, sourceContext)
+        case None =>
+      }
   }
   
   class FilterStream[E](source: Stream[E], predicate: E => Boolean) extends ProxyStream[E, E](source) {
@@ -149,29 +153,6 @@ private[signals3] object ProxyStream {
           dispatch(event, sourceContext)
           previousEvent = Some(event)
       }
-    }
-  }
-
-  final class FlatMapStream[E, V](source: Stream[E], f: E => Stream[V])
-    extends Stream[V](source.fallbackStrategy) with EventSubscriber[E] {
-    @volatile private var mapped: Option[Stream[V]] = None
-  
-    private val subscriber = new EventSubscriber[V] {
-      override protected[signals3] def onEvent(event: V, currentContext: Option[ExecutionContext]): Unit =
-        dispatch(event, currentContext)
-    }
-  
-    override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit = evalAndRun(f(event)) { e =>
-      mapped.foreach(_.unsubscribe(subscriber))
-      mapped = Some(e.tap(_.subscribe(subscriber)))
-    }
-  
-    override protected def onWire(): Unit = source.subscribe(this)
-  
-    override protected def onUnwire(): Unit = {
-      mapped.foreach(_.unsubscribe(subscriber))
-      mapped = None
-      source.unsubscribe(this)
     }
   }
 }
