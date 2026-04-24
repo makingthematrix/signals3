@@ -56,7 +56,7 @@ class FallbackStrategySpec extends munit.FunSuite {
     var res = 0
     out.foreach { n =>
       res += n
-    }
+    }Ignore
     in ! 1
     interceptMessage("Collect and throw exception")(in ! 2)
     in ! 3
@@ -414,5 +414,119 @@ class FallbackStrategySpec extends munit.FunSuite {
     streamB ! "B"
     waitForResult(out, "A")
     assertEquals(res, "AA")
+  }
+
+  // ============ ignoreExceptions / rethrowExceptions tests ============
+
+  test("ignoreExceptions switches RETHROW to IGNORE") {
+    val in = SourceStream[Int]()
+    val out = in.ignoreExceptions.map { n =>
+      if (n == 2) throw new RuntimeException("Map throws")
+      n * 10
+    }
+
+    var res = 0
+    out.foreach { n =>
+      res += n
+    }
+    in ! 1
+    in ! 2 // exception is ignored by ignoreExceptions
+    in ! 3
+
+    waitForResult(out, 30)
+    assertEquals(res, 40) // 10 + 30 (20 was ignored)
+  }
+
+  test("rethrowExceptions switches IGNORE to RETHROW") {
+    val in = SourceStream[Int](FallbackStrategy.ignore)
+    val out = in.rethrowExceptions.map { n =>
+      if (n == 2) throw new RuntimeException("Map throws")
+      n * 10
+    }
+
+    var res = 0
+    out.foreach { n =>
+      res += n
+    }
+    in ! 1
+    interceptMessage("Map throws")(in ! 2)
+    in ! 3
+
+    waitForResult(out, 30)
+    assertEquals(res, 40) // 10 + 30
+  }
+
+  test("ignoreExceptions on IGNORE stream preserves IGNORE strategy") {
+    val in = SourceStream[Int](FallbackStrategy.ignore)
+    val out = in.ignoreExceptions
+    
+    // Should preserve the IGNORE strategy
+    assert(out.fallbackStrategy == FallbackStrategy.ignore)
+  }
+
+  test("rethrowExceptions on RETHROW stream preserves RETHROW strategy") {
+    val in = SourceStream[Int]() // default is Rethrow
+    val out = in.rethrowExceptions
+    
+    // Should preserve the RETHROW strategy
+    assert(out.fallbackStrategy == FallbackStrategy.rethrow)
+  }
+
+  test("Chaining ignoreExceptions and rethrowExceptions") {
+    val in = SourceStream[Int]()
+    // Start with Rethrow (default), switch to Ignore, then back to Rethrow
+    val out = in.ignoreExceptions.rethrowExceptions.map { n =>
+      if (n == 2) throw new RuntimeException("Map throws")
+      n * 10
+    }
+
+    var res = 0
+    out.foreach { n =>
+      res += n
+    }
+    in ! 1
+    interceptMessage("Map throws")(in ! 2)
+    in ! 3
+
+    waitForResult(out, 30)
+    assertEquals(res, 40) // 10 + 30
+  }
+
+  test("ignoreExceptions with map transformation") {
+    val in = SourceStream[Int]()
+    val out = in.map(_ * 2).ignoreExceptions.map { n =>
+      if (n == 4) throw new RuntimeException("Map throws")
+      n
+    }
+
+    var res = 0
+    out.foreach { n =>
+      res += n
+    }
+    in ! 1 // 1 * 2 = 2
+    in ! 2 // 2 * 2 = 4, map throws but ignored
+    in ! 3 // 3 * 2 = 6
+
+    waitForResult(out, 6)
+    assertEquals(res, 8) // 2 + 6
+  }
+
+  test("rethrowExceptions with map transformation") {
+    val in = SourceStream[Int](FallbackStrategy.ignore)
+    val out = in.map(_ * 2).rethrowExceptions.map { n =>
+      if (n == 4) throw new RuntimeException("Map throws")
+      n
+    }
+
+    var res = 0
+    out.foreach { n =>
+      res += n
+    }
+    in ! 1 // 1 * 2 = 2
+    interceptMessage("Map throws")(in ! 2) // 2 * 2 = 4, exception propagates
+    in ! 3 // 3 * 2 = 6
+
+    waitForResult(out, 6)
+    assertEquals(res, 8) // 2 + 6
   }
 }
