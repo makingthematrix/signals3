@@ -253,6 +253,12 @@ class Stream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.rethrow) e
     */
   inline final def not(using E <:< Boolean): Stream[Boolean] = map(!_)
 
+  inline final def ignoreExceptions: Stream[E] =
+    if (fallbackStrategy == FallbackStrategy.Ignore) this else IgnoreExceptionsStream[E](this)
+
+  inline final def rethrowExceptions: Stream[E] =
+    if (fallbackStrategy == FallbackStrategy.Rethrow) this else RethrowExceptionsStream[E](this)
+
   /** By default, a stream does not have the internal state so there's nothing to do in `onWire` and `onUnwire`*/
   override protected def onWire(): Unit = {}
 

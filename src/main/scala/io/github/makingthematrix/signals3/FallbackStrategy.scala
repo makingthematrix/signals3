@@ -39,7 +39,7 @@ object FallbackStrategy {
     case (a, b) if a == b => a
     case (a: Rethrow, b: Rethrow) => a.copy(retryTimes = max(a.retryTimes, b.retryTimes), sideEffects = a.sideEffects ++ b.sideEffects)
     case (a: Rethrow, b: Ignore)  => b.copy(sideEffects = a.sideEffects ++ b.sideEffects)
-    case (a: Ignore, b: Ignore)   => a.copy(retryTimes = max(a.retryTimes, b.retryTimes), sideEffects = a.sideEffects ++ b.sideEffects)
-    case (a: Ignore, b: Rethrow)  => a.copy(sideEffects = a.sideEffects ++ b.sideEffects)
+    case (a: Ignore,  b: Ignore)  => a.copy(retryTimes = max(a.retryTimes, b.retryTimes), sideEffects = a.sideEffects ++ b.sideEffects)
+    case (a: Ignore,  b: Rethrow) => a.copy(sideEffects = a.sideEffects ++ b.sideEffects)
   }
 }
