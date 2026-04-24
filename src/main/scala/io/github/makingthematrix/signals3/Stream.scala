@@ -22,7 +22,7 @@ import scala.util.chaining.scalaUtilChainingOps
   *
   * @see `ExecutionContext`
   */
-class Stream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.Rethrow()) extends EventSource[E, EventSubscriber[E]](fallbackStrategy) {
+class Stream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.rethrow) extends EventSource[E, EventSubscriber[E]](fallbackStrategy) {
   /** Dispatches the event to all subscribers.
     *
     * @param event The event to be dispatched.
@@ -40,7 +40,7 @@ class Stream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.Rethrow())
     */
   protected[signals3] def publish(event: => E): Unit = dispatch(event, None)
 
-  protected[signals3] def evalAndRun(event: => E)(run: E => Unit): Unit = FallbackStrategy.eval(event, fallbackStrategy) match {
+  protected[signals3] def evalAndRun[T](event: => T)(run: T => Unit): Unit = FallbackStrategy.eval(event, fallbackStrategy) match {
     case Right(e)          => run(e)
     case Left(RETHROW(ex)) => throw ex
     case Left(IGNORE)      =>

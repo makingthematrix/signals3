@@ -11,7 +11,7 @@ import scala.concurrent.ExecutionContext
   *
   * @tparam E the type of the event
   */
-class SourceStream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.Rethrow()) extends Stream[E](fallbackStrategy) {
+class SourceStream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.rethrow) extends Stream[E](fallbackStrategy) {
   /** Publishes the event to all subscribers.
     *
     * @see [[Stream.publish]]
