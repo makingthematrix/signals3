@@ -11,6 +11,18 @@ enum FallbackStrategy(val retryTimes: Int, val sideEffects: List[SideEffect]) {
   case Ignore(override val retryTimes: Int = 0, override val sideEffects: List[SideEffect] = Nil) extends FallbackStrategy(retryTimes, sideEffects)
 
   inline def triggerSideEffects(ex: Throwable): Unit = sideEffects.foreach(f => f(ex))
+
+  def toRethrow: FallbackStrategy = this match {
+    case _: Rethrow => this
+    case fs if fs == FallbackStrategy.ignore => FallbackStrategy.rethrow
+    case Ignore(retryTimes, sideEffects) => Rethrow(retryTimes, sideEffects)
+  }
+
+  def toIgnore: FallbackStrategy = this match {
+    case _: Ignore => this
+    case fs if fs == FallbackStrategy.rethrow => FallbackStrategy.ignore
+    case Rethrow(retryTimes, sideEffects) => Ignore(retryTimes, sideEffects)
+  }
 }
 
 enum FallbackDecision {

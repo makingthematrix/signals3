@@ -26,12 +26,14 @@ private[signals3] object ProxyStream {
   private inline def mergeStrategies[A, E](sources: Seq[Stream[A]]): FallbackStrategy =
     FallbackStrategy.merge(sources.map(_.fallbackStrategy))
 
-  final class IgnoreExceptionsStream[E](source: Stream[E]) extends ProxyStream[E, E](Seq(source), Some(FallbackStrategy.ignore)) {
+  final class IgnoreExceptionsStream[E](source: Stream[E])
+    extends ProxyStream[E, E](Seq(source), Some(source.fallbackStrategy.toIgnore)) {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       dispatch(event, sourceContext)
   }
 
-  final class RethrowExceptionsStream[E](source: Stream[E]) extends ProxyStream[E, E](Seq(source), Some(FallbackStrategy.rethrow)){
+  final class RethrowExceptionsStream[E](source: Stream[E])
+    extends ProxyStream[E, E](Seq(source), Some(source.fallbackStrategy.toRethrow)){
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       dispatch(event, sourceContext)
   }
