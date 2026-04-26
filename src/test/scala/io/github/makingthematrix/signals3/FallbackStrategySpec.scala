@@ -56,7 +56,7 @@ class FallbackStrategySpec extends munit.FunSuite {
     var res = 0
     out.foreach { n =>
       res += n
-    }Ignore
+    }
     in ! 1
     interceptMessage("Collect and throw exception")(in ! 2)
     in ! 3
