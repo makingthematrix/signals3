@@ -1,7 +1,5 @@
 package io.github.makingthematrix.signals3
 
-import scala.util.Try
-
 /**
   * A stream or a signal can be closeable, meaning that it can be closed and after that it will not publish new events
   * anymore. Every [[GeneratorStream]] and [[GeneratorSignal]] is [[Closeable]] which allows for stopping them when
@@ -23,7 +21,6 @@ trait Closeable extends java.lang.AutoCloseable with CanBeClosed {
 }
 
 object Closeable {
-  Try[Unit]()
   /**
     * A type alias for a closeable stream.
     * @tparam E The event type of the stream.

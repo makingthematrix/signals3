@@ -6,7 +6,7 @@ class FallbackStrategySpec extends munit.FunSuite {
 
   // ============ MAP tests ============
 
-  test("Map and throw exception with RETHROW") {
+  test("Map and throw exception") {
     val in = SourceStream[Int]()
     val out = in.map {
       case 2 => throw new RuntimeException("Map and throw exception")
@@ -25,9 +25,9 @@ class FallbackStrategySpec extends munit.FunSuite {
     assertEquals(res, 4)
   }
 
-  test("Map and throw exception with IGNORE") {
-    val in = SourceStream[Int](FallbackStrategy.ignore)
-    val out = in.map {
+  test("Map and ignore exception") {
+    val in = SourceStream[Int]()
+    val out = in.ignoreExceptions.map {
       case 2 => throw new RuntimeException("Map and throw exception")
       case n => n
     }
@@ -46,7 +46,7 @@ class FallbackStrategySpec extends munit.FunSuite {
 
   // ============ COLLECT tests ============
 
-  test("Collect and throw exception with RETHROW") {
+  test("Collect and throw exception") {
     val in = SourceStream[Int]()
     val out = in.collect {
       case 2 => throw new RuntimeException("Collect and throw exception")
@@ -65,9 +65,9 @@ class FallbackStrategySpec extends munit.FunSuite {
     assertEquals(res, 40)
   }
 
-  test("Collect and throw exception with IGNORE") {
-    val in = SourceStream[Int](FallbackStrategy.ignore)
-    val out = in.collect {
+  test("Collect and ignore exception") {
+    val in = SourceStream[Int]()
+    val out = in.ignoreExceptions.collect {
       case 2 => throw new RuntimeException("Collect and throw exception")
       case n if n > 0 => n * 10
     }
@@ -86,7 +86,7 @@ class FallbackStrategySpec extends munit.FunSuite {
 
   // ============ FILTER tests ============
 
-  test("Filter and throw exception with RETHROW") {
+  test("Filter and throw exception") {
     val in = SourceStream[Int]()
     val out = in.filter { n =>
       if (n == 2) throw new RuntimeException("Filter and throw exception")
@@ -105,9 +105,9 @@ class FallbackStrategySpec extends munit.FunSuite {
     assertEquals(res, 4)
   }
 
-  test("Filter and throw exception with IGNORE") {
+  test("Filter and ignore exception") {
     val in = SourceStream[Int](FallbackStrategy.ignore)
-    val out = in.filter { n =>
+    val out = in.ignoreExceptions.filter { n =>
       if (n == 2) throw new RuntimeException("Filter and throw exception")
       n % 2 == 0
     }
@@ -126,7 +126,7 @@ class FallbackStrategySpec extends munit.FunSuite {
 
   // ============ DROPWHILE tests ============
 
-  test("DropWhile and throw exception with RETHROW") {
+  test("DropWhile and throw exception") {
     val in = SourceStream[Int]()
     val out = in.dropWhile { n =>
       if (n == 2) throw new RuntimeException("DropWhile and throw exception")
@@ -144,36 +144,13 @@ class FallbackStrategySpec extends munit.FunSuite {
     assert(res == 0)
   }
 
-
-
-  // ============ Strategy merging tests ============
-
-  test("Merged strategies: IGNORE overrides RETHROW in joined streams") {
-    val in1 = SourceStream[Int](FallbackStrategy.rethrow)
-    val in2 = SourceStream[Int](FallbackStrategy.ignore)
-    val out = in1.join(in2)
-
-    var res = 0
-    out.foreach { n =>
-      res += n
-    }
-    in1 ! 1
-    in2 ! 2
-    in1 ! 4
-
-    waitForResult(out, 4)
-    assertEquals(res, 7)
-  }
-
-  // ============ Retry tests ============
-
   // ============ Side effects tests ============
 
   test("Side effects are triggered on exception") {
     var sideEffectCalled = false
     val sideEffect: Throwable => Unit = _ => sideEffectCalled = true
     val in = SourceStream[Int](FallbackStrategy.Ignore(sideEffects = List(sideEffect)))
-    val out = in.map { n =>
+    val out = in.ignoreExceptions(sideEffect).map { n =>
       if (n == 2) throw new RuntimeException("Side effect test")
       n
     }
@@ -190,8 +167,8 @@ class FallbackStrategySpec extends munit.FunSuite {
   // ============ Chained operations ============
 
   test("Map with exception chained from another map with IGNORE") {
-    val in = SourceStream[Int](FallbackStrategy.ignore)
-    val out = in.map(_ * 2).map { n =>
+    val in = SourceStream[Int]()
+    val out = in.ignoreExceptions.map(_ * 2).map { n =>
       if (n == 4) throw new RuntimeException("Chained map test")
       n
     }
@@ -211,8 +188,8 @@ class FallbackStrategySpec extends munit.FunSuite {
   // ============ Edge cases ============
 
   test("Empty stream with IGNORE strategy") {
-    val in = SourceStream[Int](FallbackStrategy.ignore)
-    val out: Stream[Int] = in.map { n =>
+    val in = SourceStream[Int]()
+    val out: Stream[Int] = in.ignoreExceptions.map { n =>
       throw new RuntimeException("Should not be called")
     }
 
@@ -225,9 +202,9 @@ class FallbackStrategySpec extends munit.FunSuite {
     assertEquals(res, 0)
   }
 
-  test("Multiple strategies in sequence: map then filter") {
-    val in = SourceStream[Int](FallbackStrategy.ignore)
-    val out = in.map { n =>
+  test("Multiple exceptions in sequence: map then filter") {
+    val in = SourceStream[Int]()
+    val out = in.ignoreExceptions.map { n =>
       if (n == 1) throw new RuntimeException("Map throws")
       n * 2
     }.filter { n =>
@@ -249,9 +226,9 @@ class FallbackStrategySpec extends munit.FunSuite {
 
   // ============ DROPWHILE tests (additional) ============
 
-  test("DropWhile and throw exception with IGNORE") {
-    val in = SourceStream[Int](FallbackStrategy.ignore)
-    val out = in.dropWhile { n =>
+  test("DropWhile and ignore exception") {
+    val in = SourceStream[Int]()
+    val out = in.ignoreExceptions.dropWhile { n =>
       if (n == 2) throw new RuntimeException("DropWhile and throw exception")
       n < 3
     }
@@ -270,7 +247,7 @@ class FallbackStrategySpec extends munit.FunSuite {
 
   // ============ SCAN tests ============
 
-  test("Scan and throw exception with RETHROW") {
+  test("Scan and throw exception") {
     val in = SourceStream[Int]()
     val out = in.scan(0) { (acc, n) =>
       if (n == 2) throw new RuntimeException("Scan and throw exception")
@@ -287,9 +264,9 @@ class FallbackStrategySpec extends munit.FunSuite {
     assert(res == 1)
   }
 
-  test("Scan and throw exception with IGNORE") {
-    val in = SourceStream[Int](FallbackStrategy.ignore)
-    val out = in.scan(0) { (acc, n) =>
+  test("Scan and ignore exception") {
+    val in = SourceStream[Int]()
+    val out = in.ignoreExceptions.scan(0) { (acc, n) =>
       if (n == 2) throw new RuntimeException("Scan and throw exception")
       acc + n
     }
@@ -308,7 +285,7 @@ class FallbackStrategySpec extends munit.FunSuite {
 
   // ============ GROUPBY tests ============
 
-  test("GroupBy and throw exception with RETHROW") {
+  test("GroupBy and throw exception") {
     val in = SourceStream[Int]()
     val out = in.groupBy { n =>
       if (n == 2) throw new RuntimeException("GroupBy and throw exception")
@@ -325,9 +302,9 @@ class FallbackStrategySpec extends munit.FunSuite {
     assert(res.isEmpty)
   }
 
-  test("GroupBy and throw exception with IGNORE") {
-    val in = SourceStream[Int](FallbackStrategy.ignore)
-    val out = in.groupBy { n =>
+  test("GroupBy and ignore exception") {
+    val in = SourceStream[Int]()
+    val out = in.ignoreExceptions.groupBy { n =>
       if (n == 2) throw new RuntimeException("GroupBy and throw exception")
       n % 2 == 0
     }
@@ -347,9 +324,9 @@ class FallbackStrategySpec extends munit.FunSuite {
 
   // ============ TAKEWHILE tests ============
 
-  test("TakeWhile and throw exception with IGNORE") {
-    val in = SourceStream[Int](FallbackStrategy.ignore)
-    val out = in.takeWhile { n =>
+  test("TakeWhile and ignore exception") {
+    val in = SourceStream[Int]()
+    val out = in.ignoreExceptions.takeWhile { n =>
       if (n == 2) throw new RuntimeException("TakeWhile and throw exception")
       n < 3
     }
@@ -359,7 +336,7 @@ class FallbackStrategySpec extends munit.FunSuite {
       res += n
     }
     in ! 1 // p(1)=true, !p(1)=false, dispatches 1
-    in ! 2 // p(2) throws with IGNORE, silently ignored
+    in ! 2 // p(2) silently ignored
     in ! 3 // p(3)=false, !p(3)=true, closes the stream
 
     waitForResult(out, 1)
@@ -369,7 +346,7 @@ class FallbackStrategySpec extends munit.FunSuite {
 
   // ============ FLATMAP tests ============
 
-  test("FlatMap and throw exception with RETHROW") {
+  test("FlatMap and throw exception") {
     val in = SourceStream[Int]()
     val streamA = SourceStream[String]()
     val streamB = SourceStream[String]()
@@ -390,11 +367,11 @@ class FallbackStrategySpec extends munit.FunSuite {
     interceptMessage("FlatMap and throw exception")(in ! 2)
   }
 
-  test("FlatMap and throw exception with IGNORE") {
+  test("FlatMap and ignore exception") {
     val in = SourceStream[Int](FallbackStrategy.ignore)
     val streamA = SourceStream[String]()
     val streamB = SourceStream[String]()
-    val out = in.flatMap { n =>
+    val out = in.ignoreExceptions.flatMap { n =>
       if (n == 2) throw new RuntimeException("FlatMap and throw exception")
       if (n % 2 != 0) streamA else streamB
     }
@@ -416,124 +393,10 @@ class FallbackStrategySpec extends munit.FunSuite {
     assertEquals(res, "AA")
   }
 
-  // ============ ignoreExceptions / rethrowExceptions tests ============
-
-  test("ignoreExceptions switches RETHROW to IGNORE") {
-    val in = SourceStream[Int]()
-    val out = in.ignoreExceptions.map { n =>
-      if (n == 2) throw new RuntimeException("Map throws")
-      n * 10
-    }
-
-    var res = 0
-    out.foreach { n =>
-      res += n
-    }
-    in ! 1
-    in ! 2 // exception is ignored by ignoreExceptions
-    in ! 3
-
-    waitForResult(out, 30)
-    assertEquals(res, 40) // 10 + 30 (20 was ignored)
-  }
-
-  test("rethrowExceptions switches IGNORE to RETHROW") {
-    val in = SourceStream[Int](FallbackStrategy.ignore)
-    val out = in.rethrowExceptions.map { n =>
-      if (n == 2) throw new RuntimeException("Map throws")
-      n * 10
-    }
-
-    var res = 0
-    out.foreach { n =>
-      res += n
-    }
-    in ! 1
-    interceptMessage("Map throws")(in ! 2)
-    in ! 3
-
-    waitForResult(out, 30)
-    assertEquals(res, 40) // 10 + 30
-  }
-
-  test("ignoreExceptions on IGNORE stream preserves IGNORE strategy") {
-    val in = SourceStream[Int](FallbackStrategy.ignore)
-    val out = in.ignoreExceptions
-    
-    // Should preserve the IGNORE strategy
-    assert(out.fallbackStrategy == FallbackStrategy.ignore)
-  }
-
-  test("rethrowExceptions on RETHROW stream preserves RETHROW strategy") {
-    val in = SourceStream[Int]() // default is Rethrow
-    val out = in.rethrowExceptions
-    
-    // Should preserve the RETHROW strategy
-    assert(out.fallbackStrategy == FallbackStrategy.rethrow)
-  }
-
-  test("Chaining ignoreExceptions and rethrowExceptions") {
-    val in = SourceStream[Int]()
-    // Start with Rethrow (default), switch to Ignore, then back to Rethrow
-    val out = in.ignoreExceptions.rethrowExceptions.map { n =>
-      if (n == 2) throw new RuntimeException("Map throws")
-      n * 10
-    }
-
-    var res = 0
-    out.foreach { n =>
-      res += n
-    }
-    in ! 1
-    interceptMessage("Map throws")(in ! 2)
-    in ! 3
-
-    waitForResult(out, 30)
-    assertEquals(res, 40) // 10 + 30
-  }
-
-  test("ignoreExceptions with map transformation") {
-    val in = SourceStream[Int]()
-    val out = in.map(_ * 2).ignoreExceptions.map { n =>
-      if (n == 4) throw new RuntimeException("Map throws")
-      n
-    }
-
-    var res = 0
-    out.foreach { n =>
-      res += n
-    }
-    in ! 1 // 1 * 2 = 2
-    in ! 2 // 2 * 2 = 4, map throws but ignored
-    in ! 3 // 3 * 2 = 6
-
-    waitForResult(out, 6)
-    assertEquals(res, 8) // 2 + 6
-  }
-
-  test("rethrowExceptions with map transformation") {
-    val in = SourceStream[Int](FallbackStrategy.ignore)
-    val out = in.map(_ * 2).rethrowExceptions.map { n =>
-      if (n == 4) throw new RuntimeException("Map throws")
-      n
-    }
-
-    var res = 0
-    out.foreach { n =>
-      res += n
-    }
-    in ! 1 // 1 * 2 = 2
-    interceptMessage("Map throws")(in ! 2) // 2 * 2 = 4, exception propagates
-    in ! 3 // 3 * 2 = 6
-
-    waitForResult(out, 6)
-    assertEquals(res, 8) // 2 + 6
-  }
-
   test("Close the stream at exception") {
     val in = SourceStream[Int]()
     val s1 = in.closeable
-    val s2 = s1.recover { _ => s1.close(); None }
+    val s2 = s1.ignoreExceptions { _ => s1.close() }
     val out = s2.map {
       case 2 => throw new RuntimeException("Map and throw exception")
       case n => n

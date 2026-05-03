@@ -4,7 +4,6 @@ import Stream.{EmptyTakeStream, EventSubscriber, StreamSubscription}
 import Finite.FiniteStream
 import ProxyStream.*
 import io.github.makingthematrix.signals3.FallbackDecision.{IGNORE, RETHROW}
-import io.github.makingthematrix.signals3.FallbackStrategy.{Ignore, Rethrow}
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.ref.WeakReference
@@ -77,9 +76,14 @@ class Stream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.rethrow)
     new StreamSubscription[E](this, body, None)(using WeakReference(eventContext)).tap(_.enable())
 
 
-  inline final def recover(f: Throwable => Option[E]): Stream[E] = RecoverStream[E](this, f)
+  inline final private def recoverPriv(f: Throwable => Option[E]): Stream[E] = RecoverStream[E](this, f)
+  inline final def recover(f: Throwable => E): Stream[E] = recoverPriv(t => Some(f(t)))
+  inline final def ignoreExceptions: Stream[E] = recoverPriv(_ => None)
+  inline final def ignoreExceptions(f: Throwable => Unit): Stream[E] = recoverPriv(t => { f(t); None })
 
-  inline final def recoverWith(pf: PartialFunction[Throwable, Option[E]]): Stream[E] = RecoverWithStream[E](this, pf)
+  inline final private def recoverWithPriv(pf: PartialFunction[Throwable, Option[E]]): Stream[E] = RecoverWithStream[E](this, pf)
+  inline final def recoverWith(pf: PartialFunction[Throwable, E]): Stream[E] = recoverWithPriv(pf.andThen(Some(_)))
+  inline final def ignoreExceptionsWith(pf: PartialFunction[Throwable, Unit]): Stream[E] = recoverWithPriv(pf.andThen(_ => None))
 
   /** Creates a new `Stream[V]` by mapping events of the type `E` emitted by the original stream.
     *
@@ -259,16 +263,6 @@ class Stream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.rethrow)
     * @return A new stream of `Boolean`.
     */
   inline final def not(using E <:< Boolean): Stream[Boolean] = map(!_)
-
-  inline final def ignoreExceptions: Stream[E] = fallbackStrategy match {
-    case _: Ignore => this
-    case _         => IgnoreExceptionsStream[E](this)
-  }
-
-  inline final def rethrowExceptions: Stream[E] = fallbackStrategy match {
-    case _: Rethrow => this
-    case _          => RethrowExceptionsStream[E](this)
-  }
 
   /** By default, a stream does not have the internal state so there's nothing to do in `onWire` and `onUnwire`*/
   override protected def onWire(): Unit = {}
