@@ -3,7 +3,6 @@ package io.github.makingthematrix.signals3
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 import scala.math.max
-
 import io.github.makingthematrix.signals3.FallbackStrategy.SideEffect
 
 enum FallbackStrategy(val retryTimes: Int, val sideEffects: List[SideEffect]) {
@@ -13,16 +12,23 @@ enum FallbackStrategy(val retryTimes: Int, val sideEffects: List[SideEffect]) {
   inline def triggerSideEffects(ex: Throwable): Unit = sideEffects.foreach(f => f(ex))
 
   def toRethrow: FallbackStrategy = this match {
-    case _: Rethrow => this
+    case _: Rethrow                          => this
     case fs if fs == FallbackStrategy.ignore => FallbackStrategy.rethrow
-    case Ignore(retryTimes, sideEffects) => Rethrow(retryTimes, sideEffects)
+    case Ignore(retryTimes, sideEffects)     => Rethrow(retryTimes, sideEffects)
   }
 
   def toIgnore: FallbackStrategy = this match {
-    case _: Ignore => this
+    case _: Ignore                            => this
     case fs if fs == FallbackStrategy.rethrow => FallbackStrategy.ignore
-    case Rethrow(retryTimes, sideEffects) => Ignore(retryTimes, sideEffects)
+    case Rethrow(retryTimes, sideEffects)     => Ignore(retryTimes, sideEffects)
   }
+
+  def addSideEffect(se: SideEffect): FallbackStrategy = this match {
+    case Rethrow(retryTimes, sideEffects) => Rethrow(retryTimes, se :: sideEffects)
+    case Ignore(retryTimes, sideEffects)  => Ignore(retryTimes, se :: sideEffects)
+  }
+
+  inline def addSideEffect(body: => Unit): FallbackStrategy = addSideEffect((_: Throwable) => body)
 }
 
 enum FallbackDecision {

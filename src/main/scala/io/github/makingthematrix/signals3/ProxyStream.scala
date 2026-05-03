@@ -1,5 +1,6 @@
 package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.FallbackStrategy.Ignore
 import io.github.makingthematrix.signals3.ProxyStream.mergeStrategies
 import io.github.makingthematrix.signals3.Stream.EventSubscriber
 
@@ -36,6 +37,27 @@ private[signals3] object ProxyStream {
     extends ProxyStream[E, E](Seq(source), Some(source.fallbackStrategy.toRethrow)){
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       dispatch(event, sourceContext)
+  }
+
+  final class RecoverStream[E](source: Stream[E], recover: Throwable => Option[E])
+    extends ProxyStream[E, E](Seq(source)) {
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+      try {
+        dispatch(event, sourceContext)
+      } catch {
+        case t: Throwable => recover(t).foreach(dispatch(_, sourceContext))
+      }
+  }
+
+  final class RecoverWithStream[E](source: Stream[E], recoverWith: PartialFunction[Throwable, Option[E]])
+    extends ProxyStream[E, E](Seq(source)){
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+      try {
+        dispatch(event, sourceContext)
+      } catch {
+        case t: Throwable if recoverWith.isDefinedAt(t) =>
+          recoverWith(t).foreach(dispatch(_, sourceContext))
+      }
   }
 
   class MapStream[E, V](source: Stream[E], f: E => V) extends ProxyStream[E, V](Seq(source)) {
@@ -143,9 +165,13 @@ private[signals3] object ProxyStream {
     }
   }
 
-  final class CloseableStream[E](source: Stream[E]) extends ProxyStream[E, E](Seq(source)) with Closeable {
+  final class CloseableStream[E](source: Stream[E], fs: Option[FallbackStrategy] = None)
+    extends ProxyStream[E, E](Seq(source), fs) with Closeable {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       if (!isClosed) dispatch(event, sourceContext)
+
+    inline def closeAtException: CloseableStream[E] =
+      CloseableStream(this, Some(Ignore(sideEffects = List((_: Throwable) => this.close()))))
   }
 
   final class TakeWhileStream[E](source: Stream[E], p: E => Boolean)
