@@ -106,7 +106,7 @@ class FallbackStrategySpec extends munit.FunSuite {
   }
 
   test("Filter and ignore exception") {
-    val in = SourceStream[Int](FallbackStrategy.ignore)
+    val in = SourceStream[Int]()
     val out = in.ignoreExceptions.filter { n =>
       if (n == 2) throw new RuntimeException("Filter and throw exception")
       n % 2 == 0
@@ -149,7 +149,7 @@ class FallbackStrategySpec extends munit.FunSuite {
   test("Side effects are triggered on exception") {
     var sideEffectCalled = false
     val sideEffect: Throwable => Unit = _ => sideEffectCalled = true
-    val in = SourceStream[Int](FallbackStrategy.Ignore(sideEffects = List(sideEffect)))
+    val in = SourceStream[Int]()
     val out = in.ignoreExceptions(sideEffect).map { n =>
       if (n == 2) throw new RuntimeException("Side effect test")
       n
@@ -368,7 +368,7 @@ class FallbackStrategySpec extends munit.FunSuite {
   }
 
   test("FlatMap and ignore exception") {
-    val in = SourceStream[Int](FallbackStrategy.ignore)
+    val in = SourceStream[Int]()
     val streamA = SourceStream[String]()
     val streamB = SourceStream[String]()
     val out = in.ignoreExceptions.flatMap { n =>
@@ -390,7 +390,14 @@ class FallbackStrategySpec extends munit.FunSuite {
     streamA ! "A"
     streamB ! "B"
     waitForResult(out, "A")
-    assertEquals(res, "AA")
+    assertEquals(res, "A")
+
+
+    in ! 4 // change to streamB
+    streamA ! "A"
+    streamB ! "B"
+    waitForResult(out, "B")
+    assertEquals(res, "AB")
   }
 
   test("Close the stream at exception") {
@@ -407,6 +414,8 @@ class FallbackStrategySpec extends munit.FunSuite {
       res += n
     }
     in ! 1
+    awaitAllTasks
+    assertEquals(res, 1)
     in ! 2 // this should be ignored and the stream should be closed
     in ! 3
     awaitAllTasks

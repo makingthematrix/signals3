@@ -11,7 +11,7 @@ import scala.concurrent.ExecutionContext
   *
   * @tparam E the type of the event
   */
-class SourceStream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.rethrow) extends Stream[E](fallbackStrategy) {
+class SourceStream[E] extends Stream[E] {
   /** Publishes the event to all subscribers.
     *
     * @see [[Stream.publish]]
@@ -21,11 +21,11 @@ class SourceStream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.reth
     *      exposes this method for public use.
     * @param event The event to be published.
     */
-  override def publish(event: => E): Unit = dispatch(event, None)
+  override def publish(event: E): Unit = dispatch(event, None)
 
   /** An alias for the `publish` method with no explicit execution context. */
   @targetName("bang")
-  inline def !(event: => E): Unit = publish(event)
+  inline def !(event: E): Unit = publish(event)
 
   /** Publishes the event to all subscriber, using the given execution context.
     *
@@ -35,7 +35,7 @@ class SourceStream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.reth
     *           the execution context used to register the subscriber, the subscriber will be called immediately. Otherwise,
     *           a future working in the subscriber's execution context will be created and `ec` will be ignored.
     */
-  def publish(event: => E, ec: ExecutionContext): Unit = dispatch(event, Some(ec))
+  def publish(event: E, ec: ExecutionContext): Unit = dispatch(event, Some(ec))
 
   /** A version of the `publish` method which takes the implicit execution context for dispatching.
     *
@@ -45,5 +45,5 @@ class SourceStream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.reth
     * execution context the call will be synchronous. This may be desirable in some cases, but please use with caution.
     */
   @targetName("twobang")
-  inline def !!(event: => E)(using ec: ExecutionContext): Unit = publish(event, ec)
+  inline def !!(event: E)(using ec: ExecutionContext): Unit = publish(event, ec)
 }

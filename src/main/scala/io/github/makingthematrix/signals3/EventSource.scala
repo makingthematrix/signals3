@@ -10,7 +10,7 @@ import scala.concurrent.ExecutionContext
  * @tparam E Event/value type of the given event source
  * @tparam S The subscriber type, i.e. [[Stream.EventSubscriber]] or [[Signal.SignalSubscriber]]
  */
-abstract class EventSource[E, S](val fallbackStrategy: FallbackStrategy = FallbackStrategy.rethrow) {
+abstract class EventSource[E, S] {
   private object subscribersMonitor
 
   private var autowiring = true
