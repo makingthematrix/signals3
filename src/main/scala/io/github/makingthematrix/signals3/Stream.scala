@@ -3,7 +3,6 @@ package io.github.makingthematrix.signals3
 import Stream.{EmptyTakeStream, EventSubscriber, StreamSubscription}
 import Finite.FiniteStream
 import ProxyStream.*
-import io.github.makingthematrix.signals3.FallbackDecision.{IGNORE, RETHROW}
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.ref.WeakReference
@@ -23,8 +22,7 @@ import scala.util.chaining.scalaUtilChainingOps
   *
   * @see `ExecutionContext`
   */
-class Stream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.rethrow)
-  extends EventSource[E, EventSubscriber[E]](fallbackStrategy) {
+class Stream[E] extends EventSource[E, EventSubscriber[E]] {
   /** Dispatches the event to all subscribers.
     *
     * @param event The event to be dispatched.
@@ -33,20 +31,14 @@ class Stream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.rethrow)
     *                         the subscriber, the subscriber will be called immediately. Otherwise, a future working in the subscriber's
     *                         execution context will be created.
     */
-  protected[signals3] def dispatch(event: => E, executionContext: Option[ExecutionContext]): Unit =
-    evalAndRun(event)(e => notifySubscribers(_.onEvent(e, executionContext)))
+  protected[signals3] def dispatch(event: E, executionContext: Option[ExecutionContext]): Unit =
+    notifySubscribers(_.onEvent(event, executionContext))
 
   /** Publishes the event to all subscribers using the current execution context.
     *
     * @param event The event to be published.
     */
-  protected[signals3] def publish(event: => E): Unit = dispatch(event, None)
-
-  protected[signals3] def evalAndRun[T](event: => T)(run: T => Unit): Unit = FallbackStrategy.eval(event, fallbackStrategy) match {
-    case Right(e)          => run(e)
-    case Left(RETHROW(ex)) => throw ex
-    case Left(IGNORE)      =>
-  }
+  protected[signals3] def publish(event: E): Unit = dispatch(event, None)
 
   /** Registers a subscriber in a specified execution context and returns the subscription. An optional event context can also
     * be provided by the user for managing the subscription instead of doing it manually. When an event is published in

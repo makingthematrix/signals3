@@ -5,7 +5,7 @@ import scala.concurrent.ExecutionContext
 import scala.util.chaining.scalaUtilChainingOps
 
 protected[signals3] final class FlatMapStream[E, V](source: Stream[E], f: E => Stream[V])
-  extends Stream[V](source.fallbackStrategy) with EventSubscriber[E]{
+  extends Stream[V] with EventSubscriber[E]{
   @volatile private var mapped: Option[Stream[V]] = None
 
   private val subscriber = new EventSubscriber[V]{
@@ -13,9 +13,9 @@ protected[signals3] final class FlatMapStream[E, V](source: Stream[E], f: E => S
       dispatch(event, currentContext)
   }
 
-  override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit = evalAndRun(f(event)) { e =>
+  override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit = {
     mapped.foreach(_.unsubscribe(subscriber))
-    mapped = Some(e.tap(_.subscribe(subscriber)))
+    mapped = Some(f(event).tap(_.subscribe(subscriber)))
   }
 
   override protected def onWire(): Unit = source.subscribe(this)
