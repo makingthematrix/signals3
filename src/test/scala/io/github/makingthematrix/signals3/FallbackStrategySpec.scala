@@ -1,5 +1,5 @@
 package io.github.makingthematrix.signals3
-import testutils.waitForResult
+import testutils.{awaitAllTasks, waitForResult}
 
 class FallbackStrategySpec extends munit.FunSuite {
   import Threading.defaultContext
@@ -528,5 +528,26 @@ class FallbackStrategySpec extends munit.FunSuite {
 
     waitForResult(out, 6)
     assertEquals(res, 8) // 2 + 6
+  }
+
+  test("Close the stream at exception") {
+    val in = SourceStream[Int]()
+    val s1 = in.closeable
+    val s2 = s1.recover { _ => s1.close(); None }
+    val out = s2.map {
+      case 2 => throw new RuntimeException("Map and throw exception")
+      case n => n
+    }
+
+    var res = 0
+    out.foreach { n =>
+      res += n
+    }
+    in ! 1
+    in ! 2 // this should be ignored and the stream should be closed
+    in ! 3
+    awaitAllTasks
+    assertEquals(res, 1)
+    assert(s1.isClosed)
   }
 }

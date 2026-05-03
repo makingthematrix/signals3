@@ -24,7 +24,8 @@ import scala.util.chaining.scalaUtilChainingOps
   *
   * @see `ExecutionContext`
   */
-class Stream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.rethrow) extends EventSource[E, EventSubscriber[E]](fallbackStrategy) {
+class Stream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.rethrow)
+  extends EventSource[E, EventSubscriber[E]](fallbackStrategy) {
   /** Dispatches the event to all subscribers.
     *
     * @param event The event to be dispatched.
@@ -75,6 +76,10 @@ class Stream[E](fallbackStrategy: FallbackStrategy = FallbackStrategy.rethrow) e
                         (using eventContext: EventContext = EventContext.Global): Subscription =
     new StreamSubscription[E](this, body, None)(using WeakReference(eventContext)).tap(_.enable())
 
+
+  inline final def recover(f: Throwable => Option[E]): Stream[E] = RecoverStream[E](this, f)
+
+  inline final def recoverWith(pf: PartialFunction[Throwable, Option[E]]): Stream[E] = RecoverWithStream[E](this, pf)
 
   /** Creates a new `Stream[V]` by mapping events of the type `E` emitted by the original stream.
     *
