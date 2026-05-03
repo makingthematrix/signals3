@@ -422,4 +422,270 @@ class FallbackStrategySpec extends munit.FunSuite {
     assertEquals(res, 1)
     assert(s1.isClosed)
   }
+
+  // ============ RECOVERWITH tests ============
+
+  test("Map and recoverWith from matching exception") {
+    val in = SourceStream[Int]()
+    val out = in.recoverWith {
+      case _: IllegalArgumentException => 42
+    }.map {
+      case 2 => throw new IllegalArgumentException("Map and throw exception")
+      case n => n
+    }
+
+    var res = 0
+    out.foreach { n =>
+      res += n
+    }
+    in ! 1
+    in ! 2 // IllegalArgumentException is caught and recovered to 42
+    in ! 3
+
+    waitForResult(out, 3)
+    assertEquals(res, 46) // 1 + 42 + 3
+  }
+
+  test("Map and recoverWith does not catch non-matching exception") {
+    val in = SourceStream[Int]()
+    val out = in.recoverWith {
+      case _: IllegalArgumentException => 42
+    }.map {
+      case 2 => throw new RuntimeException("Map and throw exception")
+      case n => n
+    }
+
+    var res = 0
+    out.foreach { n =>
+      res += n
+    }
+    in ! 1
+    interceptMessage("Map and throw exception")(in ! 2) // RuntimeException not caught
+    in ! 3
+
+    waitForResult(out, 3)
+    assertEquals(res, 4)
+  }
+
+  test("Map and recoverWith recovers with transformed value") {
+    val in = SourceStream[Int]()
+    val out = in.recoverWith {
+      case e: IllegalArgumentException => e.getMessage.length
+    }.map {
+      case 2 => throw new IllegalArgumentException("recover me")
+      case n => n
+    }
+
+    var res = 0
+    out.foreach { n =>
+      res += n
+    }
+    in ! 1
+    in ! 2 // recovered to "recover me".length = 10
+    in ! 3
+
+    waitForResult(out, 3)
+    assertEquals(res, 14) // 1 + 10 + 3
+  }
+
+  // ============ IGNOREECEPTIONSWITH tests ============
+
+  test("Map and ignoreExceptionsWith for matching exception") {
+    val in = SourceStream[Int]()
+    val out = in.ignoreExceptionsWith {
+      case _: IllegalArgumentException =>
+    }.map {
+      case 2 => throw new IllegalArgumentException("Map and throw exception")
+      case n => n
+    }
+
+    var res = 0
+    out.foreach { n =>
+      res += n
+    }
+    in ! 1
+    in ! 2 // IllegalArgumentException is ignored
+    in ! 3
+
+    waitForResult(out, 3)
+    assertEquals(res, 4)
+  }
+
+  test("Map and ignoreExceptionsWith does not ignore non-matching exception") {
+    val in = SourceStream[Int]()
+    val out = in.ignoreExceptionsWith {
+      case _: IllegalArgumentException =>
+    }.map {
+      case 2 => throw new RuntimeException("Map and throw exception")
+      case n => n
+    }
+
+    var res = 0
+    out.foreach { n =>
+      res += n
+    }
+    in ! 1
+    interceptMessage("Map and throw exception")(in ! 2) // RuntimeException not ignored
+    in ! 3
+
+    waitForResult(out, 3)
+    assertEquals(res, 4)
+  }
+
+  test("Side effects are triggered on matching exception with ignoreExceptionsWith") {
+    var sideEffectCalled = false
+    val sideEffect: PartialFunction[Throwable, Unit] = {
+      case _: IllegalArgumentException => sideEffectCalled = true
+    }
+    val in = SourceStream[Int]()
+    val out = in.ignoreExceptionsWith(sideEffect).map { n =>
+      if (n == 2) throw new IllegalArgumentException("Side effect test")
+      n
+    }
+
+    out.foreach { _ => () }
+    in ! 1
+    in ! 2 // IllegalArgumentException triggers side effect
+    in ! 3
+
+    waitForResult(out, 3)
+    assert(sideEffectCalled)
+  }
+
+  test("Side effects are NOT triggered on non-matching exception with ignoreExceptionsWith") {
+    var sideEffectCalled = false
+    val sideEffect: PartialFunction[Throwable, Unit] = {
+      case _: IllegalArgumentException => sideEffectCalled = true
+    }
+    val in = SourceStream[Int]()
+    val out = in.ignoreExceptionsWith(sideEffect).map { n =>
+      if (n == 2) throw new RuntimeException("Side effect test")
+      n
+    }
+
+    out.foreach { _ => () }
+    in ! 1
+    interceptMessage("Side effect test")(in ! 2) // RuntimeException not caught, no side effect
+
+    assert(!sideEffectCalled)
+  }
+
+  test("Map with exception chained from another map with IGNOREWITH") {
+    val in = SourceStream[Int]()
+    val out = in.ignoreExceptionsWith {
+      case _: IllegalArgumentException =>
+    }.map(_ * 2).map { n =>
+      if (n == 4) throw new IllegalArgumentException("Chained map test")
+      n
+    }
+
+    var res = 0
+    out.foreach { n =>
+      res += n
+    }
+    in ! 1
+    in ! 2 // 2*2=4, IllegalArgumentException is ignored
+    in ! 3
+
+    waitForResult(out, 3)
+    assertEquals(res, 8) // 2 + 6 (4 was ignored)
+  }
+
+  test("recoverWith with partial function handles only specific exceptions") {
+    val in = SourceStream[Int]()
+    val out = in.recoverWith {
+      case _: IllegalArgumentException => -1
+    }.map { n =>
+      if (n == 1) throw new IllegalArgumentException("recover me")
+      if (n == 2) throw new RuntimeException("do not recover")
+      n
+    }
+
+    var res = 0
+    out.foreach { n =>
+      res += n
+    }
+    in ! 1 // recovered to -1
+    interceptMessage("do not recover")(in ! 2) // RuntimeException propagates
+    in ! 3
+
+    waitForResult(out, 3)
+    assertEquals(res, 2) // -1 + 3
+  }
+
+  test("ignoreExceptionsWith with multiple cases") {
+    val in = SourceStream[Int]()
+    var handledIllegalArg = false
+    var handledIllegalState = false
+    
+    val out = in.ignoreExceptionsWith {
+      case _: IllegalArgumentException => handledIllegalArg = true
+      case _: IllegalStateException => handledIllegalState = true
+    }.map { n =>
+      if (n == 1) throw new IllegalArgumentException("arg error")
+      if (n == 2) throw new IllegalStateException("state error")
+      if (n == 3) throw new RuntimeException("other error")
+      n
+    }
+
+    out.foreach { _ => () }
+    in ! 1
+    in ! 2
+    interceptMessage("other error")(in ! 3)
+
+    assert(handledIllegalArg)
+    assert(handledIllegalState)
+  }
+
+  // ============ WITHDEFAULT tests ============
+
+  test("Map with withDefault recovers to default value") {
+    val in = SourceStream[Int]()
+    val out = in.withDefault(42).map {
+      case 2 => throw new RuntimeException("Map and throw exception")
+      case n => n
+    }
+
+    var res = 0
+    out.foreach { n =>
+      res += n
+    }
+    in ! 1
+    in ! 2 // exception occurs, recovered to default value 42
+    in ! 3
+
+    waitForResult(out, 3)
+    assertEquals(res, 46) // 1 + 42 + 3
+  }
+
+  test("withDefault on empty stream") {
+    val in = SourceStream[Int]()
+    val out = in.withDefault(100)
+
+    var res = 0
+    out.foreach { n =>
+      res += n
+    }
+    // Don't send any events
+
+    assertEquals(res, 0)
+  }
+
+  test("withDefault does not affect normal values") {
+    val in = SourceStream[Int]()
+    val out = in.withDefault(42).map { n =>
+      n * 2
+    }
+
+    var res = 0
+    out.foreach { n =>
+      res += n
+    }
+    in ! 1
+    in ! 2
+    in ! 3
+
+    waitForResult(out, 3)
+    assertEquals(res, 12) // 2 + 4 + 6
+  }
 }
