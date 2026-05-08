@@ -403,7 +403,7 @@ class FallbackStrategySpec extends munit.FunSuite {
   test("Close the stream at exception") {
     val in = SourceStream[Int]()
     val s1 = in.closeable
-    val s2 = s1.ignoreExceptions { _ => s1.close() }
+    val s2 = in.ignoreExceptions { _ => s1.close() }
     val out = s2.map {
       case 2 => throw new RuntimeException("Map and throw exception")
       case n => n
@@ -414,8 +414,10 @@ class FallbackStrategySpec extends munit.FunSuite {
       res += n
     }
     in ! 1
+    waitForResult(out, 1)
     awaitAllTasks
     assertEquals(res, 1)
+
     in ! 2 // this should be ignored and the stream should be closed
     in ! 3
     awaitAllTasks
@@ -614,14 +616,13 @@ class FallbackStrategySpec extends munit.FunSuite {
   }
 
   test("ignoreExceptionsWith with multiple cases") {
-    val in = SourceStream[Int]()
     var handledIllegalArg = false
     var handledIllegalState = false
-    
-    val out = in.ignoreExceptionsWith {
+    val in = SourceStream[Int]().ignoreExceptionsWith {
       case _: IllegalArgumentException => handledIllegalArg = true
       case _: IllegalStateException => handledIllegalState = true
-    }.map { n =>
+    }
+    val out = in.map { n =>
       if (n == 1) throw new IllegalArgumentException("arg error")
       if (n == 2) throw new IllegalStateException("state error")
       if (n == 3) throw new RuntimeException("other error")
@@ -640,8 +641,8 @@ class FallbackStrategySpec extends munit.FunSuite {
   // ============ WITHDEFAULT tests ============
 
   test("Map with withDefault recovers to default value") {
-    val in = SourceStream[Int]()
-    val out = in.withDefault(42).map {
+    val in = SourceStream[Int]().withDefault(42)
+    val out = in.map {
       case 2 => throw new RuntimeException("Map and throw exception")
       case n => n
     }
@@ -659,11 +660,10 @@ class FallbackStrategySpec extends munit.FunSuite {
   }
 
   test("withDefault on empty stream") {
-    val in = SourceStream[Int]()
-    val out = in.withDefault(100)
+    val s = SourceStream[Int]().withDefault(100)
 
     var res = 0
-    out.foreach { n =>
+    s.foreach { n =>
       res += n
     }
     // Don't send any events
@@ -672,10 +672,8 @@ class FallbackStrategySpec extends munit.FunSuite {
   }
 
   test("withDefault does not affect normal values") {
-    val in = SourceStream[Int]()
-    val out = in.withDefault(42).map { n =>
-      n * 2
-    }
+    val in = SourceStream[Int]().withDefault(42)
+    val out = in.map { n => n * 2 }
 
     var res = 0
     out.foreach { n =>
