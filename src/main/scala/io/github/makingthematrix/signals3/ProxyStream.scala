@@ -22,21 +22,17 @@ abstract private[signals3] class ProxyStream[A, E](sources: Stream[A]*) extends 
 
 private[signals3] object ProxyStream {
   final class RecoverStream[E](source: Stream[E], recover: Throwable => Option[E])
-    extends ProxyStream[E, E](source) {
+    extends ProxyStream[E, E] {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      try {
-        dispatch(event, sourceContext)
-      } catch {
+      try dispatch(event, sourceContext) catch {
         case t: Throwable => recover(t).foreach(dispatch(_, sourceContext))
       }
   }
 
   final class RecoverWithStream[E](source: Stream[E], recoverWith: PartialFunction[Throwable, Option[E]])
-    extends ProxyStream[E, E](source){
+    extends ProxyStream[E, E] {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      try {
-        dispatch(event, sourceContext)
-      } catch {
+      try dispatch(event, sourceContext) catch {
         case t: Throwable if recoverWith.isDefinedAt(t) =>
           recoverWith(t).foreach(dispatch(_, sourceContext))
       }

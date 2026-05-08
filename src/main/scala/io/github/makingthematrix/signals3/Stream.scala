@@ -67,16 +67,16 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
                         (using eventContext: EventContext = EventContext.Global): Subscription =
     new StreamSubscription[E](this, body, None)(using WeakReference(eventContext)).tap(_.enable())
 
-  inline final private def recoverPriv(f: Throwable => Option[E]): Stream[E] = RecoverStream[E](this, f)
-  inline final def recover(f: Throwable => E): Stream[E] = recoverPriv(t => Some(f(t)))
-  inline final def ignoreExceptions: Stream[E] = recoverPriv(_ => None)
-  inline final def ignoreExceptions(f: Throwable => Unit): Stream[E] = recoverPriv(t => { f(t); None })
+  protected def recoverPriv(f: Throwable => Option[E]): Stream[E] = RecoverStream[E](this, f)
+  def recover(f: Throwable => E): Stream[E] = recoverPriv(t => Some(f(t)))
+  def ignoreExceptions: Stream[E] = recoverPriv(_ => None)
+  def ignoreExceptions(f: Throwable => Unit): Stream[E] = recoverPriv(t => { f(t); None })
 
-  inline final private def recoverWithPriv(pf: PartialFunction[Throwable, Option[E]]): Stream[E] = RecoverWithStream[E](this, pf)
-  inline final def recoverWith(pf: PartialFunction[Throwable, E]): Stream[E] = recoverWithPriv(pf.andThen(Some(_)))
-  inline final def ignoreExceptionsWith(pf: PartialFunction[Throwable, Unit]): Stream[E] = recoverWithPriv(pf.andThen(_ => None))
+  protected def recoverWithPriv(pf: PartialFunction[Throwable, Option[E]]): Stream[E] = RecoverWithStream[E](this, pf)
+  def recoverWith(pf: PartialFunction[Throwable, E]): Stream[E] = recoverWithPriv(pf.andThen(Some(_)))
+  def ignoreExceptionsWith(pf: PartialFunction[Throwable, Unit]): Stream[E] = recoverWithPriv(pf.andThen(_ => None))
 
-  inline final def withDefault(value: E): Stream[E] = recover(_ => value)
+  def withDefault(value: E): Stream[E] = recover(_ => value)
 
   /** Creates a new `Stream[V]` by mapping events of the type `E` emitted by the original stream.
     *
