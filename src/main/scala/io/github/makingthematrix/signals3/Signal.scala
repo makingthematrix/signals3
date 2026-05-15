@@ -177,6 +177,16 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     */
   final lazy val onChanged: Stream[V] = onUpdated.map(_._2)
 
+  protected def recoverPriv(f: Throwable => Option[V]): Signal[V] = RecoverSignal[V](this, f)
+  def recover(f: Throwable => V): Signal[V] = recoverPriv(t => Some(f(t)))
+  def ignoreExceptions: Signal[V] = recoverPriv(_ => None)
+  def ignoreExceptions(f: Throwable => Unit): Signal[V] = recoverPriv(t => {f(t); None})
+
+  protected def recoverWithPriv(pf: PartialFunction[Throwable, Option[V]]): Signal[V] = RecoverWithSignal[V](this, pf)
+  def recoverWith(pf: PartialFunction[Throwable, V]): Signal[V] = recoverWithPriv(pf.andThen(Some(_)))
+  def ignoreExceptionsWith(pf: PartialFunction[Throwable, Unit]): Signal[V] = recoverWithPriv(pf.andThen(_ => None))
+  def withDefault(value: V): Signal[V] = recover(_ => value)
+
   /** Zips this signal with the given one.
     *
     * @param other The other signal with values of the same or a different type.

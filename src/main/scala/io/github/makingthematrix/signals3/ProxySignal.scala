@@ -17,6 +17,28 @@ abstract private[signals3] class ProxySignal[V](sources: Signal[?]*) extends Sig
 }
 
 private[signals3] object ProxySignal {
+  final class RecoverSignal[V](source: Signal[V], recover: Throwable => Option[V])
+    extends ProxySignal[V](source) {
+
+    override protected def computeValue(current: Option[V]): Option[V] = source.value
+
+    override def changed(ec: Option[ExecutionContext]): Unit =
+      try update(computeValue, ec) catch {
+        case t: Throwable => updateWith(recover(t), ec)
+      }
+  }
+
+  final class RecoverWithSignal[V](source: Signal[V], recoverWith: PartialFunction[Throwable, Option[V]])
+    extends ProxySignal[V](source) {
+
+    override protected def computeValue(current: Option[V]): Option[V] = source.value
+
+    override def changed(ec: Option[ExecutionContext]): Unit =
+      try update(computeValue, ec) catch {
+        case t: Throwable if recoverWith.isDefinedAt(t) => updateWith(recoverWith(t), ec)
+      }
+  }
+
   final class ScanSignal[V, Z](source: Signal[V], zero: Z, f: (Z, V) => Z) extends ProxySignal[Z](source) {
     value = Some(zero)
 
