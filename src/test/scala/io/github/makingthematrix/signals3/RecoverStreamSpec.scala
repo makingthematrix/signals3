@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3
 import testutils.{awaitAllTasks, waitForResult}
 
-class FallbackStrategySpec extends munit.FunSuite {
+class RecoverStreamSpec extends munit.FunSuite {
   import Threading.defaultContext
 
   // ============ MAP tests ============
