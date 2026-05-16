@@ -1,5 +1,7 @@
 package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.Signal.SignalSubscriber
+
 import scala.annotation.targetName
 import scala.concurrent.ExecutionContext
 
@@ -11,7 +13,7 @@ import scala.concurrent.ExecutionContext
   *
   * @tparam V the type of the value held by the signal.
   */
-class SourceSignal[V](protected val v: Option[V]) extends Signal[V](v) {
+class SourceSignal[V](v: Option[V]) extends Signal[V](v) {
   /** Changes the value of the signal.
     *
     * The original `publish` method of the [[Signal]] class is `protected` to ensure that intermediate signals - those created
@@ -83,10 +85,80 @@ class SourceSignal[V](protected val v: Option[V]) extends Signal[V](v) {
     *         false otherwise.
     */
   inline def mutateOrDefault(f: V => V, default: V): Boolean = update(_.map(f).orElse(Some(default)))
+
+  import SourceSignal.*
+
+  override protected def recoverPriv(f: Throwable => Option[V]): SourceSignal[V] = SourceRecoverSignal[V](this, f)
+  override def recover(f: Throwable => V): SourceSignal[V] = recoverPriv(t => Some(f(t)))
+  override def ignoreExceptions: SourceSignal[V] = recoverPriv(_ => None)
+  override def ignoreExceptions(f: Throwable => Unit): SourceSignal[V] = recoverPriv(t => {f(t); None})
+
+  override protected def recoverWithPriv(pf: PartialFunction[Throwable, Option[V]]): SourceSignal[V] = SourceRecoverWithSignal[V](this, pf)
+  override def recoverWith(pf: PartialFunction[Throwable, V]): SourceSignal[V] = recoverWithPriv(pf.andThen(Some(_)))
+  override def ignoreExceptionsWith(pf: PartialFunction[Throwable, Unit]): SourceSignal[V] = recoverWithPriv(pf.andThen(_ => None))
+  override def withDefault(value: V): SourceSignal[V] = recover(_ => value)
 }
 
 object SourceSignal {
-  /** Creates a source signal initially holding the given value.
+  private[signals3] final class SourceRecoverSignal[V](source: SourceSignal[V], recover: Throwable => Option[V])
+    extends SourceSignal[V](source.value) with SignalSubscriber {
+    override def onWire(): Unit = {
+      source.subscribe(this)
+      this.value = source.value
+    }
+
+    override def onUnwire(): Unit = source.unsubscribe(this)
+
+    override protected[signals3] def changed(ec: Option[ExecutionContext]): Unit = updateWith(source.value, ec)
+
+    private inline def tryMe[T](doIt: => T, rec: Throwable => T): T =
+      try doIt catch {
+        case t: Throwable => rec(t)
+      }
+
+    override protected[signals3] def update(f: Option[V] => Option[V], ec: Option[ExecutionContext]): Boolean =
+      tryMe(super.update(f, ec), t => super.updateWith(recover(t), ec))
+
+    override protected[signals3] def updateWith(v: Option[V], ec: Option[ExecutionContext]): Boolean =
+      tryMe(super.updateWith(v, ec), t => super.updateWith(recover(t), ec))
+
+    override def publish(value: V, ec: ExecutionContext): Unit =
+      tryMe(super.publish(value, ec), t => recover(t).foreach(v => super.publish(v, ec)))
+
+    override def publish(value: V): Unit =
+      tryMe(super.publish(value), t => recover(t).foreach(super.publish))
+  }
+
+  private[signals3] final class SourceRecoverWithSignal[V](source: SourceSignal[V], recoverWith: PartialFunction[Throwable, Option[V]])
+    extends SourceSignal[V](source.value) with SignalSubscriber {
+    override def onWire(): Unit = {
+      source.subscribe(this)
+      this.value = source.value
+    }
+
+    override def onUnwire(): Unit = source.unsubscribe(this)
+
+    override protected[signals3] def changed(ec: Option[ExecutionContext]): Unit = updateWith(source.value, ec)
+
+    private inline def tryMe[T](doIt: => T, rec: Throwable => T): T =
+      try doIt catch {
+        case t: Throwable if recoverWith.isDefinedAt(t) => rec(t)
+      }
+
+    override protected[signals3] def update(f: Option[V] => Option[V], ec: Option[ExecutionContext]): Boolean =
+      tryMe(super.update(f, ec), t => super.updateWith(recoverWith(t), ec))
+
+    override protected[signals3] def updateWith(v: Option[V], ec: Option[ExecutionContext]): Boolean =
+      tryMe(super.updateWith(v, ec), t => super.updateWith(recoverWith(t), ec))
+
+    override def publish(value: V, ec: ExecutionContext): Unit =
+      tryMe(super.publish(value, ec), t => recoverWith(t).foreach(v => super.publish(v, ec)))
+
+    override def publish(value: V): Unit =
+      tryMe(super.publish(value), t => recoverWith(t).foreach(super.publish))
+  }
+
+    /** Creates a source signal initially holding the given value.
     *
     * @see also `Signal.apply`
     *

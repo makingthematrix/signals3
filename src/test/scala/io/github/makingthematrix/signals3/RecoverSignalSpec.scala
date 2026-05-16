@@ -447,10 +447,10 @@ class RecoverSignalSpec extends munit.FunSuite {
   test("Map and recover from exception") {
     given dq: DispatchQueue = SerialDispatchQueue()
 
-    val in = SourceSignal[Int]()
-    val out = in.recover { t =>
+    val in = SourceSignal[Int]().recover { t =>
       42
-    }.map {
+    }
+    val out = in.map {
       case 2 => throw new RuntimeException("Map and throw exception")
       case n => n
     }
@@ -656,10 +656,11 @@ class RecoverSignalSpec extends munit.FunSuite {
   test("recoverWith with partial function handles only specific exceptions") {
     given dq: DispatchQueue = SerialDispatchQueue()
 
-    val in = SourceSignal[Int]()
-    val out = in.recoverWith {
+    val in = SourceSignal[Int]().recoverWith {
       case _: IllegalArgumentException => -1
-    }.map { n =>
+    }
+
+    val out = in.map { n =>
       if (n == 1) throw new IllegalArgumentException("recover me")
       if (n == 2) throw new RuntimeException("do not recover")
       n
@@ -681,11 +682,11 @@ class RecoverSignalSpec extends munit.FunSuite {
   test("ignoreExceptionsWith with multiple cases") {
     var handledIllegalArg = false
     var handledIllegalState = false
-    val in = SourceSignal[Int]()
-    val out = in.ignoreExceptionsWith {
+    val in = SourceSignal[Int]().ignoreExceptionsWith {
       case _: IllegalArgumentException => handledIllegalArg = true
       case _: IllegalStateException => handledIllegalState = true
-    }.map { n =>
+    }
+    val out = in.map { n =>
       if (n == 1) throw new IllegalArgumentException("arg error")
       if (n == 2) throw new IllegalStateException("state error")
       if (n == 3) throw new RuntimeException("other error")
@@ -693,7 +694,10 @@ class RecoverSignalSpec extends munit.FunSuite {
     }
 
     out.foreach { _ => () }
-    in ! 1
+
+    in.publish(1)
+    awaitAllTasks
+    assert(handledIllegalArg)
     in ! 2
     interceptMessage("other error")(in ! 3)
 
@@ -739,8 +743,8 @@ class RecoverSignalSpec extends munit.FunSuite {
   }
 
   test("withDefault does not affect normal values") {
-    val in = SourceSignal[Int]()
-    val out = in.withDefault(42).map { n => n * 2 }
+    val in = SourceSignal[Int]().withDefault(42)
+    val out = in.map { n => n * 2 }
 
     var res = 0
     out.foreach { n =>

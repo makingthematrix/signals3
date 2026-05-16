@@ -629,7 +629,8 @@ class RecoverStreamSpec extends munit.FunSuite {
       n
     }
 
-    out.foreach { _ => () }
+    out.foreach { _ => () } // don't remove! :)
+
     in ! 1
     in ! 2
     interceptMessage("other error")(in ! 3)
