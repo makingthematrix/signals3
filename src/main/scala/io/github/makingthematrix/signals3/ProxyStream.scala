@@ -21,16 +21,16 @@ abstract private[signals3] class ProxyStream[A, E](sources: Stream[A]*) extends 
 }
 
 private[signals3] object ProxyStream {
-  final class RecoverStream[E](source: Stream[E], recover: Throwable => Option[E])
-    extends ProxyStream[E, E] {
+  class RecoverStream[E](source: Stream[E], recover: Throwable => Option[E])
+    extends ProxyStream[E, E](source) {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       try dispatch(event, sourceContext) catch {
         case t: Throwable => recover(t).foreach(dispatch(_, sourceContext))
       }
   }
 
-  final class RecoverWithStream[E](source: Stream[E], recoverWith: PartialFunction[Throwable, Option[E]])
-    extends ProxyStream[E, E] {
+  class RecoverWithStream[E](source: Stream[E], recoverWith: PartialFunction[Throwable, Option[E]])
+    extends ProxyStream[E, E](source) {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       try dispatch(event, sourceContext) catch {
         case t: Throwable if recoverWith.isDefinedAt(t) =>
@@ -78,7 +78,7 @@ private[signals3] object ProxyStream {
       dispatch(event, sourceContext)
   }
   
-  final class ScanStream[E, V](source: Stream[E], zero: V, f: (V, E) => V) extends ProxyStream[E, V](source) {
+  class ScanStream[E, V](source: Stream[E], zero: V, f: (V, E) => V) extends ProxyStream[E, V](source) {
     @volatile private var value = zero
   
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
@@ -87,7 +87,7 @@ private[signals3] object ProxyStream {
     }
   }
 
-  final class GroupedStream[E](source: Stream[E], n: Int) extends ProxyStream[E, Seq[E]](source) {
+  class GroupedStream[E](source: Stream[E], n: Int) extends ProxyStream[E, Seq[E]](source) {
     require(n > 0, "n must be positive")
     private val buffer = ArrayBuffer.empty[E]
 
@@ -101,7 +101,7 @@ private[signals3] object ProxyStream {
     }
   }
 
-  final class GroupByStream[E](source: Stream[E], groupBy: E => Boolean) extends ProxyStream[E, Seq[E]](source) {
+  class GroupByStream[E](source: Stream[E], groupBy: E => Boolean) extends ProxyStream[E, Seq[E]](source) {
     private val buffer = ArrayBuffer.empty[E]
 
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
@@ -121,12 +121,12 @@ private[signals3] object ProxyStream {
     }
   }
 
-  final class DropStream[E](source: Stream[E], drop: Int) extends IndexedStream[E](source) {
+  class DropStream[E](source: Stream[E], drop: Int) extends IndexedStream[E](source) {
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       if (counter < drop) inc() else dispatch(event, sourceContext)
   }
 
-  final class DropWhileStream[E](source: Stream[E], p: E => Boolean) extends ProxyStream[E, E](source) {
+  class DropWhileStream[E](source: Stream[E], p: E => Boolean) extends ProxyStream[E, E](source) {
     @volatile private var dropping = true
     override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
       if (dropping) dropping = p(event)

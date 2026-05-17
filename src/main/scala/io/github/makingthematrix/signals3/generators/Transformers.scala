@@ -298,4 +298,48 @@ object Transformers {
     */
   def signalFromStream[V](source: CloseableStream[V]): CloseableSignal[V] =
     new StreamSignal[V](source, None) with Closeability(source)
+
+  def recover[E](source: CloseableStream[E], rec: Throwable => Option[E]): CloseableStream[E] =
+    new RecoverStream[E](source, rec) with Closeability(source)
+
+  def recover[V](source: CloseableSignal[V], rec: Throwable => Option[V]): CloseableSignal[V] =
+    new RecoverSignal[V](source, rec) with Closeability(source)
+
+  def recoverWith[E](source: CloseableStream[E], rec: PartialFunction[Throwable, Option[E]]): CloseableStream[E] =
+    new RecoverWithStream[E](source, rec) with Closeability(source)
+
+  def recoverWith[V](source: CloseableSignal[V], rec: PartialFunction[Throwable, Option[V]]): CloseableSignal[V] =
+    new RecoverWithSignal[V](source, rec) with Closeability(source)
+
+  def scan[E, V](source: CloseableStream[E], zero: V)(f: (V, E) => V): CloseableStream[V] =
+    new ScanStream[E, V](source, zero, f) with Closeability(source)
+
+  def scan[V, Z](source: CloseableSignal[V], zero: Z)(f: (Z, V) => Z): CloseableSignal[Z] =
+    new ScanSignal[V, Z](source, zero, f) with Closeability(source)
+
+  def grouped[E](source: CloseableStream[E], n: Int): CloseableStream[Seq[E]] =
+    new GroupedStream[E](source, n) with Closeability(source)
+
+  def grouped[V](source: CloseableSignal[V], n: Int): CloseableSignal[Seq[V]] =
+    new GroupedSignal[V](source, n) with Closeability(source)
+
+  def groupBy[E](source: CloseableStream[E], p: E => Boolean): CloseableStream[Seq[E]] =
+    new GroupByStream[E](source, p) with Closeability(source)
+
+  def groupBy[V](source: CloseableSignal[V], p: V => Boolean): CloseableSignal[Seq[V]] =
+    new GroupBySignal[V](source, p) with Closeability(source)
+
+  def drop[E](source: CloseableStream[E], n: Int): CloseableStream[E] =
+    if (n <= 0) source else new DropStream[E](source, n) with Closeability(source)
+
+  def drop[V](source: CloseableSignal[V], n: Int): CloseableSignal[V] =
+    if (n <= 0) source else new DropSignal[V](source, n) with Closeability(source)
+
+  def dropWhile[E](source: CloseableStream[E], p: E => Boolean): CloseableStream[E] =
+    new DropWhileStream[E](source, p) with Closeability(source)
+
+  def dropWhile[V](source: CloseableSignal[V], p: V => Boolean): CloseableSignal[V] =
+    new DropWhileSignal[V](source, p) with Closeability(source)
+
+  // no take and no takeWhile because Closeable does not mix with Finite - just use standard take/takeWhile methods
 }
