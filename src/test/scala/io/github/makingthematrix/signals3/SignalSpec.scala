@@ -492,12 +492,10 @@ class SignalSpec extends munit.FunSuite {
     val a = Signal(0)
     val b = a.drop(1)
     assert(waitForResult(a, 0))
-    assert(waitForResult(b, 0))
-
+    assert(b.empty)
     a ! 1
     assert(waitForResult(a, 1))
-    assert(waitForResult(b, 0))
-
+    assert(waitForResult(b, 1))
     a ! 2
     assert(waitForResult(a, 2))
     assert(waitForResult(b, 2))
@@ -562,6 +560,8 @@ class SignalSpec extends munit.FunSuite {
     assert(waitForResult(a, 3))
     a ! 4
     assert(waitForResult(a, 4))
+
+    awaitAllTasks
 
     val seq = buffer.result().toSeq
     assertEquals(seq, Seq(1, 2))

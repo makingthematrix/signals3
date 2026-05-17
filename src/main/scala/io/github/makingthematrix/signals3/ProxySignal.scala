@@ -17,7 +17,7 @@ abstract private[signals3] class ProxySignal[V](sources: Signal[?]*) extends Sig
 }
 
 private[signals3] object ProxySignal {
-  final class RecoverSignal[V](source: Signal[V], recover: Throwable => Option[V])
+  class RecoverSignal[V](source: Signal[V], recover: Throwable => Option[V])
     extends ProxySignal[V](source) {
 
     override protected def computeValue(current: Option[V]): Option[V] = source.value
@@ -28,7 +28,7 @@ private[signals3] object ProxySignal {
       }
   }
 
-  final class RecoverWithSignal[V](source: Signal[V], recoverWith: PartialFunction[Throwable, Option[V]])
+  class RecoverWithSignal[V](source: Signal[V], recoverWith: PartialFunction[Throwable, Option[V]])
     extends ProxySignal[V](source) {
 
     override protected def computeValue(current: Option[V]): Option[V] = source.value
@@ -39,7 +39,7 @@ private[signals3] object ProxySignal {
       }
   }
 
-  final class ScanSignal[V, Z](source: Signal[V], zero: Z, f: (Z, V) => Z) extends ProxySignal[Z](source) {
+  class ScanSignal[V, Z](source: Signal[V], zero: Z, f: (Z, V) => Z) extends ProxySignal[Z](source) {
     value = Some(zero)
 
     override protected def computeValue(current: Option[Z]): Option[Z] =
@@ -54,7 +54,7 @@ private[signals3] object ProxySignal {
     override protected def computeValue(current: Option[Z]): Option[Z] = source.value.map(f)
   }
 
-  final class GroupedSignal[V](source: Signal[V], n: Int) extends ProxySignal[Seq[V]](source) {
+  class GroupedSignal[V](source: Signal[V], n: Int) extends ProxySignal[Seq[V]](source) {
     require(n > 0, "n must be positive")
     private val buffer = scala.collection.mutable.ArrayBuffer.empty[V]
 
@@ -69,7 +69,7 @@ private[signals3] object ProxySignal {
     }
   }
 
-  final class GroupBySignal[V](source: Signal[V], groupBy: V => Boolean) extends ProxySignal[Seq[V]](source) {
+  class GroupBySignal[V](source: Signal[V], groupBy: V => Boolean) extends ProxySignal[Seq[V]](source) {
     private val buffer = scala.collection.mutable.ArrayBuffer.empty[V]
 
     override protected def computeValue(current: Option[Seq[V]]): Option[Seq[V]] = {
@@ -86,7 +86,6 @@ private[signals3] object ProxySignal {
     }
   }
 
-
   class IndexedSignal[V](source: Signal[V]) extends ProxySignal[V](source) with Indexed {
     value = source.value
 
@@ -96,7 +95,9 @@ private[signals3] object ProxySignal {
     }
   }
 
-  final class DropSignal[V](source: Signal[V], drop: Int) extends IndexedSignal[V](source) {
+  class DropSignal[V](source: Signal[V], drop: Int) extends ProxySignal[V](source) with Indexed {
+    require(drop > 0, "drop must be positive")
+    value = None
     override protected def computeValue(current: Option[V]): Option[V] = {
       val c = if (source.value != current) incAndGet() else counter
       if (c > drop) source.value else current
@@ -123,7 +124,7 @@ private[signals3] object ProxySignal {
       else source.value
   }
 
-  final class DropWhileSignal[V](source: Signal[V], p: V => Boolean) extends ProxySignal[V](source) {
+  class DropWhileSignal[V](source: Signal[V], p: V => Boolean) extends ProxySignal[V](source) {
     @volatile private var dropping = true
     override protected def computeValue(current: Option[V]): Option[V] = {
       if (dropping && source.value != current) dropping = source.value.exists(p)
