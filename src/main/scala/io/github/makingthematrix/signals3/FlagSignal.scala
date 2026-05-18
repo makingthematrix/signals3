@@ -39,5 +39,5 @@ final class FlagSignal(initialValue: Boolean) extends SourceSignal(Some(initialV
 
 object FlagSignal {
   /** Creates a new flag signal with the initial value set to `false` */
-  def apply(): FlagSignal = new FlagSignal(false)
+  inline def apply(): FlagSignal = new FlagSignal(false)
 }

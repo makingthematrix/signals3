@@ -78,7 +78,7 @@ object RefreshingSignal {
     * @tparam V The value type of the signal and the result of the `loader` closeable future.
     * @return A new refreshing signal with the value of the type `V`.
     */
-  def apply[V](loader: () => CloseableFuture[V], refreshStream: Stream[?])
+  inline def apply[V](loader: () => CloseableFuture[V], refreshStream: Stream[?])
               (using ExecutionContext): RefreshingSignal[V] =
     new RefreshingSignal(loader, refreshStream)
 

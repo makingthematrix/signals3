@@ -47,5 +47,5 @@ final class StreamWithAuxSignal[A, B](source: Stream[A], aux: Signal[B]) extends
 }
 
 object StreamWithAuxSignal {
-  def apply[A, B](source: Stream[A], aux: Signal[B]): StreamWithAuxSignal[A, B] =
+  inline def apply[A, B](source: Stream[A], aux: Signal[B]): StreamWithAuxSignal[A, B] =
     new StreamWithAuxSignal(source, aux)}
