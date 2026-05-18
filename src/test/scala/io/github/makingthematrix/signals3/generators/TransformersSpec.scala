@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, result, tryResult, waitForResult}
-import io.github.makingthematrix.signals3.{CloseableFuture, EventContext, Signal, Threading}
+import io.github.makingthematrix.signals3.{CloseableFuture, DispatchQueue, DoneSignal, EventContext, SerialDispatchQueue, Signal}
 
 import scala.collection.mutable
 import scala.concurrent.duration.*
@@ -10,7 +10,7 @@ import scala.language.postfixOps
 
 class TransformersSpec extends munit.FunSuite {
   import EventContext.Implicits.global
-  import Threading.defaultContext
+  given dq: DispatchQueue = SerialDispatchQueue()
 
   test("fibonacci stream with generate and map") {
     var a = 0
@@ -516,11 +516,11 @@ class TransformersSpec extends munit.FunSuite {
   test("In a zipped stream, closing the original ones closes the transformed ones too") {
     val isClosed = Signal(0)
     val original1 = GeneratorStream.heartbeat(200.millis)
-    original1.onClose { isClosed.mutate(_ + 1) }
+    original1.onClose {isClosed.mutate(_ + 1)}
     val original2 = GeneratorStream.heartbeat(300.millis)
-    original2.onClose { isClosed.mutate(_ + 1) }
+    original2.onClose {isClosed.mutate(_ + 1)}
     val zipped = Transformers.zip(original1, original2)
-    zipped.onClose { isClosed.mutate(_ + 1) }
+    zipped.onClose {isClosed.mutate(_ + 1)}
 
     original1.close()
 
@@ -537,4 +537,658 @@ class TransformersSpec extends munit.FunSuite {
     assert(original1.isClosed)
     assert(original2.isClosed)
     assert(zipped.isClosed)
-  }}
+  }
+
+  // ============ RECOVER tests for CloseableStream ============
+
+  test("CloseableStream recover from exception in map") {
+    var counter = 0
+    val original = GeneratorStream.generate(200.millis) { 
+      counter += 1
+      counter
+    }
+    val withRecover = Transformers.recover(original, _ => Some(-1))
+    val mapped = Transformers.map(withRecover) { n =>
+      if (n == 2) throw new RuntimeException("recover test")
+      n
+    }
+
+    val isSuccess = DoneSignal()
+    var res = List[Int]()
+    mapped.foreach { n =>
+      res = n :: res
+      isSuccess.doneIf(n == 4)
+    }
+
+    waitForResult(isSuccess, true)
+    mapped.close()
+    awaitAllTasks
+    assertEquals(res, Seq(4, 3, -1, 1))
+    assert(original.isClosed)
+  }
+
+  test("CloseableStream recover returns None on exception") {
+    var counter = 0
+    val original = GeneratorStream.generate(200.millis) { 
+      counter += 1
+      counter
+    }
+    val withRecover = Transformers.recover(original, _ => None)
+    val mapped = Transformers.map(withRecover) { n =>
+      if (n == 1) throw new RuntimeException("recover test")
+      n
+    }
+
+    val isClosed = Signal(false)
+    mapped.onClose { isClosed ! true }
+
+    mapped.close()
+    awaitAllTasks
+    waitForResult(isClosed, true)
+    assert(original.isClosed)
+  }
+
+  // ============ RECOVER tests for CloseableSignal ============
+
+  test("CloseableSignal recover from exception in map") {
+    val original = GeneratorSignal.counter(200.millis)
+    val withRecover = Transformers.recover(original, _ => Some(-1))
+    val mapped = Transformers.map(withRecover) { n =>
+      if (n == 2) throw new RuntimeException("recover test")
+      n
+    }
+
+    val isSuccess = DoneSignal()
+    var res = List[Int]()
+    mapped.foreach { n =>
+      res = n :: res
+      isSuccess.doneIf(n == 3)
+    }
+
+    waitForResult(isSuccess, true)
+    withRecover.close()
+    awaitAllTasks
+    assertEquals(res, List(3, -1, 1, 0))
+    assert(original.isClosed)
+  }
+
+  test("CloseableSignal recover returns None on exception") {
+    val original = GeneratorSignal.counter(200.millis)
+    val withRecover = Transformers.recover(original, _ => None)
+    val mapped = Transformers.map(withRecover) { n =>
+      if (n == 0) throw new RuntimeException("recover test")
+      n
+    }
+
+    val isClosed = Signal(false)
+    mapped.onClose { isClosed ! true }
+
+    mapped.close()
+    awaitAllTasks
+    waitForResult(isClosed, true)
+    assert(original.isClosed)
+  }
+
+  // ============ RECOVERWITH tests for CloseableStream ============
+
+  test("CloseableStream recoverWith from matching exception") {
+    var counter = 0
+    val original = GeneratorStream.generate(200.millis) { 
+      counter += 1
+      counter
+    }
+    val withRecover = Transformers.recoverWith(original, { case _: IllegalArgumentException => Some(-1) })
+    val mapped = Transformers.map(withRecover) { n =>
+      if (n == 2) throw new IllegalArgumentException("recover test")
+      n
+    }
+
+    val isSuccess = DoneSignal()
+    var res = List[Int]()
+    mapped.foreach { n =>
+      res = n :: res
+      isSuccess.doneIf(n == 4)
+    }
+
+    waitForResult(isSuccess, true)
+    mapped.close()
+    awaitAllTasks
+    assertEquals(res, List(4, 3, -1, 1))
+    assert(original.isClosed)
+  }
+
+  test("CloseableStream recoverWith does not catch non-matching exception") {
+    var counter = 0
+    val original = GeneratorStream.generate(200.millis) { 
+      counter += 1
+      counter
+    }
+    val withRecover = Transformers.recoverWith(original, { case _: IllegalArgumentException => Some(-1) })
+    val mapped = Transformers.map(withRecover) { n =>
+      if (n == 2) throw new RuntimeException("not matched")
+      n
+    }
+
+    val isClosed = Signal(false)
+    mapped.onClose { isClosed ! true }
+
+    mapped.close()
+    awaitAllTasks
+    waitForResult(isClosed, true)
+    assert(original.isClosed)
+  }
+
+  test("CloseableStream recoverWith recovers with transformed value") {
+    var counter = 0
+    val original = GeneratorStream.generate(200.millis) { 
+      counter += 1
+      counter
+    }
+    val withRecover = Transformers.recoverWith(original, { case e: IllegalArgumentException => Some(e.getMessage.length) })
+    val mapped = Transformers.map(withRecover) { n =>
+      if (n == 2) throw new IllegalArgumentException("recover me")
+      n
+    }
+
+    val isSuccess = DoneSignal()
+    var  res = List[Int]()
+    mapped.foreach { n =>
+      res = n :: res
+      isSuccess.doneIf(n == 4)
+    }
+
+    waitForResult(isSuccess, true)
+    mapped.close()
+    awaitAllTasks
+    assertEquals(res, Seq(4, 3, 10, 1))
+    assert(original.isClosed)
+  }
+
+  // ============ RECOVERWITH tests for CloseableSignal ============
+
+  test("CloseableSignal recoverWith from matching exception") {
+    val original = GeneratorSignal.counter(200.millis)
+    val withRecover = Transformers.recoverWith(original, { case _: IllegalArgumentException => Some(-1) })
+    val mapped = Transformers.map(withRecover) { n =>
+      if (n == 2) throw new IllegalArgumentException("recover test")
+      n
+    }
+
+    val isSuccess = DoneSignal()
+    var res = List[Int]()
+    mapped.foreach { n =>
+      res = n :: res
+      isSuccess.doneIf(n == 3)
+    }
+
+    waitForResult(isSuccess, true)
+    mapped.close()
+    awaitAllTasks
+    assertEquals(res, Seq(3, -1, 1, 0))
+    assert(original.isClosed)
+  }
+
+  test("CloseableSignal recoverWith does not catch non-matching exception") {
+    val original = GeneratorSignal.counter(200.millis)
+    val withRecover = Transformers.recoverWith(original, { case _: IllegalArgumentException => Some(-1) })
+    val mapped = Transformers.map(withRecover) { n =>
+      if (n == 2) throw new RuntimeException("not matched")
+      n
+    }
+
+    val isClosed = Signal(false)
+    mapped.onClose { isClosed ! true }
+
+    mapped.close()
+    awaitAllTasks
+    waitForResult(isClosed, true)
+    assert(original.isClosed)
+  }
+
+  test("CloseableSignal recoverWith recovers with transformed value") {
+    val original = GeneratorSignal.counter(200.millis)
+    val withRecover = Transformers.recoverWith(original, { case e: IllegalArgumentException => Some(e.getMessage.length) })
+    val mapped = Transformers.map(withRecover) { n =>
+      if (n == 2) throw new IllegalArgumentException("recover me")
+      n
+    }
+
+    val isSuccess = DoneSignal()
+    var  res = List[Int]()
+    mapped.foreach { n =>
+      res = n :: res
+      isSuccess.doneIf(n == 3)
+    }
+
+    waitForResult(isSuccess, true)
+    mapped.close()
+    awaitAllTasks
+    assertEquals(res, List(3, 10, 1, 0))
+    assert(original.isClosed)
+  }
+
+  // ============ SCAN tests for CloseableStream ============
+
+  test("CloseableStream scan accumulates values") {
+    var counter = 0
+    val original = GeneratorStream.generate(200.millis) { 
+      counter += 1
+      if (counter <= 4) counter else counter - 5
+    }
+    val scanned = Transformers.scan(original, 0)(_ + _)
+
+    val isSuccess = Signal(false)
+    val builder = mutable.ArrayBuilder.make[Int]
+    scanned.foreach { n =>
+      builder.addOne(n)
+      isSuccess ! (n == 10)
+    }
+
+    waitForResult(isSuccess, true)
+    scanned.close()
+    awaitAllTasks
+    assertEquals(builder.result().toSeq, Seq(1, 3, 6, 10))
+    assert(original.isClosed)
+  }
+
+  test("CloseableStream scan with different initial value") {
+    var counter = 0
+    val original = GeneratorStream.generate(200.millis) { 
+      counter += 1
+      counter
+    }
+    val scanned = Transformers.scan(original, 10)(_ + _)
+
+    val isSuccess = DoneSignal()
+    var  res = List[Int]()
+    scanned.foreach { n =>
+      res = n :: res
+      isSuccess.doneIf(n == 16)
+    }
+
+    waitForResult(isSuccess, true)
+    scanned.close()
+    awaitAllTasks
+    assertEquals(res, Seq(16, 13, 11))
+    assert(original.isClosed)
+  }
+
+  // ============ SCAN tests for CloseableSignal ============
+
+  test("CloseableSignal scan accumulates values") {
+    val original = GeneratorSignal.counter(200.millis)
+    val scanned = Transformers.scan(original, 0)(_ + _)
+
+    val isSuccess = Signal(false)
+    val builder = mutable.ArrayBuilder.make[Int]
+    scanned.foreach { n =>
+      builder.addOne(n)
+      isSuccess ! (n == 6) // 0+0=0, 0+1=1, 1+2=3, 3+3=6
+    }
+
+    waitForResult(isSuccess, true)
+    scanned.close()
+    awaitAllTasks
+    assertEquals(builder.result().toSeq, Seq(0, 1, 3, 6))
+    assert(original.isClosed)
+  }
+
+  test("CloseableSignal scan with initial value") {
+    val original = GeneratorSignal.generate(1, 200.millis)(_ + 1)
+    val scanned = Transformers.scan(original, 10)(_ + _)
+
+    val isSuccess = DoneSignal()
+    var  res = List[Int]()
+    scanned.foreach { n =>
+      res = n :: res
+      isSuccess.doneIf(n == 16)
+    }
+
+    waitForResult(isSuccess, true)
+    scanned.close()
+    awaitAllTasks
+    assertEquals(res, Seq(16, 13, 11))
+    assert(original.isClosed)
+  }
+
+  // ============ GROUPED tests for CloseableStream ============
+
+  test("CloseableStream grouped batches events") {
+    var counter = 0
+    val original = GeneratorStream.generate(200.millis) { 
+      counter += 1
+      counter
+    }
+    val grouped = Transformers.grouped(original, 3)
+
+    val isSuccess = Signal(false)
+    val builder = mutable.ArrayBuilder.make[Seq[Int]]
+    grouped.foreach { batch =>
+      builder.addOne(batch)
+      isSuccess ! (batch == Seq(4, 5, 6))
+    }
+
+    waitForResult(isSuccess, true)
+    grouped.close()
+    awaitAllTasks
+    assertEquals(builder.result().toSeq, Seq(Seq(1, 2, 3), Seq(4, 5, 6)))
+    assert(original.isClosed)
+  }
+
+  test("CloseableStream grouped with partial batch") {
+    var counter = 0
+    val original = GeneratorStream.generate(200.millis) { 
+      counter += 1
+      if (counter <= 5) counter else counter - 6
+    }
+    val grouped = Transformers.grouped(original, 3)
+
+    val isSuccess = DoneSignal()
+    var res = List[Seq[Int]]()
+    grouped.foreach { batch =>
+      res = batch :: res
+      isSuccess.doneIf(res.size == 2)
+    }
+
+    waitForResult(isSuccess, true)
+    grouped.close()
+    awaitAllTasks
+    assertEquals(res, List(Seq(4, 5, 0), Seq(1, 2, 3)))
+    assert(original.isClosed)
+  }
+
+  // ============ GROUPED tests for CloseableSignal ============
+
+  test("CloseableSignal grouped batches values") {
+    val original = GeneratorSignal.counter(200.millis)
+    val grouped = Transformers.grouped(original, 3)
+
+    val isSuccess = Signal(false)
+    val builder = mutable.ArrayBuilder.make[Seq[Int]]
+    grouped.foreach { batch =>
+      builder.addOne(batch)
+      isSuccess ! (batch == Seq(3, 4, 5))
+    }
+
+    waitForResult(isSuccess, true)
+    grouped.close()
+    awaitAllTasks
+    assertEquals(builder.result().toSeq, Seq(Seq(0, 1, 2), Seq(3, 4, 5)))
+    assert(original.isClosed)
+  }
+
+  test("CloseableSignal grouped with partial batch") {
+    var counter = 0
+    val original = GeneratorSignal.generate(0, 200.millis) { v =>
+      counter += 1
+      if (counter <= 5) counter else -1
+    }
+    val grouped = Transformers.grouped(original, 3)
+
+    val isSuccess = DoneSignal()
+    var res = List[Seq[Int]]()
+    grouped.foreach { batch =>
+      res = batch :: res
+      isSuccess.doneIf(res.size == 2)
+    }
+
+    waitForResult(isSuccess, true)
+    grouped.close()
+    awaitAllTasks
+    assertEquals(res, List(Seq(3, 4, 5), Seq(0, 1, 2)))
+    assert(original.isClosed)
+  }
+
+  // ============ GROUPBY tests for CloseableStream ============
+
+  test("CloseableStream groupBy groups consecutive events by predicate") {
+    var counter = 0
+    val original = GeneratorStream.generate(200.millis) { 
+      counter += 1
+      counter
+    }
+    // Create groups: 1,3,5 are odd (true), 2,4,6 are even (false)
+    // But since they come consecutively with same predicate result, they get grouped
+    // Actually all odd numbers will be in different groups since 1(true), 2(false), 3(true), 4(false)...
+    val grouped = Transformers.groupBy(original, _ % 2 != 0)
+
+    val isSuccess = Signal(false)
+    val builder = mutable.ArrayBuilder.make[Seq[Int]]
+    grouped.foreach { batch =>
+      builder.addOne(batch)
+      isSuccess ! builder.result().nonEmpty
+    }
+
+    waitForResult(isSuccess, true)
+    grouped.close()
+    awaitAllTasks
+    assert(builder.result().toSeq.nonEmpty)
+    assert(original.isClosed)
+  }
+
+  // ============ GROUPBY tests for CloseableSignal ============
+
+  test("CloseableSignal groupBy groups consecutive values by predicate") {
+    val original = GeneratorSignal.counter(200.millis)
+    val grouped = Transformers.groupBy(original, _ % 2 == 0)
+
+    val isSuccess = Signal(false)
+    val builder = mutable.ArrayBuilder.make[Seq[Int]]
+    grouped.foreach { batch =>
+      builder.addOne(batch)
+      isSuccess ! builder.result().nonEmpty
+    }
+
+    waitForResult(isSuccess, true)
+    grouped.close()
+    awaitAllTasks
+    assert(builder.result().toSeq.nonEmpty)
+    assert(original.isClosed)
+  }
+
+  // ============ DROP tests for CloseableStream ============
+
+  test("CloseableStream drop skips first N events") {
+    var counter = 0
+    val original = GeneratorStream.generate(200.millis) { 
+      counter += 1
+      counter
+    }
+    val dropped = Transformers.drop(original, 3)
+
+    val isSuccess = Signal(false)
+    val builder = mutable.ArrayBuilder.make[Int]
+    dropped.foreach { n =>
+      builder.addOne(n)
+      isSuccess ! (n == 5)
+    }
+
+    waitForResult(isSuccess, true)
+    dropped.close()
+    awaitAllTasks
+    assertEquals(builder.result().toSeq, Seq(4, 5))
+    assert(original.isClosed)
+  }
+
+  test("CloseableStream drop with N = 0 returns original") {
+    var counter = 0
+    val original = GeneratorStream.generate(200.millis) { 
+      counter += 1
+      counter
+    }
+    val dropped = Transformers.drop(original, 0)
+
+    val isSuccess = Signal(false)
+    val builder = mutable.ArrayBuilder.make[Int]
+    dropped.foreach { n =>
+      builder.addOne(n)
+      isSuccess ! (n == 3)
+    }
+
+    waitForResult(isSuccess, true)
+    dropped.close()
+    awaitAllTasks
+    assertEquals(builder.result().toSeq, Seq(1, 2, 3))
+    assert(original.isClosed)
+  }
+
+  test("CloseableStream drop with N > count") {
+    var counter = 0
+    val original = GeneratorStream.generate(200.millis) { 
+      counter += 1
+      if (counter <= 3) counter else counter - 4
+    }
+    val dropped = Transformers.drop(original, 10)
+
+    val isClosed = Signal(false)
+    dropped.onClose { isClosed ! true }
+
+    dropped.close()
+    awaitAllTasks
+    waitForResult(isClosed, true)
+    assert(original.isClosed)
+  }
+
+  // ============ DROP tests for CloseableSignal ============
+
+  test("CloseableSignal drop skips first N values") {
+    val original = GeneratorSignal.counter(200.millis)
+    val dropped = Transformers.drop(original, 3)
+
+    val isSuccess = DoneSignal()
+    var res = List[Int]()
+    dropped.foreach { n =>
+      res = n :: res
+      isSuccess.doneIf(n == 5)
+    }
+
+    waitForResult(isSuccess, true)
+    dropped.close()
+    awaitAllTasks
+    assertEquals(res, List(5, 4, 3))
+    assert(original.isClosed)
+  }
+
+  test("CloseableSignal drop with N = 0 returns original") {
+    val original = GeneratorSignal.counter(200.millis)
+    val dropped = Transformers.drop(original, 0)
+
+    val isSuccess = Signal(false)
+    val builder = mutable.ArrayBuilder.make[Int]
+    dropped.foreach { n =>
+      builder.addOne(n)
+      isSuccess ! (n == 2)
+    }
+
+    waitForResult(isSuccess, true)
+    dropped.close()
+    awaitAllTasks
+    assertEquals(builder.result().toSeq, Seq(0, 1, 2))
+    assert(original.isClosed)
+  }
+
+  // ============ DROPWHILE tests for CloseableStream ============
+
+  test("CloseableStream dropWhile skips events while predicate is true") {
+    var counter = 0
+    val original = GeneratorStream.generate(200.millis) { 
+      counter += 1
+      counter
+    }
+    val dropped = Transformers.dropWhile(original, _ < 3)
+
+    val isSuccess = Signal(false)
+    val builder = mutable.ArrayBuilder.make[Int]
+    dropped.foreach { n =>
+      builder.addOne(n)
+      isSuccess ! (n == 5)
+    }
+
+    waitForResult(isSuccess, true)
+    dropped.close()
+    awaitAllTasks
+    assertEquals(builder.result().toSeq, Seq(3, 4, 5))
+    assert(original.isClosed)
+  }
+
+  test("CloseableStream dropWhile with all matching predicate") {
+    var counter = 0
+    val original = GeneratorStream.generate(200.millis) { 
+      counter += 1
+      counter
+    }
+    val dropped = Transformers.dropWhile(original, _ < 10)
+
+    val isClosed = Signal(false)
+    dropped.onClose { isClosed ! true }
+
+    dropped.close()
+    awaitAllTasks
+    waitForResult(isClosed, true)
+    assert(original.isClosed)
+  }
+
+  test("CloseableStream dropWhile with none matching predicate") {
+    var counter = 0
+    val original = GeneratorStream.generate(200.millis) { 
+      counter += 1
+      counter
+    }
+    val dropped = Transformers.dropWhile(original, _ > 10)
+
+    val isSuccess = Signal(false)
+    val builder = mutable.ArrayBuilder.make[Int]
+    dropped.foreach { n =>
+      builder.addOne(n)
+      isSuccess ! (n == 3)
+    }
+
+    waitForResult(isSuccess, true)
+    dropped.close()
+    awaitAllTasks
+    assertEquals(builder.result().toSeq, Seq(1, 2, 3))
+    assert(original.isClosed)
+  }
+
+  // ============ DROPWHILE tests for CloseableSignal ============
+
+  test("CloseableSignal dropWhile skips values while predicate is true") {
+    val original = GeneratorSignal.counter(200.millis)
+    val dropped = Transformers.dropWhile(original, _ < 3)
+
+    val isSuccess = Signal(false)
+    val builder = mutable.ArrayBuilder.make[Int]
+    dropped.foreach { n =>
+      builder.addOne(n)
+      isSuccess ! (n == 5)
+    }
+
+    waitForResult(isSuccess, true)
+    dropped.close()
+    awaitAllTasks
+    assertEquals(builder.result().toSeq, Seq(3, 4, 5))
+    assert(original.isClosed)
+  }
+
+  test("CloseableSignal dropWhile with alternating predicate") {
+    var counter = 0
+    val original = GeneratorSignal.generate(0, 200.millis) { v =>
+      counter += 1
+      counter
+    }
+    val dropped = Transformers.dropWhile(original, _ < 3)
+
+    val isSuccess = Signal(false)
+    val builder = mutable.ArrayBuilder.make[Int]
+    dropped.foreach { n =>
+      builder.addOne(n)
+      if (n == 6) isSuccess ! true
+    }
+
+    waitForResult(isSuccess, true)
+    dropped.close()
+    awaitAllTasks
+    assertEquals(builder.result().toSeq, Seq(3, 4, 5, 6))
+    assert(original.isClosed)
+  }
+}

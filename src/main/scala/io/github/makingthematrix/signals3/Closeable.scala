@@ -6,7 +6,8 @@ package io.github.makingthematrix.signals3
   * they're no longer needed, but you can make any new stream or signal inherit [[Closeable]] and implement the required
   * logic. 
   * [[Closeable]] extends [[java.lang.AutoCloseable]] so in theory it can be used in Java `try-with-resources`.
-  * 
+  *
+ *
   * @see [[ProxyStream]] and [[ProxySignal]] for examples.
   */
 trait Closeable extends java.lang.AutoCloseable with CanBeClosed {

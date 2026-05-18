@@ -11,7 +11,7 @@ import CloseableFuture.toFuture
 import scala.language.implicitConversions
 
 package object testutils {
-  private val localRandom = new ThreadLocal[Random] {
+  private val localRandom: ThreadLocal[Random] = new ThreadLocal[Random] {
     override def initialValue: Random = new Random
   }
 

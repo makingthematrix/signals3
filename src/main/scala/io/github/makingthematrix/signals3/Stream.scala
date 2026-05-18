@@ -67,6 +67,62 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
                         (using eventContext: EventContext = EventContext.Global): Subscription =
     new StreamSubscription[E](this, body, None)(using WeakReference(eventContext)).tap(_.enable())
 
+  protected def recoverPriv(f: Throwable => Option[E]): Stream[E] = RecoverStream[E](this, f)
+
+  /**
+    * Creates a new stream which, if a further transformation fails with an exception, will emit a recovery event instead.
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    * @param f A function transforming an exception into a recovery event
+    * @return A new stream of the same event type and the recovery guard
+    */
+  def recover(f: Throwable => E): Stream[E] = recoverPriv(t => Some(f(t)))
+
+  /**
+    * Creates a new stream which, if a further transformation fails with an exception, behaves as if no event was emited.
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    * @return A new stream of the same event type and the recovery guard
+    */
+  def ignoreExceptions: Stream[E] = recoverPriv(_ => None)
+
+  /**
+    * Creates a new stream which, if a further transformation fails with an exception, behaves as if no event was emited,
+    * but also allows for a side-effect, e.g. logging that the exception was caught.
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    *
+    * @param f A function that is triggered when the exception is caught
+    * @return A new stream of the same event type and the recovery guard
+    */
+  def ignoreExceptions(f: Throwable => Unit): Stream[E] = recoverPriv(t => { f(t); None })
+
+  /**
+    * A utility method that works like [[Stream#recover]] where every exception is replaced with an event of default value.
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    *
+    * @param value The value emited if an exception is caught
+    * @return A new stream of the same event type and the recovery guard
+    */
+  def withDefault(value: E): Stream[E] = recover(_ => value)
+
+  protected def recoverWithPriv(pf: PartialFunction[Throwable, Option[E]]): Stream[E] = RecoverWithStream[E](this, pf)
+
+  /**
+    * Creates a new stream which, if a further transformation fails with an exception that is handled by a provided partial function,
+    * will emit a recovery event instead. **Note**: This recovery guard must be placed **before** the risky transformation, not after,
+    * as e.g. in the case of [[Try#recoverWith]].
+    * @param pf A partial function transforming an exception into a recovery event
+    * @return A new stream of the same event type and the recovery guard
+    */
+  def recoverWith(pf: PartialFunction[Throwable, E]): Stream[E] = recoverWithPriv(pf.andThen(Some(_)))
+
+  /**
+    * Creates a new stream which, if a further transformation fails with an exception that is handled by a provided partial function,
+    * will ignore the exception and allow for a side-effect to take place. **Note**: This recovery guard must be placed **before**
+    * the risky transformation, not after, as e.g. in the case of [[Try#recoverWith]].
+    * @param pf A partial function transforming an exception into a side-effect
+    * @return A new stream of the same event type and the recovery guard
+    */
+  def ignoreExceptionsWith(pf: PartialFunction[Throwable, Unit]): Stream[E] = recoverWithPriv(pf.andThen(_ => None))
+
   /** Creates a new `Stream[V]` by mapping events of the type `E` emitted by the original stream.
     *
     * @param f The function mapping each event of type `E` into exactly one event of type `V`.
@@ -148,9 +204,13 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
    * start firing only after the first one finishes. Let's remove this alias from here and from Signal, and instead create
    * a new ::: functionality in FiniteStream/Signal where it makes sense.
    * */
-
   inline final def :::(stream: Stream[E]): Stream[E] = join(stream)
-  
+
+  /**
+    * Creates a new stream that emits all the events of the original stream + one event emited by the provided [[Future]].
+    * @param future A future which will result with a new event
+    * @return A new stream, emitting events from both the original stream and the future.
+    */
   inline final def join(future: Future[E])(using ExecutionContext): Stream[E] = join(Stream.apply(future))
 
   /**
@@ -177,29 +237,89 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
   inline final def |(sourceStream: SourceStream[E])(using ec: EventContext = EventContext.Global): Subscription = 
     pipeTo(sourceStream)
 
+  /**
+    * Provides [[Indexed]] functionality to the original stream
+    * @return A new indexed stream or the original one if it's already indexed
+    */
   final def indexed: IndexedStream[E] = this match {
     case that: IndexedStream[E] => that
     case _ => new IndexedStream[E](this)
   }
 
+  /**
+    * Drops a given number of new emited events from the original stream before starting to emit the consecutive ones.
+    * @param n The number of events to drop
+    * @return A new stream that drops n events and then starts to emit all consecutive events
+    */
   final def drop(n: Int): Stream[E] = if (n <= 0) this else new DropStream[E](this, n)
+
+  /**
+    * Drops events while they fulfill the condition `p`. The first event that fails is emited and the all consecutive
+    * events as well, also those  that would fulfill the condition.
+    * @param p The condition function
+    * @return A new stream that drops events while `p` is fulfilled
+    */
   inline final def dropWhile(p: E => Boolean): Stream[E] = new DropWhileStream[E](this, p)
 
+  /**
+    * Emits a given number of events and closes the stream.
+    * @param n The number of events to take
+    * @return A new stream that takes n events and closes
+    */
   final def take(n: Int): TakeStream[E] =
     if (n <= 0) EmptyTakeStream.asInstanceOf[TakeStream[E]] else new TakeStream[E](this, n)
+
+  /**
+    * Emits events while they fulfill the condition `p`. The first event that fails closes the stream.
+    * @param p The condition function
+    * @return A new stream that emits events while `p` is fulfilled
+    */
   inline final def takeWhile(p: E => Boolean): FiniteStream[E] = new TakeWhileStream[E](this, p)
 
+  /**
+    * Splits the stream into a finite stream that emits the given number of event and closes, and another stream that picks up
+    * emiting the events after the first stops.
+    * @param n The number of events to split the stream at
+    * @return A tuple of streams of the same event type
+    */
   inline final def splitAt(n: Int): (FiniteStream[E], Stream[E]) = (take(n), drop(n))
+
+  /**
+    * Splits the stream into a finite stream that emits events until thee new event fails to fulfill the given condition, 
+    * and another stream that picks up emiting the events after the first stops.
+    *
+    * @param p The condition function
+    * @return A tuple of streams of the same event type
+    */
   inline final def splitAt(p: E => Boolean): (FiniteStream[E], Stream[E]) = (takeWhile(p), dropWhile(p))
 
+  /**
+    * Creates a closeable wrapper around this stream
+    * @return A new closeable stream or this one if it's already closeable
+    */
   final def closeable: CloseableStream[E] = this match {
     case that: CloseableStream[E] => that
     case _ => new CloseableStream[E](this)
   }
 
+  /**
+    * Groups events in sequences of even size and emits each sequence as one event.
+    * @param n The size of the sequence
+    * @return A new stream where the event type is a sequence of original events
+    */
   inline final def grouped(n: Int): Stream[Seq[E]] = new GroupedStream[E](this, n)
-  inline final def groupBy(p: E => Boolean): Stream[Seq[E]] = new GroupByStream[E](this, p)
 
+  /**
+    * Groups events in sequences of uneven size and emits each sequence as one event.
+    * The size of each sequence is decided by a condition. If the new event fulfills the condition,
+    * all events already stored in a buffer are released as one sequence, and the new event becomes
+    * the first element of a new sequence (it's not released yet). Otherwise, the event is added
+    * to the buffer and nothing is released.
+    *
+    * @param p A condition function
+    * @return A new stream where the event type is a sequence of original events
+    */
+  inline final def groupBy(p: E => Boolean): Stream[Seq[E]] = new GroupByStream[E](this, p)
 
   /** Produces a [[CloseableFuture]] which will finish when the next event is emitted in the parent stream.
     *
@@ -222,7 +342,8 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
 
   /** An alias to the `future` method. */
   inline final def head(using ExecutionContext): Future[E] = future
-  
+
+  /** An alias for `drop(1)`, i.e. a stream that ignores one event and emits all the rest. */
   inline final def tail: Stream[E] = drop(1)
 
   /** Assuming that the event emitted by the stream can be interpreted as a boolean, this method creates a new stream
@@ -255,13 +376,25 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
 
 object Stream {
   extension [E](f: Future[E]) {
+    /**
+      * Creates a finite event stream that emits one event produced by the original future and closes.
+      * @return A finite stream of the same event type as the original future
+      */
     inline def toStream(using ExecutionContext): Stream[E] = Stream.apply(f)
   }
 
   extension [E](p: Promise[E]) {
+    /**
+      * Creates a finite event stream that emits one event produced by the original promise and closes.
+      * @return A finite stream of the same event type as the original promise
+      */
     inline def toStream(using ExecutionContext): Stream[E] = Stream.apply(p)
   }
 
+  /**
+    * Splits the stream into a future which completes when the first event is emited, and a stream that emits
+    * all the rest of events from the original stream.
+    */
   object `::` {
     def unapply[E](stream: Stream[E])(using ExecutionContext): (Future[E], Stream[E]) = (stream.head, stream.tail)
   }

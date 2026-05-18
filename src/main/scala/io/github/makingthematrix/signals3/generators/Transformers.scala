@@ -298,4 +298,223 @@ object Transformers {
     */
   def signalFromStream[V](source: CloseableStream[V]): CloseableSignal[V] =
     new StreamSignal[V](source, None) with Closeability(source)
+
+  /**
+    * Creates a new closeable stream which, if a further transformation fails with an exception, will emit a recovery event instead.
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    *
+    * @param rec A function transforming an exception into a recovery event
+    * @return A new closeable stream of the same event type and the recovery guard
+    */
+  def recover[E](source: CloseableStream[E], rec: Throwable => Option[E]): CloseableStream[E] =
+    new RecoverStream[E](source, rec) with Closeability(source)
+
+  /**
+    * Creates a new closeable stream which, if a further transformation fails with an exception, behaves as if no event was emited.
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    *
+    * @return A new closeable stream of the same event type and the recovery guard
+    */
+  inline def ignoreExceptions[E](source: CloseableStream[E]): CloseableStream[E] = recover(source, _ => None)
+
+  /**
+    * Creates a new closeable stream which, if a further transformation fails with an exception, behaves as if no event was emited,
+    * but also allows for a side-effect, e.g. logging that the exception was caught.
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    *
+    * @param rec A function that is triggered when the exception is caught
+    * @return A new closeable stream of the same event type and the recovery guard
+    */
+  inline def ignoreExceptions[E](source: CloseableStream[E], rec: Throwable => Unit): CloseableStream[E] =
+    recover(source, t => { rec(t); None })
+
+  /**
+    * A utility method that works like [[Transformers#recover]] where every exception is replaced with an event of default value.
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    *
+    * @param value The value emited if an exception is caught
+    * @return A new closeable stream of the same event type and the recovery guard
+    */
+  inline def withDefault[E](source: CloseableStream[E], value: E): CloseableStream[E] = recover(source, _ => Some(value))
+
+  /**
+    * Creates a new closeable signal which, if a further transformation fails with an exception, will set to a recovery value instead.
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    *
+    * @param rec A function transforming an exception into a recovery value
+    * @return A new closeable signal of the same value type and the recovery guard
+    */
+  def recover[V](source: CloseableSignal[V], rec: Throwable => Option[V]): CloseableSignal[V] =
+    new RecoverSignal[V](source, rec) with Closeability(source)
+
+  /**
+    * Creates a new closeable signal which, if a further transformation fails with an exception, behaves as if nothing happened.
+    * Note: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    *
+    * @return A new closeable signal of the same value type and the recovery guard
+    */
+  inline def ignoreExceptions[V](source: CloseableSignal[V]): CloseableSignal[V] = recover(source, _ => None)
+
+  /**
+    * Creates a new closeable signal which, if a further transformation fails with an exception, does not update its value,
+    * but also allows for a side-effect, e.g. logging that the exception was caught.
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    *
+    * @param rec A function that is triggered when the exception is caught
+    * @return A new closeable signal of the same event type and the recovery guard
+    */
+  inline def ignoreExceptions[V](source: CloseableSignal[V], rec: Throwable => Unit): CloseableSignal[V] =
+    recover(source, t => { rec(t); None})
+
+  /**
+    * Creates a new closeable stream which, if a further transformation fails with an exception that is handled by a provided partial function,
+    * will emit a recovery event instead. **Note**: This recovery guard must be placed **before** the risky transformation, not after,
+    * as e.g. in the case of [[Try#recoverWith]].
+    *
+    * @param rec A partial function transforming an exception into a recovery event
+    * @return A new closeable stream of the same event type and the recovery guard
+    */
+  def recoverWith[E](source: CloseableStream[E], rec: PartialFunction[Throwable, Option[E]]): CloseableStream[E] =
+    new RecoverWithStream[E](source, rec) with Closeability(source)
+
+  /**
+    * Creates a new closeable stream which, if a further transformation fails with an exception that is handled by a provided partial function,
+    * will ignore the exception and allow for a side-effect to take place. **Note**: This recovery guard must be placed **before**
+    * the risky transformation, not after, as e.g. in the case of [[Try#recoverWith]].
+    * @param rec A partial function transforming an exception into a side-effect
+    * @return A new closeable stream of the same event type and the recovery guard
+    */
+  inline def ignoreExceptionsWith[E](source: CloseableStream[E], rec: PartialFunction[Throwable, Unit]): CloseableStream[E] =
+    recoverWith(source, rec.andThen(_ => None))
+
+  /**
+    * Creates a new closeable signal which, if a further transformation fails with an exception that is handled by a provided partial function,
+    * will use a recovery value instead. **Note**: This recovery guard must be placed **before** the risky transformation, not after,
+    * as e.g. in the case of [[Try#recoverWith]].
+    *
+    * @param rec A partial function transforming an exception into a recovery value
+    * @return A new closeable signal of the same value type and the recovery guard
+    */
+  def recoverWith[V](source: CloseableSignal[V], rec: PartialFunction[Throwable, Option[V]]): CloseableSignal[V] =
+    new RecoverWithSignal[V](source, rec) with Closeability(source)
+  
+  /**
+    * Creates a new closeable signal which, if a further transformation fails with an exception that is handled by a provided partial function,
+    * will ignore the exception and allow for a side-effect to take place. **Note**: This recovery guard must be placed **before**
+    * the risky transformation, not after, as e.g. in the case of [[Try#recoverWith]].
+    *
+    * @param rec A partial function transforming an exception into a side-effect
+    * @return A new closeable signal of the same value type and the recovery guard
+    */
+  def ignoreExceptionsWith[V](source: CloseableSignal[V], rec: PartialFunction[Throwable, Unit]): CloseableSignal[V] = 
+    recoverWith(source, rec.andThen(_ => None))
+
+  /** Creates a new closeable stream of events of type `V` where each event is a result of applying a function which combines
+    * the previous result of type `V` with the original event of type `E` that triggers the emission of the new one.
+    *
+    * @param zero The initial value of type `V` used to produce the first new event when the first original event comes in.
+    * @param f    The function which combines the previous result of type `V` with a new original event of type `E` to produce a new result of type `V`.
+    * @tparam V The type of the resulting event.
+    * @return A new closeable stream of type `V`.
+    */
+  def scan[E, V](source: CloseableStream[E], zero: V)(f: (V, E) => V): CloseableStream[V] =
+    new ScanStream[E, V](source, zero, f) with Closeability(source)
+
+  /** Creates a new closeable signal with the value type `Z` where the change in the value is the result of applying a function
+    * which combines the previous value of type `Z` with the changed value of the type `V` of the parent signal.
+    *
+    * @todo Test if it really works like that, the code is a bit complicated.
+    * @param zero The initial value of the new signal.
+    * @param f    The function which combines the current value of the new signal with the new, changed value of the parent (this) signal
+    *             to produce a new value for the new signal (might be the same as the old one and then subscribers won't be notified).
+    *
+    * @tparam Z   The value type of the new signal.
+    * @return A new closeable signal with the value of the type `Z`.
+    */
+  def scan[V, Z](source: CloseableSignal[V], zero: Z)(f: (Z, V) => Z): CloseableSignal[Z] =
+    new ScanSignal[V, Z](source, zero, f) with Closeability(source)
+
+  /**
+    * Groups events in sequences of even size and emits each sequence as one event.
+    *
+    * @param n The size of the sequence
+    * @return A new closeable stream where the event type is a sequence of original events
+    */
+  def grouped[E](source: CloseableStream[E], n: Int): CloseableStream[Seq[E]] =
+    new GroupedStream[E](source, n) with Closeability(source)
+
+  /**
+    * Groups values in sequences of even size and uses each sequence as one value.
+    *
+    * @param n The size of the sequence
+    * @return A new closeable signal where the value type is a sequence of original values
+    */
+  def grouped[V](source: CloseableSignal[V], n: Int): CloseableSignal[Seq[V]] =
+    new GroupedSignal[V](source, n) with Closeability(source)
+
+  /**
+    * Groups events in sequences of uneven size and emits each sequence as one event.
+    * The size of each sequence is decided by a condition. If the new event fulfills the condition,
+    * all events already stored in a buffer are released as one sequence, and the new event becomes
+    * the first element of a new sequence (it's not released yet). Otherwise, the event is added
+    * to the buffer and nothing is released.
+    *
+    * @param p A condition function
+    * @return A new closeable stream where the event type is a sequence of original events
+    */
+  def groupBy[E](source: CloseableStream[E], p: E => Boolean): CloseableStream[Seq[E]] =
+    new GroupByStream[E](source, p) with Closeability(source)
+
+  /**
+    * Groups values in sequences of uneven size and uses each sequence as one value.
+    * The size of each sequence is decided by a condition. If the new value fulfills the condition,
+    * all values already stored in a buffer are used as one new value (a sequence), and the new value becomes
+    * the first element of a new sequence (it's not released yet). Otherwise, the value is added
+    * to the buffer and the result value is not changed.
+    *
+    * @param p A condition function
+    * @return A new closeable signal where the value type is a sequence of original values
+    */
+  def groupBy[V](source: CloseableSignal[V], p: V => Boolean): CloseableSignal[Seq[V]] =
+    new GroupBySignal[V](source, p) with Closeability(source)
+
+  /**
+    * Drops a given number of new emited events from the original closeable stream before starting to emit the consecutive ones.
+    *
+    * @param n The number of events to drop
+    * @return A new closeable stream that drops n events and then starts to emit all consecutive events
+    */
+  def drop[E](source: CloseableStream[E], n: Int): CloseableStream[E] =
+    if (n <= 0) source else new DropStream[E](source, n) with Closeability(source)
+
+  /**
+    * Ignores a given number of new values from the original closeable signal before starting to update to the consecutive ones.
+    *
+    * @param n The number of values to drop
+    * @return A new closeable signal that drops n values and then starts to use all consecutive values
+    */
+  def drop[V](source: CloseableSignal[V], n: Int): CloseableSignal[V] =
+    if (n <= 0) source else new DropSignal[V](source, n) with Closeability(source)
+
+  /**
+    * Drops events while they fulfill the condition `p`. The first event that fails is emited and the all consecutive
+    * events as well, also those  that would fulfill the condition.
+    *
+    * @param p The condition function
+    * @return A new closeable stream that drops events while `p` is fulfilled
+    */
+  def dropWhile[E](source: CloseableStream[E], p: E => Boolean): CloseableStream[E] =
+    new DropWhileStream[E](source, p) with Closeability(source)
+
+  /**
+    * Ignores new values while they fulfill the condition `p`. The first event that fails is emited and the all consecutive
+    * events as well, also those  that would fulfill the condition.
+    *
+    * @param p The condition function
+    * @return A new closeable signal that drops events while `p` is fulfilled
+    */
+  def dropWhile[V](source: CloseableSignal[V], p: V => Boolean): CloseableSignal[V] =
+    new DropWhileSignal[V](source, p) with Closeability(source)
+
+  // no .take and no .takeWhile because Closeable does not mix with Finite - just use standard take/takeWhile methods
 }

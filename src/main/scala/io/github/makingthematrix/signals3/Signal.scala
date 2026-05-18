@@ -177,6 +177,66 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     */
   final lazy val onChanged: Stream[V] = onUpdated.map(_._2)
 
+  protected def recoverPriv(f: Throwable => Option[V]): Signal[V] = RecoverSignal[V](this, f)
+
+  /**
+    * Creates a new signal which, if a further transformation fails with an exception, will set to a recovery value instead.
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    *
+    * @param f A function transforming an exception into a recovery value
+    * @return A new signal of the same value type and the recovery guard
+    */
+  def recover(f: Throwable => V): Signal[V] = recoverPriv(t => Some(f(t)))
+
+  /**
+    * Creates a new signal which, if a further transformation fails with an exception, behaves as if nothing happened.
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    *
+    * @return A new signal of the same value type and the recovery guard
+    */
+  def ignoreExceptions: Signal[V] = recoverPriv(_ => None)
+
+  /**
+    * Creates a new signal which, if a further transformation fails with an exception, does not update its value,
+    * but also allows for a side-effect, e.g. logging that the exception was caught.
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    *
+    * @param f A function that is triggered when the exception is caught
+    * @return A new signal of the same event type and the recovery guard
+    */
+  def ignoreExceptions(f: Throwable => Unit): Signal[V] = recoverPriv(t => {f(t); None})
+
+  /**
+    * A utility method that works like [[Signal#recover]] where every exception is replaced with a default value.
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    *
+    * @param value The default value that's set if an exception is caught
+    * @return A new signal of the same value type and the recovery guard
+    */
+  def withDefault(value: V): Signal[V] = recover(_ => value)
+
+  protected def recoverWithPriv(pf: PartialFunction[Throwable, Option[V]]): Signal[V] = RecoverWithSignal[V](this, pf)
+
+  /**
+    * Creates a new signal which, if a further transformation fails with an exception that is handled by a provided partial function,
+    * will use a recovery value instead. **Note**: This recovery guard must be placed **before** the risky transformation, not after,
+    * as e.g. in the case of [[Try#recoverWith]].
+    *
+    * @param pf A partial function transforming an exception into a recovery value
+    * @return A new signal of the same value type and the recovery guard
+    */
+  def recoverWith(pf: PartialFunction[Throwable, V]): Signal[V] = recoverWithPriv(pf.andThen(Some(_)))
+
+  /**
+    * Creates a new signal which, if a further transformation fails with an exception that is handled by a provided partial function,
+    * will ignore the exception and allow for a side-effect to take place. **Note**: This recovery guard must be placed **before**
+    * the risky transformation, not after, as e.g. in the case of [[Try#recoverWith]].
+    *
+    * @param pf A partial function transforming an exception into a side-effect
+    * @return A new signal of the same value type and the recovery guard
+    */
+  def ignoreExceptionsWith(pf: PartialFunction[Throwable, Unit]): Signal[V] = recoverWithPriv(pf.andThen(_ => None))
+
   /** Zips this signal with the given one.
     *
     * @param other The other signal with values of the same or a different type.
@@ -352,7 +412,24 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
   inline final def |(sourceSignal: SourceSignal[V])(using ec: EventContext = EventContext.Global): Subscription = 
     pipeTo(sourceSignal)
 
+  /**
+    * Groups values in sequences of even size and uses each sequence as one value.
+    *
+    * @param n The size of the sequence
+    * @return A new signal where the value type is a sequence of original values
+    */
   inline final def grouped(n: Int): Signal[Seq[V]] = new GroupedSignal(this, n)
+
+  /**
+    * Groups values in sequences of uneven size and uses each sequence as one value.
+    * The size of each sequence is decided by a condition. If the new value fulfills the condition,
+    * all values already stored in a buffer are used as one new value (a sequence), and the new value becomes
+    * the first element of a new sequence (it's not released yet). Otherwise, the value is added
+    * to the buffer and the result value is not changed.
+    *
+    * @param p A condition function
+    * @return A new signal where the value type is a sequence of original values
+    */
   inline final def groupBy(p: V => Boolean): Signal[Seq[V]] = new GroupBySignal(this, p)
 
   /** Creates a new signal of the same value type which changes its value to the changed value of the parent signal only if
@@ -517,25 +594,74 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
   final inline def nand[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] =
     Signal.nand(this.asInstanceOf[Signal[Boolean]], other.asInstanceOf[Signal[Boolean]])
 
+  /**
+    * Provides [[Indexed]] functionality to the original signal
+    * @return A new indexed signal or the original one if it's already indexed
+    */
   final def indexed: IndexedSignal[V] = this match {
     case that: IndexedSignal[V] => that
     case _ => new IndexedSignal[V](this)
   }
-  
+
+  /**
+    * Creates a closeable wrapper around this signal
+    * @return A new closeable signal or this one if it's already closeable
+    */
   final def closeable: CloseableSignal[V] = this match {
     case that: CloseableSignal[V] => that
     case _ => new CloseableSignal[V](this)
   }
 
+  /**
+    * Ignores a given number of new values from the original signal before starting to update to the consecutive ones.
+    *
+    * @param n The number of values to drop
+    * @return A new signal that drops n values and then starts to use all consecutive values
+    */
   final def drop(n: Int): Signal[V] = if (n <= 0) this else new DropSignal[V](this, n)
+
+  /**
+    * Ignores new values while they fulfill the condition `p`. The first event that fails is emited and the all consecutive
+    * events as well, also those  that would fulfill the condition.
+    *
+    * @param p The condition function
+    * @return A new signal that drops events while `p` is fulfilled
+    */
   final inline def dropWhile(p: V => Boolean): Signal[V] = new DropWhileSignal[V](this, p)
 
+  /**
+    * Updates the value a given number of times and then closes
+    *
+    * @param n The number of value updates
+    * @return A new signal that updates n times and closes
+    */
   final def take(n: Int): TakeSignal[V] =
-    if (n <= 0) EmptyTakeSignal.asInstanceOf[TakeSignal[V]]
-    else new TakeSignal[V](this, n)
+    if (n <= 0) EmptyTakeSignal.asInstanceOf[TakeSignal[V]] else new TakeSignal[V](this, n)
+
+  /**
+    * Updates the value while it fulfills the condition `p`. The first update that fails closes the signal.
+    *
+    * @param p The condition function
+    * @return A new signal that updates events while `p` is fulfilled
+    */
   final inline def takeWhile(p: V => Boolean): FiniteSignal[V] = new TakeWhileSignal[V](this, p)
 
+  /**
+    * Splits the signal into a finite signal that updates the given number of values and closes, and another signal that picks up
+    * updating its value after the first stops.
+    *
+    * @param n The number of value updates to split the stream at
+    * @return A tuple of signals of the same event type
+    */
   final inline def splitAt(n: Int): (FiniteSignal[V], Signal[V]) = (take(n), drop(n))
+
+  /**
+    * Splits the signal into a finite signal that updates until the new value stops fulfilling the given condition,
+    * and another signal that picks up updating its value after the first stops.
+    *
+    * @param p The condition function
+    * @return A tuple of streams of the same event type
+    */
   final inline def splitAt(p: V => Boolean): (FiniteSignal[V], Signal[V]) = (takeWhile(p), dropWhile(p))
 }
 
@@ -543,6 +669,10 @@ object Signal {
   final private val EmptyTakeSignal: TakeSignal[Any] = new TakeSignal[Any](Signal[Any](), 0)
   final private val Empty = new ConstSignal[Any](None)
 
+  /**
+    * Splits the signal into a future which completes when the current value - or the first new value if the original signal
+    * is currently empty - and another signal that carries over all the rest of updates.
+    */
   object `::` {
     def unapply[V](signal: Signal[V]): (Future[V], Signal[V]) = (signal.head, signal.tail)
   }
@@ -872,6 +1002,5 @@ object Signal {
 
   private[signals3] def done(): DoneSignal = new DoneSignal()
 
-  /** A signal which holds no value and never changes. */
   inline def flag(): FlagSignal = FlagSignal()
 }
