@@ -16,6 +16,8 @@ import scala.language.postfixOps
 class SignalSpec extends munit.FunSuite {
   private val eventContext = EventContext()
   import Threading.defaultContext
+  
+  given Timeout: FiniteDuration = 1.seconds
 
   override def beforeEach(context: BeforeEach): Unit =
     eventContext.start()
@@ -30,7 +32,7 @@ class SignalSpec extends munit.FunSuite {
     val s = Signal(1)
     s.foreach(capture)
 
-    waitForResult(received, Seq(1))
+    waitFor(received, Seq(1))
   }
 
   test("Basic subscriber lifecycle") {
@@ -49,18 +51,18 @@ class SignalSpec extends munit.FunSuite {
     val s = Signal(1)
     val sub = s.foreach(capture)
 
-    waitForResult(received, Seq(1))
+    waitFor(received, Seq(1))
 
     s ! 2
 
-    waitForResult(received, Seq(1, 2))
+    waitFor(received, Seq(1, 2))
 
     sub.destroy()
     s ! 3
 
-    waitForResult(received, Seq(1, 2))
+    waitFor(received, Seq(1, 2))
     capture(4) // to ensure '3' doesn't just come late
-    waitForResult(received, Seq(1, 2, 4))
+    waitFor(received, Seq(1, 2, 4))
   }
 
   test("Don't receive events after unregistering all subscribers") {
@@ -70,17 +72,17 @@ class SignalSpec extends munit.FunSuite {
     val s = Signal(1)
     s.foreach(capture)
 
-    waitForResult(received, Seq(1))
+    waitFor(received, Seq(1))
 
     s ! 2
-    waitForResult(received, Seq(1, 2))
+    waitFor(received, Seq(1, 2))
 
     s.unsubscribeAll()
     s ! 3
 
-    waitForResult(received, Seq(1, 2))
+    waitFor(received, Seq(1, 2))
     capture(4) // to ensure '3' doesn't just come late
-    waitForResult(received, Seq(1, 2, 4))
+    waitFor(received, Seq(1, 2, 4))
   }
 
   test("Signal mutation") {
@@ -89,11 +91,11 @@ class SignalSpec extends munit.FunSuite {
 
     val s = Signal(42)
     s.foreach(capture)
-    waitForResult(received, Seq(42))
+    waitFor(received, Seq(42))
     s.mutate(_ + 1)
-    waitForResult(received, Seq(42, 43))
+    waitFor(received, Seq(42, 43))
     s.mutate(_ - 1)
-    waitForResult(received, Seq(42, 43, 42))
+    waitFor(received, Seq(42, 43, 42))
   }
 
   test("Don't send the same value twice") {
@@ -104,9 +106,9 @@ class SignalSpec extends munit.FunSuite {
     s.foreach(capture)
     Seq(1, 2, 2, 1).foreach { n =>
       s ! n
-      waitForResult(s, n)
+      waitFor(s, n)
     }
-    waitForResult(received, Seq(1, 2, 1))
+    waitFor(received, Seq(1, 2, 1))
   }
 
   test("Idempotent signal mutation") {
@@ -115,9 +117,9 @@ class SignalSpec extends munit.FunSuite {
 
     val s = Signal(42)
     s.foreach(capture)
-    waitForResult(received, Seq(42))
+    waitFor(received, Seq(42))
     s.mutate(_ + 1 - 1)
-    waitForResult(received, Seq(42))
+    waitFor(received, Seq(42))
   }
 
   test("Simple for comprehension") {
@@ -134,7 +136,7 @@ class SignalSpec extends munit.FunSuite {
     yield y * 2
     r.foreach(capture)
     s ! 1
-    waitForResult(received, Seq(2, 4))
+    waitFor(received, Seq(2, 4))
   }
 
   test("Many concurrent subscriber changes") {
@@ -415,15 +417,15 @@ class SignalSpec extends munit.FunSuite {
     val s2 = Signal("")
     val zipped = Signal.zip(s1, s2)
 
-    assert(waitForResult(zipped, (0, "")))
+    assert(waitFor(zipped, (0, "")))
 
     s1 ! 1
 
-    assert(waitForResult(zipped, (1, "")))
+    assert(waitFor(zipped, (1, "")))
 
     s2 ! "a"
 
-    assert(waitForResult(zipped, (1, "a")))
+    assert(waitFor(zipped, (1, "a")))
   }
 
   test("Zip one signal with another and assert that the zipped signal updates from both sources") {
@@ -431,26 +433,26 @@ class SignalSpec extends munit.FunSuite {
     val s2 = Signal("")
     val zipped = s1.zip(s2)
 
-    assert(waitForResult(zipped, (0, "")))
+    assert(waitFor(zipped, (0, "")))
 
     s1 ! 1
 
-    assert(waitForResult(zipped, (1, "")))
+    assert(waitFor(zipped, (1, "")))
 
     s2 ! "a"
 
-    assert(waitForResult(zipped, (1, "a")))
+    assert(waitFor(zipped, (1, "a")))
   }
 
   test("Map one signal to another") {
     val s1 = Signal(0)
     val mapped = s1.map(n => s"number: $n")
 
-    assert(waitForResult(mapped, "number: 0"))
+    assert(waitFor(mapped, "number: 0"))
 
     s1 ! 1
 
-    assert(waitForResult(mapped, "number: 1"))
+    assert(waitFor(mapped, "number: 1"))
   }
 
   test("Index a signal") {
@@ -460,12 +462,12 @@ class SignalSpec extends munit.FunSuite {
     assertEquals(b.counter, 0)
 
     a ! -1
-    assert(waitForResult(b, -1))
+    assert(waitFor(b, -1))
     assertEquals(b.counter, 1)
 
 
     a ! -2
-    assert(waitForResult(b, -2))
+    assert(waitFor(b, -2))
     assertEquals(b.counter, 2)
   }
 
@@ -476,29 +478,29 @@ class SignalSpec extends munit.FunSuite {
     assertEquals(b.counter, 0)
 
     a ! 0
-    assert(waitForResult(b, 0))
+    assert(waitFor(b, 0))
     assertEquals(b.counter, 0)
 
     a ! 1
-    assert(waitForResult(b, 1))
+    assert(waitFor(b, 1))
     assertEquals(b.counter, 1)
 
     a ! 1
-    assert(waitForResult(b, 1))
+    assert(waitFor(b, 1))
     assertEquals(b.counter, 1)
   }
 
   test("Drop one change") {
     val a = Signal(0)
     val b = a.drop(1)
-    assert(waitForResult(a, 0))
+    assert(waitFor(a, 0))
     assert(b.empty)
     a ! 1
-    assert(waitForResult(a, 1))
-    assert(waitForResult(b, 1))
+    assert(waitFor(a, 1))
+    assert(waitFor(b, 1))
     a ! 2
-    assert(waitForResult(a, 2))
-    assert(waitForResult(b, 2))
+    assert(waitFor(a, 2))
+    assert(waitFor(b, 2))
   }
 
   test("Drop one change when starting from an empty signal") {
@@ -508,12 +510,12 @@ class SignalSpec extends munit.FunSuite {
     assert(b.empty)
 
     a ! 1
-    assert(waitForResult(a, 1))
+    assert(waitFor(a, 1))
     assert(b.empty)
 
     a ! 2
-    assert(waitForResult(a, 2))
-    assert(waitForResult(b, 2))
+    assert(waitFor(a, 2))
+    assert(waitFor(b, 2))
   }
 
   test("Drop and map") {
@@ -526,13 +528,13 @@ class SignalSpec extends munit.FunSuite {
     }
 
     a !! 1
-    assert(waitForResult(a, 1))
+    assert(waitFor(a, 1))
     a !! 2
-    assert(waitForResult(a, 2))
+    assert(waitFor(a, 2))
     a !! 3
-    assert(waitForResult(a, 3))
+    assert(waitFor(a, 3))
     a !! 4
-    assert(waitForResult(a, 4))
+    assert(waitFor(a, 4))
     awaitAllTasks
 
     val seq = buffer.result().toSeq.sorted
@@ -549,17 +551,17 @@ class SignalSpec extends munit.FunSuite {
     }
 
     a ! 1
-    assert(waitForResult(a, 1))
+    assert(waitFor(a, 1))
     a ! 2
-    assert(waitForResult(a, 2))
+    assert(waitFor(a, 2))
 
     b.close()
     assert(b.isClosed)
 
     a ! 3
-    assert(waitForResult(a, 3))
+    assert(waitFor(a, 3))
     a ! 4
-    assert(waitForResult(a, 4))
+    assert(waitFor(a, 4))
 
     awaitAllTasks
 
@@ -617,7 +619,7 @@ class SignalSpec extends munit.FunSuite {
     val s1 = Signal.empty[Int]
     val mapped = s1.map(n => s"number: $n")
 
-    assert(!waitForResult(mapped, "number: 0", 1.second))
+    assert(!waitFor(mapped, "number: 0")(using duration = 1.second))
   }
 
   test("filter numbers to even and odd") {
@@ -660,12 +662,12 @@ class SignalSpec extends munit.FunSuite {
 
     s ! false
 
-    assert(waitForResult(s, false))
+    assert(waitFor(s, false))
     assert(!res)
 
     s ! true
 
-    assert(waitForResult(s, true))
+    assert(waitFor(s, true))
     assert(res)
   }
 
@@ -680,22 +682,22 @@ class SignalSpec extends munit.FunSuite {
 
     s ! false
 
-    assert(waitForResult(s, false))
+    assert(waitFor(s, false))
     assertEquals(res, 0)
 
     s ! true
 
-    assert(waitForResult(s, true))
+    assert(waitFor(s, true))
     assertEquals(res, 1)
 
     s ! false
 
-    assert(waitForResult(s, false))
+    assert(waitFor(s, false))
     assertEquals(res, 1)
 
     s ! true
 
-    assert(waitForResult(s, true))
+    assert(waitFor(s, true))
     assertEquals(res, 1)
   }
 
@@ -710,12 +712,12 @@ class SignalSpec extends munit.FunSuite {
 
     s ! true
 
-    assert(waitForResult(s, true))
+    assert(waitFor(s, true))
     assert(res)
 
     s ! false
 
-    assert(waitForResult(s, false))
+    assert(waitFor(s, false))
     assert(!res)
   }
 
@@ -730,22 +732,22 @@ class SignalSpec extends munit.FunSuite {
 
     s ! true
 
-    assert(waitForResult(s, true))
+    assert(waitFor(s, true))
     assertEquals(res, 0)
 
     s ! false
 
-    assert(waitForResult(s, false))
+    assert(waitFor(s, false))
     assertEquals(res, 1)
 
     s ! true
 
-    assert(waitForResult(s, true))
+    assert(waitFor(s, true))
     assertEquals(res, 1)
 
     s ! false
 
-    assert(waitForResult(s, false))
+    assert(waitFor(s, false))
     assertEquals(res, 1)
   }
 
@@ -754,47 +756,47 @@ class SignalSpec extends munit.FunSuite {
     val s1 = Signal(0)
     val collected = s1.collect { case n if n % 2 == 0 => s"number: $n" }
 
-    assert(waitForResult(collected, "number: 0", 500.millis))
+    assert(waitFor(collected, "number: 0")(using duration = 500.millis))
 
     s1 ! 1
 
-    assert(!waitForResult(collected, "number: 1", 500.millis))
+    assert(!waitFor(collected, "number: 1")(using duration = 500.millis))
 
     s1 ! 2
 
-    assert(waitForResult(collected, "number: 2", 500.millis))
+    assert(waitFor(collected, "number: 2")(using duration = 500.millis))
 
     s1 ! 3
 
-    assert(!waitForResult(collected, "number: 3", 500.millis))
+    assert(!waitFor(collected, "number: 3")(using duration = 500.millis))
 
     s1 ! 4
 
-    assert(waitForResult(collected, "number: 4", 500.millis))
+    assert(waitFor(collected, "number: 4")(using duration = 500.millis))
   }
 
   test("Combining two signals") {
     val signalA = Signal(1)
     val signalB = Signal(true)
     val chain = signalA.combine(signalB) { case (n, b) => s"$n:$b" }
-    assert(waitForResult(chain, "1:true"))
+    assert(waitFor(chain, "1:true"))
 
     signalA ! 2
 
-    assert(waitForResult(chain, "2:true"))
+    assert(waitFor(chain, "2:true"))
 
     signalB ! false
 
-    assert(waitForResult(chain, "2:false"))
+    assert(waitFor(chain, "2:false"))
 
     signalB ! true
 
-    assert(waitForResult(chain, "2:true"))
+    assert(waitFor(chain, "2:true"))
 
     signalA ! 42
     signalB ! false
 
-    assert(waitForResult(chain, "42:false"))
+    assert(waitFor(chain, "42:false"))
   }
 
   test("Fallback to another signal if the original one is empty") {
@@ -803,11 +805,11 @@ class SignalSpec extends munit.FunSuite {
 
     val res = s1.orElse(s2)
 
-    assert(waitForResult(res, 2))
+    assert(waitFor(res, 2))
 
     s1 ! 1
 
-    assert(waitForResult(res, 1))
+    assert(waitFor(res, 1))
   }
 
   test("Fallback to another signal if the original one switch empty") {
@@ -820,23 +822,23 @@ class SignalSpec extends munit.FunSuite {
 
     val res = s3.orElse(s2)
 
-    assert(waitForResult(res, 1))
+    assert(waitFor(res, 1))
 
     s1 ! false
 
-    assert(waitForResult(res, 2))
+    assert(waitFor(res, 2))
 
     s2 ! 3
 
-    assert(waitForResult(res, 3))
+    assert(waitFor(res, 3))
 
     s1 ! true
 
-    assert(waitForResult(res, 1))
+    assert(waitFor(res, 1))
 
     s2 ! 4
 
-    assert(waitForResult(res, 1))
+    assert(waitFor(res, 1))
   }
 
   test("Fallback to a signal of another type if the original one is empty") {
@@ -845,11 +847,11 @@ class SignalSpec extends munit.FunSuite {
 
     val res = s1.either(s2)
 
-    assert(waitForResult(res, Left("a")))
+    assert(waitFor(res, Left("a")))
 
     s1 ! 1
 
-    assert(waitForResult(res, Right(1)))
+    assert(waitFor(res, Right(1)))
   }
 
   test("Fallback to a signal of another type if the original one switch empty") {
@@ -862,23 +864,23 @@ class SignalSpec extends munit.FunSuite {
 
     val res = s3.either(s2)
 
-    assert(waitForResult(res, Right(1)))
+    assert(waitFor(res, Right(1)))
 
     s1 ! false
 
-    assert(waitForResult(res, Left("a")))
+    assert(waitFor(res, Left("a")))
 
     s2 ! "b"
 
-    assert(waitForResult(res, Left("b")))
+    assert(waitFor(res, Left("b")))
 
     s1 ! true
 
-    assert(waitForResult(res, Right(1)))
+    assert(waitFor(res, Right(1)))
 
     s2 ! "c"
 
-    assert(waitForResult(res, Right(1)))
+    assert(waitFor(res, Right(1)))
   }
 
   test("Pipe events from one signal to another") {
@@ -887,15 +889,15 @@ class SignalSpec extends munit.FunSuite {
 
     s1.pipeTo(s2)
 
-    assert(waitForResult(s2, 1))
+    assert(waitFor(s2, 1))
 
     s2 ! 2
 
-    assert(waitForResult(s2, 2))
+    assert(waitFor(s2, 2))
 
     s1 ! 3
 
-    assert(waitForResult(s2, 3))
+    assert(waitFor(s2, 3))
   }
 
   test("Pipe events from one signal to another with the operator |") {
@@ -904,15 +906,15 @@ class SignalSpec extends munit.FunSuite {
 
     s1 | s2
 
-    assert(waitForResult(s2, 1))
+    assert(waitFor(s2, 1))
 
     s2 ! 2
 
-    assert(waitForResult(s2, 2))
+    assert(waitFor(s2, 2))
 
     s1 ! 3
 
-    assert(waitForResult(s2, 3))
+    assert(waitFor(s2, 3))
   }
 
   test("Compare values of two signals and create a boolean signal") {
@@ -925,16 +927,16 @@ class SignalSpec extends munit.FunSuite {
     assert(res.empty)
 
     s2 ! 1
-    assert(waitForResult(s2, 1))
-    assert(waitForResult(res, true))
+    assert(waitFor(s2, 1))
+    assert(waitFor(res, true))
 
     s1 ! 2
-    assert(waitForResult(s1, 2))
-    assert(waitForResult(res, false))
+    assert(waitFor(s1, 2))
+    assert(waitFor(res, false))
     
     s2 ! 2
-    assert(waitForResult(s2, 2))
-    assert(waitForResult(res, true))
+    assert(waitFor(s2, 2))
+    assert(waitFor(res, true))
   }
 
   test("Compare values of two boolean signals with AND and create a new boolean signal") {
@@ -947,28 +949,28 @@ class SignalSpec extends munit.FunSuite {
     assert(res.empty)
 
     s1 ! true
-    assert(waitForResult(s1, true))
+    assert(waitFor(s1, true))
     assert(res.empty)
 
     s2 ! true
-    assert(waitForResult(s2, true))
-    assert(waitForResult(res, true)) // true && true => true
+    assert(waitFor(s2, true))
+    assert(waitFor(res, true)) // true && true => true
 
     s1 ! false
-    assert(waitForResult(s1, false))
-    assert(waitForResult(res, false)) // false && true => false
+    assert(waitFor(s1, false))
+    assert(waitFor(res, false)) // false && true => false
 
     s2 ! false
-    assert(waitForResult(s2, false))
-    assert(waitForResult(res, false)) // false && false => false
+    assert(waitFor(s2, false))
+    assert(waitFor(res, false)) // false && false => false
 
     s1 ! true
-    assert(waitForResult(s1, true))
-    assert(waitForResult(res, false)) // true && false => false
+    assert(waitFor(s1, true))
+    assert(waitFor(res, false)) // true && false => false
 
     s2 ! true
-    assert(waitForResult(s2, true))
-    assert(waitForResult(res, true)) // true && true => true
+    assert(waitFor(s2, true))
+    assert(waitFor(res, true)) // true && true => true
   }
 
   test("Compare values of three boolean signals with AND and create a new boolean signal") {
@@ -977,22 +979,22 @@ class SignalSpec extends munit.FunSuite {
     val s3 = Signal[Boolean](true)
 
     val res: Signal[Boolean] = Signal.and(s1, s2, s3)
-    assert(waitForResult(res, true)) // true && true && true => true
+    assert(waitFor(res, true)) // true && true && true => true
 
     s1 ! false
-    assert(waitForResult(res, false)) // false && true && true => false
+    assert(waitFor(res, false)) // false && true && true => false
     s1 ! true
-    assert(waitForResult(res, true)) // true && true && true => true
+    assert(waitFor(res, true)) // true && true && true => true
 
     s2 ! false
-    assert(waitForResult(res, false)) // true && false && true => false
+    assert(waitFor(res, false)) // true && false && true => false
     s2 ! true
-    assert(waitForResult(res, true)) // true && true && true => true
+    assert(waitFor(res, true)) // true && true && true => true
 
     s3 ! false
-    assert(waitForResult(res, false)) // true && true && false => false
+    assert(waitFor(res, false)) // true && true && false => false
     s3 ! true
-    assert(waitForResult(res, true)) // true && true && true => true
+    assert(waitFor(res, true)) // true && true && true => true
   }
 
   test("Compare values of two boolean signals with OR and create a new boolean signal") {
@@ -1005,28 +1007,28 @@ class SignalSpec extends munit.FunSuite {
     assert(res.empty)
 
     s1 ! true
-    assert(waitForResult(s1, true))
+    assert(waitFor(s1, true))
     assert(res.empty)
 
     s2 ! true
-    assert(waitForResult(s2, true))
-    assert(waitForResult(res, true)) // true || true => true
+    assert(waitFor(s2, true))
+    assert(waitFor(res, true)) // true || true => true
 
     s1 ! false
-    assert(waitForResult(s1, false))
-    assert(waitForResult(res, true)) // false || true => true
+    assert(waitFor(s1, false))
+    assert(waitFor(res, true)) // false || true => true
 
     s2 ! false
-    assert(waitForResult(s2, false))
-    assert(waitForResult(res, false)) // false || false => false
+    assert(waitFor(s2, false))
+    assert(waitFor(res, false)) // false || false => false
 
     s1 ! true
-    assert(waitForResult(s1, true))
-    assert(waitForResult(res, true)) // true || false => true
+    assert(waitFor(s1, true))
+    assert(waitFor(res, true)) // true || false => true
 
     s2 ! true
-    assert(waitForResult(s2, true))
-    assert(waitForResult(res, true)) // true || true => true
+    assert(waitFor(s2, true))
+    assert(waitFor(res, true)) // true || true => true
   }
 
   test("Compare values of three boolean signals with OR and create a new boolean signal") {
@@ -1035,22 +1037,22 @@ class SignalSpec extends munit.FunSuite {
     val s3 = Signal[Boolean](false)
 
     val res: Signal[Boolean] = Signal.or(s1, s2, s3)
-    assert(waitForResult(res, false)) // false && false && false => false
+    assert(waitFor(res, false)) // false && false && false => false
 
     s1 ! true
-    assert(waitForResult(res, true)) // true && false && false => true
+    assert(waitFor(res, true)) // true && false && false => true
     s1 ! false
-    assert(waitForResult(res, false)) // false && false && false => false
+    assert(waitFor(res, false)) // false && false && false => false
 
     s2 ! true
-    assert(waitForResult(res, true)) // false && true && false => true
+    assert(waitFor(res, true)) // false && true && false => true
     s2 ! false
-    assert(waitForResult(res, false)) // false && false && false => false
+    assert(waitFor(res, false)) // false && false && false => false
 
     s3 ! true
-    assert(waitForResult(res, true)) // false && false && true => true
+    assert(waitFor(res, true)) // false && false && true => true
     s3 ! false
-    assert(waitForResult(res, false)) // false && false && false => false
+    assert(waitFor(res, false)) // false && false && false => false
   }
 
   test("Compare values of two boolean signals with XOR and create a new boolean signal") {
@@ -1063,28 +1065,28 @@ class SignalSpec extends munit.FunSuite {
     assert(res.empty)
 
     s1 ! true
-    assert(waitForResult(s1, true))
+    assert(waitFor(s1, true))
     assert(res.empty)
 
     s2 ! true
-    assert(waitForResult(s2, true))
-    assert(waitForResult(res, false)) // true ^^ true => false
+    assert(waitFor(s2, true))
+    assert(waitFor(res, false)) // true ^^ true => false
 
     s1 ! false
-    assert(waitForResult(s1, false))
-    assert(waitForResult(res, true)) // false ^^ true => true
+    assert(waitFor(s1, false))
+    assert(waitFor(res, true)) // false ^^ true => true
 
     s2 ! false
-    assert(waitForResult(s2, false))
-    assert(waitForResult(res, false)) // false ^^ false => false
+    assert(waitFor(s2, false))
+    assert(waitFor(res, false)) // false ^^ false => false
 
     s1 ! true
-    assert(waitForResult(s1, true))
-    assert(waitForResult(res, true)) // true ^^ false => true
+    assert(waitFor(s1, true))
+    assert(waitFor(res, true)) // true ^^ false => true
 
     s2 ! true
-    assert(waitForResult(s2, true))
-    assert(waitForResult(res, false)) // true ^^ true => false
+    assert(waitFor(s2, true))
+    assert(waitFor(res, false)) // true ^^ true => false
   }
 
   test("Compare values of two boolean signals with NOR and create a new boolean signal") {
@@ -1097,28 +1099,28 @@ class SignalSpec extends munit.FunSuite {
     assert(res.empty)
 
     s1 ! true
-    assert(waitForResult(s1, true))
+    assert(waitFor(s1, true))
     assert(res.empty)
 
     s2 ! true
-    assert(waitForResult(s2, true))
-    assert(waitForResult(res, false)) // true nor true => false
+    assert(waitFor(s2, true))
+    assert(waitFor(res, false)) // true nor true => false
 
     s1 ! false
-    assert(waitForResult(s1, false))
-    assert(waitForResult(res, false)) // false nor true => false
+    assert(waitFor(s1, false))
+    assert(waitFor(res, false)) // false nor true => false
 
     s2 ! false
-    assert(waitForResult(s2, false))
-    assert(waitForResult(res, true)) // false nor false => true
+    assert(waitFor(s2, false))
+    assert(waitFor(res, true)) // false nor false => true
 
     s1 ! true
-    assert(waitForResult(s1, true))
-    assert(waitForResult(res, false)) // true nor false => false
+    assert(waitFor(s1, true))
+    assert(waitFor(res, false)) // true nor false => false
 
     s2 ! true
-    assert(waitForResult(s2, true))
-    assert(waitForResult(res, false)) // true nor true => false
+    assert(waitFor(s2, true))
+    assert(waitFor(res, false)) // true nor true => false
   }
 
   test("Compare values of two boolean signals with NAND and create a new boolean signal") {
@@ -1131,28 +1133,28 @@ class SignalSpec extends munit.FunSuite {
     assert(res.empty)
 
     s1 ! true
-    assert(waitForResult(s1, true))
+    assert(waitFor(s1, true))
     assert(res.empty)
 
     s2 ! true
-    assert(waitForResult(s2, true))
-    assert(waitForResult(res, false)) // true nand true => false
+    assert(waitFor(s2, true))
+    assert(waitFor(res, false)) // true nand true => false
 
     s1 ! false
-    assert(waitForResult(s1, false))
-    assert(waitForResult(res, true)) // false nand true => true
+    assert(waitFor(s1, false))
+    assert(waitFor(res, true)) // false nand true => true
 
     s2 ! false
-    assert(waitForResult(s2, false))
-    assert(waitForResult(res, true)) // false nand false => true
+    assert(waitFor(s2, false))
+    assert(waitFor(res, true)) // false nand false => true
 
     s1 ! true
-    assert(waitForResult(s1, true))
-    assert(waitForResult(res, true)) // true nand false => true
+    assert(waitFor(s1, true))
+    assert(waitFor(res, true)) // true nand false => true
 
     s2 ! true
-    assert(waitForResult(s2, true))
-    assert(waitForResult(res, false)) // true nand true => false
+    assert(waitFor(s2, true))
+    assert(waitFor(res, false)) // true nand true => false
   }
 
   test("Flip the boolean signal with the .not method") {
@@ -1162,12 +1164,12 @@ class SignalSpec extends munit.FunSuite {
     assert(flipped.empty)
 
     source ! true
-    assert(waitForResult(source, true))
-    assert(waitForResult(flipped, false))
+    assert(waitFor(source, true))
+    assert(waitFor(flipped, false))
 
     source ! false
-    assert(waitForResult(source, false))
-    assert(waitForResult(flipped, true))
+    assert(waitFor(source, false))
+    assert(waitFor(flipped, true))
   }
 
   test("update the signal when a future is successfully completed") {
@@ -1207,9 +1209,9 @@ class SignalSpec extends munit.FunSuite {
     Seq(1, 2, 0, 1).foreach { n =>
       if (n == 0) c.close()
       s ! n
-      waitForResult(s, n)
+      waitFor(s, n)
     }
-    waitForResult(received, Seq(1, 2))
+    waitFor(received, Seq(1, 2))
   }
 
   test("Group the signal") {

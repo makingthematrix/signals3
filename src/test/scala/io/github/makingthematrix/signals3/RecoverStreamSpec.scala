@@ -1,9 +1,19 @@
 package io.github.makingthematrix.signals3
-import testutils.{awaitAllTasks, waitForResult}
+import testutils.{awaitAllTasks, waitFor}
+
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 class RecoverStreamSpec extends munit.FunSuite {
-  import Threading.defaultContext
+  private val eventContext = EventContext()
+  given dq: DispatchQueue = SerialDispatchQueue()
+  given Timeout: FiniteDuration = 250.millis
 
+  override def beforeEach(context: BeforeEach): Unit =
+    eventContext.start()
+
+  override def afterEach(context: AfterEach): Unit =
+    eventContext.stop()
+    
   // ============ MAP tests ============
 
   test("Map and throw exception") {
@@ -21,7 +31,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     interceptMessage("Map and throw exception")(in ! 2)
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 4)
   }
 
@@ -40,7 +50,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 2 // this should be ignored
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 4)
   }
 
@@ -61,7 +71,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     interceptMessage("Collect and throw exception")(in ! 2)
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 40)
   }
 
@@ -80,7 +90,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 2 // this should be ignored (collect predicate matches but function throws)
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 40)
   }
 
@@ -101,7 +111,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     interceptMessage("Filter and throw exception")(in ! 2)
     in ! 4
 
-    waitForResult(out, 4)
+    waitFor(out, 4)
     assertEquals(res, 4)
   }
 
@@ -120,7 +130,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 2 // predicate throws, should be ignored
     in ! 4
 
-    waitForResult(out, 4)
+    waitFor(out, 4)
     assertEquals(res, 4)
   }
 
@@ -160,7 +170,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 2
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assert(sideEffectCalled)
   }
 
@@ -181,7 +191,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 2
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 8) // 2 + 6 (4 was ignored)
   }
 
@@ -220,7 +230,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 2
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 6)
   }
 
@@ -241,7 +251,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 2 // p(2) throws with IGNORE, dropping stays true
     in ! 4 // p(4)=false, dropping becomes false, 4 is dispatched
 
-    waitForResult(out, 4)
+    waitFor(out, 4)
     assertEquals(res, 4)
   }
 
@@ -279,7 +289,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 2 // ignored, accumulator stays at 1
     in ! 3 // 1 + 3 = 4
 
-    waitForResult(out, 4)
+    waitFor(out, 4)
     assertEquals(res, 5) // 1 + 4
   }
 
@@ -318,7 +328,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 3
     in ! 4 // groupBy(4) returns true, [1,3] is dispatched
 
-    waitForResult(out, Seq(4))
+    waitFor(out, Seq(4))
     assertEquals(res, Seq(Seq(1, 3)))
   }
 
@@ -339,7 +349,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 2 // p(2) silently ignored
     in ! 3 // p(3)=false, !p(3)=true, closes the stream
 
-    waitForResult(out, 1)
+    waitFor(out, 1)
     assertEquals(res, 1)
     assert(out.isClosed)
   }
@@ -362,7 +372,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 1
     streamA ! "A"
     streamB ! "B"
-    waitForResult(out, "A")
+    waitFor(out, "A")
     assertEquals(res, "A")
     interceptMessage("FlatMap and throw exception")(in ! 2)
   }
@@ -383,27 +393,31 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 1
     streamA ! "A"
     streamB ! "B"
-    waitForResult(out, "A")
+    waitFor(out, "A")
     assertEquals(res, "A")
 
     in ! 2 // 2 is ignored so no change in what out is attached to
     streamA ! "A"
     streamB ! "B"
-    waitForResult(out, "A")
+    waitFor(out, "A")
     assertEquals(res, "A")
 
 
     in ! 4 // change to streamB
     streamA ! "A"
     streamB ! "B"
-    waitForResult(out, "B")
+    waitFor(out, "B")
     assertEquals(res, "AB")
   }
 
   test("Close the stream at exception") {
     val in = SourceStream[Int]()
     val s1 = in.closeable
-    val s2 = in.ignoreExceptions { _ => s1.close() }
+    val closedInput = DoneSignal()
+    val s2 = s1.ignoreExceptions { _ =>
+      s1.close();
+      closedInput.done()
+    }
     val out = s2.map {
       case 2 => throw new RuntimeException("Map and throw exception")
       case n => n
@@ -414,15 +428,18 @@ class RecoverStreamSpec extends munit.FunSuite {
       res += n
     }
     in ! 1
-    waitForResult(out, 1)
+    waitFor(out, 1)
     awaitAllTasks
     assertEquals(res, 1)
 
     in ! 2 // this should be ignored and the stream should be closed
+    waitFor(closedInput, true)
+    awaitAllTasks
+    assert(s1.isClosed)
+
     in ! 3
     awaitAllTasks
     assertEquals(res, 1)
-    assert(s1.isClosed)
   }
 
   // ============ RECOVERWITH tests ============
@@ -444,7 +461,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 2 // IllegalArgumentException is caught and recovered to 42
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 46) // 1 + 42 + 3
   }
 
@@ -465,7 +482,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     interceptMessage("Map and throw exception")(in ! 2) // RuntimeException not caught
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 4)
   }
 
@@ -486,7 +503,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 2 // recovered to "recover me".length = 10
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 14) // 1 + 10 + 3
   }
 
@@ -509,7 +526,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 2 // IllegalArgumentException is ignored
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 4)
   }
 
@@ -530,7 +547,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     interceptMessage("Map and throw exception")(in ! 2) // RuntimeException not ignored
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 4)
   }
 
@@ -550,7 +567,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 2 // IllegalArgumentException triggers side effect
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assert(sideEffectCalled)
   }
 
@@ -589,7 +606,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 2 // 2*2=4, IllegalArgumentException is ignored
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 8) // 2 + 6 (4 was ignored)
   }
 
@@ -611,7 +628,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     interceptMessage("do not recover")(in ! 2) // RuntimeException propagates
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 2) // -1 + 3
   }
 
@@ -656,7 +673,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 2 // exception occurs, recovered to default value 42
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 46) // 1 + 42 + 3
   }
 
@@ -684,7 +701,7 @@ class RecoverStreamSpec extends munit.FunSuite {
     in ! 2
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 12) // 2 + 4 + 6
   }
 }

@@ -33,7 +33,7 @@ object Transformers {
     * Encapsulates logic for closing original streams/signals/c-futures, checking if they are closed, and calling
     * the registered `onClose` code (but only once, not once per the original source).
     */
-  private trait Closeability(sources: Closeable*) extends Closeable {
+  trait Closeability(sources: Closeable*) extends Closeable {
     private var callOnCloseList: List[() => Unit] = Nil
     @volatile private var open = sources.length
 

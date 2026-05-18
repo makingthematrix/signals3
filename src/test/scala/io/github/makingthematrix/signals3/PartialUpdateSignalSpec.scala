@@ -6,6 +6,7 @@ class PartialUpdateSignalSpec extends munit.FunSuite {
 
   import EventContext.Implicits.global
   import PartialUpdateSignalSpec._
+  import Threading.defaultContext
 
   test("Basic") {
 

@@ -3,6 +3,9 @@ package io.github.makingthematrix.signals3
 import testutils.{result, waitForResult}
 
 class ScanSignalSpec extends munit.FunSuite {
+
+  import Threading.defaultContext
+  
   test("Normal scanning") {
     val received = Signal(Seq.empty[Int])
     val capture: Int => Unit = { value => received.mutate(_ :+ value) }

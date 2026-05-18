@@ -9,10 +9,17 @@ import scala.concurrent.{Future, Promise}
 import scala.language.postfixOps
 
 class TransformersSpec extends munit.FunSuite {
-  import EventContext.Implicits.global
+
+  private val eventContext = EventContext()
   given dq: DispatchQueue = SerialDispatchQueue()
-  given Timeout: FiniteDuration = 5.seconds
-  
+  given Timeout: FiniteDuration = 2.seconds
+
+  override def beforeEach(context: BeforeEach): Unit =
+    eventContext.start()
+
+  override def afterEach(context: AfterEach): Unit =
+    eventContext.stop()
+
   test("fibonacci stream with generate and map") {
     var a = 0
     var b = 1

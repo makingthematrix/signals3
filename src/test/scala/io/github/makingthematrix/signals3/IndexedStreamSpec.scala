@@ -3,15 +3,24 @@ package io.github.makingthematrix.signals3
 import io.github.makingthematrix.signals3.Closeable.CloseableStream
 import io.github.makingthematrix.signals3.ProxyStream.IndexedStream
 import io.github.makingthematrix.signals3.Finite.FiniteStream
-import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, result, waitForResult}
+import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, result, waitFor}
 
 import scala.collection.mutable
 import scala.concurrent.Future
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 class IndexedStreamSpec extends munit.FunSuite {
-  import EventContext.Implicits.global
-  import Threading.defaultContext
 
+  private val eventContext = EventContext()
+  given dq: DispatchQueue = SerialDispatchQueue()
+  given Timeout: FiniteDuration = 250.millis
+
+  override def beforeEach(context: BeforeEach): Unit =
+    eventContext.start()
+
+  override def afterEach(context: AfterEach): Unit =
+    eventContext.stop()
+    
   test("Counter starts at zero") {
     val a: Indexed = Stream().indexed
     assertEquals(0, a.counter)
@@ -78,15 +87,15 @@ class IndexedStreamSpec extends munit.FunSuite {
     val b: FiniteStream[Int] = a.take(2)
 
     a !! 1
-    waitForResult(b, 1)
+    waitFor(b, 1)
     a !! 2
-    waitForResult(b, 2)
-    waitForResult(b.isClosedSignal, true)
+    waitFor(b, 2)
+    waitFor(b.isClosedSignal, true)
 
     a !! 3
-    waitForResult(a, 3)
+    waitFor(a, 3)
     a !! 4
-    waitForResult(a, 4)
+    waitFor(a, 4)
   }
 
   test("Close a stream manually") {
@@ -98,14 +107,14 @@ class IndexedStreamSpec extends munit.FunSuite {
 
     a !! 1
     a !! 2
-    waitForResult(a, 2)
+    waitFor(a, 2)
 
     b.close()
     assert(b.isClosed)
 
     a !! 3
     a !! 4
-    waitForResult(a, 4)
+    waitFor(a, 4)
 
     assertEquals(buffer.result().toSeq.sorted, Seq(1, 2))
   }
@@ -122,10 +131,10 @@ class IndexedStreamSpec extends munit.FunSuite {
     a !! 1
     a !! 2
     a !! 3
-    waitForResult(b.isClosedSignal, true)
+    waitFor(b.isClosedSignal, true)
 
     a !! 4
-    waitForResult(a, 4)
+    waitFor(a, 4)
 
     assertEquals(buffer.result().toSeq.sorted, Seq(2, 3))
   }
@@ -283,7 +292,7 @@ class IndexedStreamSpec extends munit.FunSuite {
     ts.foreach(buffer.addOne)
 
     // Companion should close the stream on failure
-    assert(waitForResult(ts.isClosedSignal, true))
+    assert(waitFor(ts.isClosedSignal, true))
     awaitAllTasks
 
     assertEquals(buffer.result().toSeq, Seq.empty[Int])
