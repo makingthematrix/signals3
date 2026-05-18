@@ -51,6 +51,7 @@ class SourceStream[E] extends Stream[E] {
   inline def !!(event: E)(using ec: ExecutionContext): Unit = publish(event, ec)
 
   override protected def recoverPriv(f: Throwable => Option[E]): SourceStream[E] = SourceRecoverStream(this, f)
+  
   override def recover(f: Throwable => E): SourceStream[E] = recoverPriv(t => Some(f(t)))
   override def ignoreExceptions: SourceStream[E] = recoverPriv(_ => None)
   override def ignoreExceptions(f: Throwable => Unit): SourceStream[E] = recoverPriv(t => {f(t); None})
