@@ -58,5 +58,5 @@ object ThrottledSignal {
     * @tparam V The value type of the signal.
     * @return The new throttled signal of the same type as the original one.
     */
-  def apply[V](source: Signal[V], delay: FiniteDuration): ThrottledSignal[V] = new ThrottledSignal(source, delay)
+  inline def apply[V](source: Signal[V], delay: FiniteDuration): ThrottledSignal[V] = new ThrottledSignal(source, delay)
 }

@@ -2,6 +2,7 @@ package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.ProxyStream.IndexedStream
 
+import scala.annotation.static
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success}
 
@@ -66,7 +67,7 @@ object TakeStream {
    * @tparam E The type of the stream's result.
    * @return A new `TakeStream` of length 1.
    */
-  def apply[E](cf: CloseableFuture[E])(using ec: ExecutionContext): TakeStream[E] = {
+  @static def apply[E](cf: CloseableFuture[E])(using ec: ExecutionContext): TakeStream[E] = {
     val stream = new TakeStream[E](Stream[E](), 1)
     cf.onComplete {
       case Failure(_) => stream.close() // TODO: log exception?

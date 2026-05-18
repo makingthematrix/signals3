@@ -4,6 +4,7 @@ import Signal.{EmptyTakeSignal, SignalSubscriber, SignalSubscription}
 import Finite.FiniteSignal
 import ProxySignal.*
 
+import scala.annotation.static
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.ref.WeakReference
@@ -666,8 +667,8 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
 }
 
 object Signal {
-  final private val EmptyTakeSignal: TakeSignal[Any] = new TakeSignal[Any](Signal[Any](), 0)
-  final private val Empty = new ConstSignal[Any](None)
+  @static final private val EmptyTakeSignal: TakeSignal[Any] = new TakeSignal[Any](Signal[Any](), 0)
+  @static final private val Empty = new ConstSignal[Any](None)
 
   /**
     * Splits the signal into a future which completes when the current value - or the first new value if the original signal
@@ -677,15 +678,15 @@ object Signal {
     def unapply[V](signal: Signal[V]): (Future[V], Signal[V]) = (signal.head, signal.tail)
   }
 
-  private[signals3] trait SignalSubscriber {
+  @static private[signals3] trait SignalSubscriber {
     // 'currentContext' is the context this method IS run in, NOT the context any subsequent methods SHOULD run in
     protected[signals3] def changed(currentContext: Option[ExecutionContext]): Unit
   }
 
-  final private class SignalSubscription[V](source:           Signal[V],
-                                            f:                V => Unit,
-                                            executionContext: Option[ExecutionContext] = None
-                                           )(using context: WeakReference[EventContext])
+  @static final private class SignalSubscription[V](source:           Signal[V],
+                                                    f:                V => Unit,
+                                                    executionContext: Option[ExecutionContext] = None
+                                                   )(using context: WeakReference[EventContext])
     extends BaseSubscription(context) with SignalSubscriber {
 
     override def changed(currentContext: Option[ExecutionContext]): Unit = synchronized {
@@ -713,7 +714,7 @@ object Signal {
     * @tparam V The type of the values which can be published to the signal.
     * @return A new signal of values of the type `V`.
     */
-  def apply[V](): SourceSignal[V] = new SourceSignal[V](None)
+  @static def apply[V](): SourceSignal[V] = new SourceSignal[V](None)
 
   /** Creates a new [[SourceSignal]] of values of the type `V`. A usual entry point for the signals network.
     * Starts initialized to the given value.
@@ -722,7 +723,7 @@ object Signal {
     * @tparam V The type of the values which can be published to the signal.
     * @return A new signal of values of the type `V`.
     */
-  def apply[V](v: V): SourceSignal[V] = new SourceSignal[V](Some(v))
+  @static def apply[V](v: V): SourceSignal[V] = new SourceSignal[V](Some(v))
 
   /** Returns an empty, uninitialized, immutable signal of the given type.
     * Empty signals can be used in flatMap chains to signalize (ha!) that for the given value of the parent signal all further
@@ -969,7 +970,7 @@ object Signal {
     * @tparam V The type of the value produced by the future.
     * @return A new signal which will hold the value produced by the future.
     */
-  def from[V](future: Future[V], executionContext: ExecutionContext): Signal[V] =
+  @static def from[V](future: Future[V], executionContext: ExecutionContext): Signal[V] =
     new Signal[V]().tap { signal =>
       future.foreach {
         res => signal.updateWith(Option(res), Some(executionContext))
@@ -1000,7 +1001,7 @@ object Signal {
     */
   inline def from[V](source: Stream[V]): Signal[V] = new StreamSignal[V](source)
 
-  private[signals3] def done(): DoneSignal = new DoneSignal()
+  @static private[signals3] def done(): DoneSignal = new DoneSignal()
 
   inline def flag(): FlagSignal = FlagSignal()
 }

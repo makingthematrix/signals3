@@ -1,6 +1,7 @@
 package io.github.makingthematrix.signals3
 
 import java.util.{Timer, TimerTask}
+import scala.annotation.static
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.*
 import scala.concurrent.duration.{Duration, FiniteDuration, MILLISECONDS}
@@ -426,8 +427,8 @@ object CloseableFuture {
     * @param promise The promise a new closeable future wraps around
     * @tparam T The result type of the closeable future
     */
-  private[signals3] class ActuallyCloseable[+T](promise: Promise[T])
-                                               (using ExecutionContext) extends CloseableFuture[T] {
+  @static private[signals3] class ActuallyCloseable[+T](promise: Promise[T])
+                                                       (using ExecutionContext) extends CloseableFuture[T] {
     override val future: Future[T] = promise.future
     override def fail(ex: Throwable): Boolean = promise.tryFailure(ex)
     override def toUncloseable: CloseableFuture[T] = new Uncloseable[T](future)
@@ -468,8 +469,8 @@ object CloseableFuture {
     *               in the `Threading` class
     * @tparam T The result type of the closeable future
     */
-  private[signals3] final class Uncloseable[+T](override val future: Future[T])
-                                               (using ExecutionContext) extends CloseableFuture[T] {
+  @static private[signals3] final class Uncloseable[+T](override val future: Future[T])
+                                                       (using ExecutionContext) extends CloseableFuture[T] {
     override def fail(ex: Throwable): Boolean = false
     override def toUncloseable: CloseableFuture[T] = this
     override def isCloseable: Boolean = false
@@ -594,7 +595,7 @@ object CloseableFuture {
 
   private val timer: Timer = new Timer()
 
-  private def schedule(f: () => Any, delay: Long): TimerTask =
+  private final def schedule(f: () => Any, delay: Long): TimerTask =
     new TimerTask {
       override def run(): Unit = f()
     }.tap {
@@ -652,7 +653,7 @@ object CloseableFuture {
     * @tparam T The type returned by each of original closeable futures
     * @return A closeable future with its result being a collection of results of original futures in the same order
     */
-  def sequence[T](futures: Iterable[CloseableFuture[T]])(using ExecutionContext): CloseableFuture[Iterable[T]] = {
+  final def sequence[T](futures: Iterable[CloseableFuture[T]])(using ExecutionContext): CloseableFuture[Iterable[T]] = {
     val results = new ArrayBuffer[(Int, T)](futures.size)
     val promise = Promise[Iterable[T]]()
 
@@ -688,8 +689,8 @@ object CloseableFuture {
     * @tparam U The type of the result of closeable futures created by `f`
     * @return A closeable future with its result being a collection of results of futures created by `f`
     */
-  inline def traverse[T, U](in: Iterable[T])(f: T => CloseableFuture[U])
-                           (using ExecutionContext): CloseableFuture[Iterable[U]] =
+  inline final def traverse[T, U](in: Iterable[T])(f: T => CloseableFuture[U])
+                                 (using ExecutionContext): CloseableFuture[Iterable[U]] =
     sequence(in.map(f))
 
   /** Transforms an `Iterable[T]` into a `CloseableFuture[Iterable[U]]` using
@@ -708,8 +709,8 @@ object CloseableFuture {
     * @tparam U The type of the result of closeable futures created by `f`
     * @return A closeable future with its result being a collection of results of futures created by `f`
     */
-  def traverseSequential[T, U](in: Iterable[T])(f: T => CloseableFuture[U])
-                              (using ExecutionContext): CloseableFuture[Iterable[U]] = {
+  final def traverseSequential[T, U](in: Iterable[T])(f: T => CloseableFuture[U])
+                                    (using ExecutionContext): CloseableFuture[Iterable[U]] = {
     def processNext(remaining: Iterable[T], acc: List[U] = Nil): CloseableFuture[Iterable[U]] =
       if (remaining.isEmpty) CloseableFuture.successful(acc.reverse)
       else f(remaining.head).flatMap(res => processNext(remaining.tail, res :: acc))
@@ -728,7 +729,7 @@ object CloseableFuture {
     * @tparam U The type of the result of the second of original closeable futures
     * @return A new closeable future with its result being a tuple of results of both original futures
     */
-  def zip[T, U](f1: CloseableFuture[T], f2: CloseableFuture[U])(using ec: ExecutionContext): CloseableFuture[(T, U)] = {
+  final def zip[T, U](f1: CloseableFuture[T], f2: CloseableFuture[U])(using ec: ExecutionContext): CloseableFuture[(T, U)] = {
     val p = Promise[(T, U)]()
 
     p.completeWith((for r1 <- f1; r2 <- f2 yield (r1, r2)).future)

@@ -24,7 +24,7 @@ object AggregatingSignal {
     * @tparam V The type of the value held in the signal and the result of the `loader` execution.
     * @return A new aggregating signal with the value type `V`.
     */
-  def apply[E, V](loader: () => Future[V], sourceStream: Stream[E], updater: (V, E) => V)
+  inline def apply[E, V](loader: () => Future[V], sourceStream: Stream[E], updater: (V, E) => V)
                  (using ExecutionContext): AggregatingSignal[E, V]
     = new AggregatingSignal(loader, sourceStream, updater)
 }

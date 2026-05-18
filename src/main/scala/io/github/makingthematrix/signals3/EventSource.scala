@@ -1,5 +1,6 @@
 package io.github.makingthematrix.signals3
 
+import scala.annotation.static
 import scala.concurrent.ExecutionContext
 
 /** A common superclass for all event sources, i.e. [[Stream]] and [[Signal]].
@@ -129,7 +130,7 @@ object EventSource {
   /** By default, a new event source is initialized lazily, i.e. only when the first subscriber function is registered in it.
     * You can decorate it with `NoAutowiring` to enforce initialization.
     */
-  trait NoAutowiring {
+  @static trait NoAutowiring {
     self: EventSource[?, ?] =>
     self.disableAutowiring()
   }

@@ -22,7 +22,7 @@ object Threading {
   final val Cpus: Int = math.max(2, Runtime.getRuntime.availableProcessors)
 
   private var instance = Option.empty[DispatchQueue]
-  private lazy val defaultQueue = 
+  private lazy val defaultQueue =
     DispatchQueue(if (virtualThreadsSupported) Virtual else Unlimited, ExecutionContext.global)
 
   /** The default dispatch queue for Wire Signals is lazily initialized, meaning that at the start of the app,
@@ -45,7 +45,7 @@ object Threading {
     * @return the default dispatch queue, either the one provided by the user or an unlimited dispatch queue over ExecutionContext.global,
     *         created at the moment of first use.
     */
-  def apply(): DispatchQueue = instance.getOrElse(defaultQueue)
+  inline def apply(): DispatchQueue = instance.getOrElse(defaultQueue)
 
   /**
    * Checks if virtual threads are supported in the current Java runtime.

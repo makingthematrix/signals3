@@ -5,7 +5,7 @@ object EventContext {
     *
     * @return A default implementation of the [[EventContext]]
     */
-  def apply(): EventContext = new BaseEventContext
+  inline def apply(): EventContext = new BaseEventContext
 
   object Implicits {
     given global: EventContext = EventContext.Global

@@ -166,7 +166,7 @@ object SourceSignal {
     * @tparam V The type of the value
     * @return A new source signal with the given value
     */
-  def apply[V](v: V): SourceSignal[V] = new SourceSignal(Option(v))
+  inline def apply[V](v: V): SourceSignal[V] = new SourceSignal(Option(v))
 
   /** Creates an initially empty source signal.
     *
@@ -175,5 +175,5 @@ object SourceSignal {
     * @tparam V The type of the value
     * @return A new source signal
     */
-  def apply[V](): SourceSignal[V] = new SourceSignal[V](None)
+  inline def apply[V](): SourceSignal[V] = new SourceSignal[V](None)
 }

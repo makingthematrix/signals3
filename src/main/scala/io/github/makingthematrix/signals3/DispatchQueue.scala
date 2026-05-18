@@ -4,7 +4,7 @@ import java.util.concurrent.{ConcurrentLinkedQueue, ExecutorService, Executors}
 import java.util.concurrent.atomic.AtomicInteger
 import DispatchQueue.{Serial, nextInt}
 
-import scala.annotation.tailrec
+import scala.annotation.{static, tailrec}
 import scala.concurrent.ExecutionContext
 
 /** A thin wrapper over Scala's `ExecutionContext` allowing us to differentiate between the default execution context
@@ -46,26 +46,26 @@ trait DispatchQueue extends ExecutionContext {
 
 object DispatchQueue {
 
-  final val Virtual: Int = -1
+  @static final val Virtual: Int = -1
   /** Used in place of the `concurrentTasks` parameter in one of the `DispatchQueue.apply` method,
     * `Virtual` indicates that the queue should be an unlimited one that uses virtual threads.
     *
     * @see [[VirtualDispatchQueue]]
     */
-  final val Unlimited: Int = 0
+  @static final val Unlimited: Int = 0
   /** Used in place of the `concurrentTasks` parameter in one of the `DispatchQueue.apply` method,
     * `SERIAL` indicates that the queue should be a serial one. But take a look on `SerialDispatchQueue.apply`
     * before you decide to use it.
     *
     * @see [[SerialDispatchQueue]]
     */
-  final val Serial: Int = 1
+  @static final val Serial: Int = 1
 
-  private final val AtomInt = new AtomicInteger()
+  @static private final val AtomInt = new AtomicInteger()
 
-  private[signals3] def nextInt(): Int = AtomInt.incrementAndGet()
+  inline private[signals3] def nextInt(): Int = AtomInt.incrementAndGet()
 
-  private def createDispatchQueue(concurrentTasks: Int, executor: ExecutionContext, name: Option[String]): DispatchQueue =
+  @static private final def createDispatchQueue(concurrentTasks: Int, executor: ExecutionContext, name: Option[String]): DispatchQueue =
     concurrentTasks match {
       case Virtual   => new VirtualDispatchQueue(name)
       case Unlimited => new UnlimitedDispatchQueue(executor, name)
@@ -80,7 +80,7 @@ object DispatchQueue {
     * @param executor - the underlying execution context
     * @return a new dispatch queue, either unlimited, serial, or limited.
     */
-  def apply(concurrentTasks: Int, executor: ExecutionContext): DispatchQueue =
+  inline def apply(concurrentTasks: Int, executor: ExecutionContext): DispatchQueue =
     createDispatchQueue(concurrentTasks, executor, None)
 
   /** Creates a dispatch queue with a given name.
@@ -91,10 +91,10 @@ object DispatchQueue {
     * @param name - the name of the queue; might be later used e.g. in logging
     * @return a new dispatch queue, either unlimited, serial, or limited.
     */
-  def apply(concurrentTasks: Int, executor: ExecutionContext, name: String): DispatchQueue =
+  inline def apply(concurrentTasks: Int, executor: ExecutionContext, name: String): DispatchQueue =
     createDispatchQueue(concurrentTasks, executor, Some(name))
 
-  private def createDispatchQueue(concurrentTasks: Int, service: ExecutorService, name: Option[String]): DispatchQueue =
+  @static private final def createDispatchQueue(concurrentTasks: Int, service: ExecutorService, name: Option[String]): DispatchQueue =
     createDispatchQueue(
       concurrentTasks,
       new ExecutionContext {
@@ -112,7 +112,7 @@ object DispatchQueue {
     * @param service - the underlying executor service. The dispatch queue will create a new execution context, using the service.
     * @return a new dispatch queue, either unlimited, serial, or limited.
     */
-  def apply(concurrentTasks: Int, service: ExecutorService): DispatchQueue =
+  inline def apply(concurrentTasks: Int, service: ExecutorService): DispatchQueue =
     createDispatchQueue(concurrentTasks, service, None)
 
   /** Creates a dispatch queue with a given name, given an executor service instead of an execution context.
@@ -124,7 +124,7 @@ object DispatchQueue {
     * @param name - the name of the queue; might be later used e.g. in logging.
     * @return a new dispatch queue, either unlimited, serial, or limited.
     */
-  def apply(concurrentTasks: Int, service: ExecutorService, name: String): DispatchQueue =
+  inline def apply(concurrentTasks: Int, service: ExecutorService, name: String): DispatchQueue =
     createDispatchQueue(concurrentTasks, service, Some(name))
 }
 

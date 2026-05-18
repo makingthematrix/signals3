@@ -4,6 +4,7 @@ import Stream.{EmptyTakeStream, EventSubscriber, StreamSubscription}
 import Finite.FiniteStream
 import ProxyStream.*
 
+import scala.annotation.static
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.ref.WeakReference
 import scala.util.Try
@@ -401,15 +402,15 @@ object Stream {
 
   private final val EmptyTakeStream: TakeStream[Any] = new TakeStream[Any](Stream[Any](), 0)
 
-  private[signals3] trait EventSubscriber[E] {
+  @static private[signals3] trait EventSubscriber[E] {
     // 'currentContext' is the context this method IS run in, NOT the context any subsequent methods SHOULD run in
     protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit
   }
 
-  final private class StreamSubscription[E](source:            Stream[E],
-                                            f:                 E => Unit,
-                                            executionContext:  Option[ExecutionContext] = None
-                                           )(using context: WeakReference[EventContext])
+  @static final private class StreamSubscription[E](source:            Stream[E],
+                                                    f:                 E => Unit,
+                                                    executionContext:  Option[ExecutionContext] = None
+                                                   )(using context: WeakReference[EventContext])
     extends BaseSubscription(context) with EventSubscriber[E] {
 
     override def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
