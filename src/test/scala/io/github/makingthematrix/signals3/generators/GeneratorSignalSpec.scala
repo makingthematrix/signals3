@@ -12,7 +12,9 @@ class GeneratorSignalSpec extends munit.FunSuite {
   import Threading.defaultContext
 
   def fibDelay(t: (Int, Int)): FiniteDuration = FiniteDuration(t._2 * 200L, TimeUnit.MILLISECONDS)
-  
+
+  given Timeout: FiniteDuration = 5.seconds
+
   test("fibonacci signal with generate") {
     val builder = mutable.ArrayBuilder.make[Int]
     val isSuccess = DoneSignal()
@@ -22,7 +24,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
       builder.addOne(b)
       if (b == 8) isSuccess.done()
     }
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     signal.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(1, 1, 2, 3, 5, 8))
@@ -38,7 +40,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
       builder.addOne(b)
       isSuccess.doneIf(b == 8)
     }
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     signal.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(1, 2, 3, 5, 8))
@@ -56,7 +58,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
       isSuccess ! (b == 5)
     }
   
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
 
     val totalTime = System.currentTimeMillis - now
     signal.close()
@@ -77,7 +79,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
       isSuccess ! (b == 5)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
 
     val totalTime = System.currentTimeMillis - now
     signal.close()
@@ -95,7 +97,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
       isSuccess ! (counter == 4)
     }
     val t1 = System.currentTimeMillis
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     val timePassed1 = System.currentTimeMillis - t1
     signal1.close()
     awaitAllTasks
@@ -120,7 +122,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
     }
 
     val t2 = System.currentTimeMillis
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     val timePassed2 = System.currentTimeMillis - t2
     signal2.close()
     awaitAllTasks

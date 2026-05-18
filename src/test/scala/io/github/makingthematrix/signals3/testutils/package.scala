@@ -32,7 +32,7 @@ package object testutils {
   def withDelay[T](body: => T, delay: FiniteDuration = 300.millis)(using ec: ExecutionContext): CloseableFuture[T] =
     CloseableFuture.delayed(delay)(body)
 
-  val DefaultTimeout: FiniteDuration = 5.seconds
+  val DefaultTimeout: FiniteDuration = 1.seconds
 
   def result[A](future: Future[A])(using duration: FiniteDuration = DefaultTimeout): A = Await.result(future, duration)
 

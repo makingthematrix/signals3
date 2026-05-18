@@ -10,6 +10,8 @@ import scala.concurrent.duration.*
 class GeneratorStreamSpec extends munit.FunSuite {
   import EventContext.Implicits.global
   import Threading.defaultContext
+  
+  given Timeout: FiniteDuration = 5.seconds
 
   test("heartbeat stream") {
     var counter = 0
@@ -19,7 +21,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
       counter += 1
       if (counter == 3) isSuccess ! true
     }
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     stream.close()
     awaitAllTasks
     assert(stream.isClosed)
@@ -40,7 +42,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
       counter += 1
       if (counter == 3) isSuccess ! true
     }
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     stream.close()
     awaitAllTasks
     assert(stream.isClosed)
@@ -62,7 +64,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
       builder.addOne(t)
       isSuccess ! (t == 8)
     }
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     stream.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(1, 1, 2, 3, 5, 8))
@@ -87,7 +89,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
       builder.addOne(t)
       isSuccess ! (t == 5)
     }
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
 
     val totalTime = System.currentTimeMillis - now
     stream.close()
@@ -106,14 +108,14 @@ class GeneratorStreamSpec extends munit.FunSuite {
       isSuccess ! (counter == 4)
     }
     val t1 = System.currentTimeMillis
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     val timePassed1 = System.currentTimeMillis - t1
     stream1.close()
     awaitAllTasks
 
     // restart, this time with pause for one beat when counter == 2
     isSuccess ! false
-    waitForResult(isSuccess, false)
+    waitForResult(isSuccess, false, Timeout)
     counter = 0
 
     var pausedOn = 0L
@@ -133,7 +135,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
     }
 
     val t2 = System.currentTimeMillis
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     val timePassed2 = System.currentTimeMillis - t2
     stream2.close()
     awaitAllTasks
@@ -150,7 +152,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
     generator.onClose(isSuccess.done())
     generator.map(n => (n, System.currentTimeMillis() - t)).foreach((n,l) => buffer.addOne((n, l)))
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
 
     val res = buffer.toSeq
     assertEquals(res.size, numbers.size)
@@ -166,7 +168,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
       counter += 1
       if (counter == 3) isSuccess ! true
     }
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     stream.close()
     awaitAllTasks
     assert(stream.isClosed)
@@ -181,7 +183,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
       counter += 1
       if (counter == 5) isSuccess ! true
     }
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     stream.close()
     awaitAllTasks
     assert(stream.isClosed)
