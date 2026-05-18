@@ -346,7 +346,7 @@ class SignalSpec extends munit.FunSuite {
   }
 
   test("The 'exists' check for an initialized signal should work accordingly") { //
-    given defaultContext: DispatchQueue = Threading.defaultContext// I know, stupid name
+    given defaultContext: DispatchQueue = Threading.defaultContext
     val s = Signal.const(5.millis)
     assert(!result(s.exists(d => d.toMillis == 2)))
     assert(result(s.exists(d => d.toMillis == 5)))

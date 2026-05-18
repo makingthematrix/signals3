@@ -11,7 +11,8 @@ import scala.language.postfixOps
 class TransformersSpec extends munit.FunSuite {
   import EventContext.Implicits.global
   given dq: DispatchQueue = SerialDispatchQueue()
-
+  given Timeout: FiniteDuration = 5.seconds
+  
   test("fibonacci stream with generate and map") {
     var a = 0
     var b = 1
@@ -31,7 +32,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (t == 8)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     mapped.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(1, 1, 2, 3, 5, 8))
@@ -58,7 +59,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (t == 8)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     signal.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(1, 2, 3, 5, 8))
@@ -85,7 +86,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (t == 8)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     signal.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(0, 1, 2, 3, 5, 8))
@@ -105,7 +106,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (n == 7)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     stream.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(1, 3, 5, 7))
@@ -121,7 +122,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (n == 7)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     signal.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(1, 3, 5, 7))
@@ -149,7 +150,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (t == 8)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     mapped.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(1, 1, 2, 3, 5, 8))
@@ -171,7 +172,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (n == "7")
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     stream.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq("1", "3", "5", "7"))
@@ -189,7 +190,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (n == "7")
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     signal.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq("1", "3", "5", "7"))
@@ -219,7 +220,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (t == -3)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     stream.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(1, -1, 2, -2, 3, -3))
@@ -238,7 +239,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (t._2 == -3)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     signal.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq((0,0), (1,0), (1,-1), (2,-1), (2,-2), (3,-2), (3,-3)))
@@ -258,7 +259,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (t._3 == 2)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     signal.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq((0, 0, 0), (1, 0, 0), (1, 1, 0), (1, 1, 1), (2, 1, 1), (2, 2, 1), (2, 2, 2)))
@@ -279,7 +280,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (t._4 == -1.0)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     signal.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq((0, 0.0, 0, 0.0), (1, 0.0, 0, 0.0), (1, -1.0, 0, 0.0), (1, -1.0, 1, 0.0), (1, -1.0, 1, -1.0)))
@@ -301,7 +302,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (t._5 == "1")
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     signal.close()
     awaitAllTasks
     assertEquals(
@@ -327,7 +328,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (t._6 == "-1")
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     signal.close()
     awaitAllTasks
     assertEquals(
@@ -352,7 +353,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (t(2) == 2)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     signal.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(Seq(0, 0, 0), Seq(1, 0, 0), Seq(1, 1, 0), Seq(1, 1, 1), Seq(2, 1, 1), Seq(2, 2, 1), Seq(2, 2, 2)))
@@ -373,7 +374,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (t == "2:-2")
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     signal.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq("0:0", "1:0", "1:-1", "2:-1", "2:-2"))
@@ -560,7 +561,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess.doneIf(n == 4)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     mapped.close()
     awaitAllTasks
     assertEquals(res, Seq(4, 3, -1, 1))
@@ -605,7 +606,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess.doneIf(n == 3)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     withRecover.close()
     awaitAllTasks
     assertEquals(res, List(3, -1, 1, 0))
@@ -650,7 +651,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess.doneIf(n == 4)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     mapped.close()
     awaitAllTasks
     assertEquals(res, List(4, 3, -1, 1))
@@ -697,7 +698,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess.doneIf(n == 4)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     mapped.close()
     awaitAllTasks
     assertEquals(res, Seq(4, 3, 10, 1))
@@ -721,7 +722,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess.doneIf(n == 3)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     mapped.close()
     awaitAllTasks
     assertEquals(res, Seq(3, -1, 1, 0))
@@ -760,7 +761,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess.doneIf(n == 3)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     mapped.close()
     awaitAllTasks
     assertEquals(res, List(3, 10, 1, 0))
@@ -784,7 +785,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (n == 10)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     scanned.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(1, 3, 6, 10))
@@ -806,7 +807,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess.doneIf(n == 16)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     scanned.close()
     awaitAllTasks
     assertEquals(res, Seq(16, 13, 11))
@@ -826,7 +827,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (n == 6) // 0+0=0, 0+1=1, 1+2=3, 3+3=6
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     scanned.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(0, 1, 3, 6))
@@ -844,7 +845,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess.doneIf(n == 16)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     scanned.close()
     awaitAllTasks
     assertEquals(res, Seq(16, 13, 11))
@@ -868,7 +869,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (batch == Seq(4, 5, 6))
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     grouped.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(Seq(1, 2, 3), Seq(4, 5, 6)))
@@ -890,7 +891,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess.doneIf(res.size == 2)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     grouped.close()
     awaitAllTasks
     assertEquals(res, List(Seq(4, 5, 0), Seq(1, 2, 3)))
@@ -910,7 +911,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (batch == Seq(3, 4, 5))
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     grouped.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(Seq(0, 1, 2), Seq(3, 4, 5)))
@@ -932,7 +933,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess.doneIf(res.size == 2)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     grouped.close()
     awaitAllTasks
     assertEquals(res, List(Seq(3, 4, 5), Seq(0, 1, 2)))
@@ -959,7 +960,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! builder.result().nonEmpty
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     grouped.close()
     awaitAllTasks
     assert(builder.result().toSeq.nonEmpty)
@@ -979,7 +980,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! builder.result().nonEmpty
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     grouped.close()
     awaitAllTasks
     assert(builder.result().toSeq.nonEmpty)
@@ -1003,7 +1004,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (n == 5)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     dropped.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(4, 5))
@@ -1025,7 +1026,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (n == 3)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     dropped.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(1, 2, 3))
@@ -1062,7 +1063,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess.doneIf(n == 5)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     dropped.close()
     awaitAllTasks
     assertEquals(res, List(5, 4, 3))
@@ -1080,7 +1081,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (n == 2)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     dropped.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(0, 1, 2))
@@ -1104,7 +1105,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (n == 5)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     dropped.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(3, 4, 5))
@@ -1143,7 +1144,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (n == 3)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     dropped.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(1, 2, 3))
@@ -1163,7 +1164,7 @@ class TransformersSpec extends munit.FunSuite {
       isSuccess ! (n == 5)
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     dropped.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(3, 4, 5))
@@ -1185,7 +1186,7 @@ class TransformersSpec extends munit.FunSuite {
       if (n == 6) isSuccess ! true
     }
 
-    waitForResult(isSuccess, true)
+    waitForResult(isSuccess, true, Timeout)
     dropped.close()
     awaitAllTasks
     assertEquals(builder.result().toSeq, Seq(3, 4, 5, 6))
