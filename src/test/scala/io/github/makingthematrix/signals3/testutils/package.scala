@@ -44,8 +44,11 @@ package object testutils {
     catch {
       case t: Throwable => Failure(t)
     }
-
-  def waitForResult[V](signal: Signal[V], expected: V, timeout: FiniteDuration): Boolean = {
+  
+  def waitFor[V](signal: Signal[V], expected: V)(using ec: ExecutionContext, duration: FiniteDuration): Boolean =
+    waitForResult(signal, expected, duration)(using ec)
+  
+  def waitForResult[V](signal: Signal[V], expected: V, timeout: FiniteDuration)(using ec: ExecutionContext): Boolean = {
     val offset = System.currentTimeMillis()
     while System.currentTimeMillis() - offset < timeout.toMillis do {
       Try(result(signal.head)(using timeout)) match {
@@ -60,8 +63,11 @@ package object testutils {
     false
   }
 
-  def waitForResult[V](signal: Signal[V], expected: V): Boolean = waitForResult(signal, expected, DefaultTimeout)
-
+  def waitForResult[V](signal: Signal[V], expected: V)(using ExecutionContext): Boolean = waitForResult(signal, expected, DefaultTimeout)
+  
+  def waitFor[E](stream: Stream[E], expected: E)(using ec: ExecutionContext, duration: FiniteDuration): Boolean =
+    waitForResult(stream, expected, duration)(using ec)
+    
   def waitForResult[E](stream: Stream[E], expected: E, timeout: FiniteDuration)(using ec: ExecutionContext): Boolean = {
     val offset = System.currentTimeMillis()
     while System.currentTimeMillis() - offset < timeout.toMillis do {

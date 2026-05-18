@@ -2,10 +2,12 @@ package io.github.makingthematrix.signals3
 
 import testutils.*
 
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
+
 class RecoverSignalSpec extends munit.FunSuite {
   private val eventContext = EventContext()
-
-  given ec: DispatchQueue = SerialDispatchQueue()
+  given dq: DispatchQueue = SerialDispatchQueue()
+  given Timeout: FiniteDuration = 250.millis
 
   override def beforeEach(context: BeforeEach): Unit =
     eventContext.start()
@@ -30,7 +32,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     interceptMessage("Map and throw exception")(in !! 2)
     in !! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 4)
   }
 
@@ -50,7 +52,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     in !! 2 // should be ignored
     in !! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 4)
   }
 
@@ -71,7 +73,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     interceptMessage("Collect and throw exception")(in ! 2)
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 40)
   }
 
@@ -90,7 +92,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     in ! 2
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 40)
   }
 
@@ -111,7 +113,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     interceptMessage("Filter and throw exception")(in !! 2)
     in !! 4
 
-    waitForResult(out, 4)
+    waitFor(out, 4)
     assertEquals(res, 4)
   }
 
@@ -130,7 +132,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     in !! 2
     in !! 4
 
-    waitForResult(out, 4)
+    waitFor(out, 4)
     assertEquals(res, 4)
   }
 
@@ -168,7 +170,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     in !! 2
     in !! 4
 
-    waitForResult(out, 4)
+    waitFor(out, 4)
     assertEquals(res, 4)
   }
 
@@ -188,7 +190,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     in ! 2
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assert(sideEffectCalled)
   }
 
@@ -209,7 +211,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     in ! 2
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 8)
   }
 
@@ -247,7 +249,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     in ! 2
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 6)
   }
 
@@ -285,7 +287,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     in !! 2
     in !! 3
 
-    waitForResult(out, 4)
+    waitFor(out, 4)
     assertEquals(res, 5)
   }
 
@@ -324,7 +326,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     in ! 3
     in ! 4
 
-    waitForResult(out, Seq(4))
+    waitFor(out, Seq(4))
     assertEquals(res, Seq(Seq(1, 3)))
   }
 
@@ -345,7 +347,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     in ! 2
     in ! 3
 
-    waitForResult(out, 1)
+    waitFor(out, 1)
     awaitAllTasks
     assertEquals(res, 1)
     assert(out.isClosed)
@@ -369,7 +371,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     in ! 1
     signalA ! "A"
     signalB ! "B"
-    waitForResult(out, "A")
+    waitFor(out, "A")
     awaitAllTasks
     assertEquals(res, "A")
     interceptMessage("FlatMap and throw exception")(in ! 2)
@@ -392,21 +394,21 @@ class RecoverSignalSpec extends munit.FunSuite {
     in ! 1
     signalA ! "A"
     signalB ! "B"
-    waitForResult(out, "A")
+    waitFor(out, "A")
     awaitAllTasks
     assertEquals(res, "A")
 
     in ! 2
     signalA ! "A"
     signalB ! "B"
-    waitForResult(out, "A")
+    waitFor(out, "A")
     awaitAllTasks
     assertEquals(res, "A")
 
     in ! 4
     signalA ! "A"
     signalB ! "B"
-    waitForResult(out, "B")
+    waitFor(out, "B")
     awaitAllTasks
     assertEquals(res, "AB")
   }
@@ -429,7 +431,7 @@ class RecoverSignalSpec extends munit.FunSuite {
       res += n
     }
     in ! 1
-    waitForResult(out, 1)
+    waitFor(out, 1)
     awaitAllTasks
     assertEquals(res, 1)
     assert(!s1.isClosed)
@@ -460,15 +462,15 @@ class RecoverSignalSpec extends munit.FunSuite {
       res += n
     }
     in ! 1
-    waitForResult(out, 1)
+    waitFor(out, 1)
     awaitAllTasks
     assertEquals(res, 1)
     in ! 2 // exception is caught and recovered to 42
-    waitForResult(out, 42)
+    waitFor(out, 42)
     awaitAllTasks
     assertEquals(res, 43)
     in ! 3
-    waitForResult(out, 3)
+    waitFor(out, 3)
     awaitAllTasks
     assertEquals(res, 46)
   }
@@ -492,7 +494,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     in ! 2
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     awaitAllTasks
     assertEquals(res, 46)
   }
@@ -516,7 +518,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     interceptMessage("Map and throw exception")(in ! 2)
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     awaitAllTasks
     assertEquals(res, 4)
   }
@@ -540,7 +542,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     in ! 2
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     awaitAllTasks
     assertEquals(res, 14)
   }
@@ -566,7 +568,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     in ! 2
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     awaitAllTasks
     assertEquals(res, 4)
   }
@@ -585,11 +587,11 @@ class RecoverSignalSpec extends munit.FunSuite {
       res += n
     }
     in ! 1
-    waitForResult(out, 1)
+    waitFor(out, 1)
     interceptMessage("Map and throw exception")(in ! 2)
     awaitAllTasks
     in ! 3
-    waitForResult(out, 3)
+    waitFor(out, 3)
     awaitAllTasks
     assertEquals(res, 4)
   }
@@ -610,7 +612,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     in ! 2
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assert(sideEffectCalled)
   }
 
@@ -649,7 +651,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     in ! 2
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 8)
   }
 
@@ -671,10 +673,10 @@ class RecoverSignalSpec extends munit.FunSuite {
       res += n
     }
     in ! 1
-    waitForResult(out, 3)
+    waitFor(out, 3)
     interceptMessage("do not recover")(in ! 2)
     in ! 3
-    waitForResult(out, 3)
+    waitFor(out, 3)
     awaitAllTasks
     assertEquals(res, 2)
   }
@@ -721,11 +723,11 @@ class RecoverSignalSpec extends munit.FunSuite {
       res += n
     }
     in ! 1
-    waitForResult(out, 1)
+    waitFor(out, 1)
     in ! 2
-    waitForResult(out, 42)
+    waitFor(out, 42)
     in ! 3
-    waitForResult(out, 3)
+    waitFor(out, 3)
     awaitAllTasks
     assertEquals(res, 46)
   }
@@ -754,7 +756,7 @@ class RecoverSignalSpec extends munit.FunSuite {
     in ! 2
     in ! 3
 
-    waitForResult(out, 3)
+    waitFor(out, 3)
     assertEquals(res, 12)
   }
 }
