@@ -3,10 +3,19 @@ package io.github.makingthematrix.signals3
 import testutils.*
 
 import scala.collection.mutable
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 class IndexedSignalSpec extends munit.FunSuite {
-  import EventContext.Implicits.global
-  import Threading.defaultContext
+
+  private val eventContext = EventContext()
+  given dq: DispatchQueue = SerialDispatchQueue()
+  given Timeout: FiniteDuration = 500.millis 
+
+  override def beforeEach(context: BeforeEach): Unit =
+    eventContext.start()
+
+  override def afterEach(context: AfterEach): Unit =
+    eventContext.stop()
 
   test("Counter starts at zero") {
     val a: Indexed = Signal().indexed
@@ -99,21 +108,21 @@ class IndexedSignalSpec extends munit.FunSuite {
     }
 
     a ! 1
-    assert(waitForResult(a, 1))
-    assert(waitForResult(b, 1))
+    assert(waitFor(a, 1))
+    assert(waitFor(b, 1))
 
     a ! 2
-    assert(waitForResult(a, 2))
-    assert(waitForResult(b, 2))
+    assert(waitFor(a, 2))
+    assert(waitFor(b, 2))
 
     assert(b.isClosed)
 
     a ! 3
-    assert(waitForResult(a, 3))
-    assert(waitForResult(b, 2))
+    assert(waitFor(a, 3))
+    assert(waitFor(b, 2))
     a ! 4
-    assert(waitForResult(a, 4))
-    assert(waitForResult(b, 2))
+    assert(waitFor(a, 4))
+    assert(waitFor(b, 2))
 
     val seq = buffer.result().toSeq
     assertEquals(seq, Seq(1, 2))
@@ -133,12 +142,12 @@ class IndexedSignalSpec extends munit.FunSuite {
     }
 
     a ! 1
-    assert(waitForResult(a, 1))
-    assert(waitForResult(b, 1))
+    assert(waitFor(a, 1))
+    assert(waitFor(b, 1))
 
     a ! 2
-    assert(waitForResult(a, 2))
-    assert(waitForResult(b, 2))
+    assert(waitFor(a, 2))
+    assert(waitFor(b, 2))
 
     assert(b.isClosed)
     assert(closed)
@@ -154,23 +163,23 @@ class IndexedSignalSpec extends munit.FunSuite {
     }
 
     a ! 1
-    assert(waitForResult(a, 1))
+    assert(waitFor(a, 1))
     assertEquals(buffer.result().toSeq, Seq.empty)
 
     a ! 2
-    assert(waitForResult(a, 2))
-    assert(waitForResult(b, 2))
+    assert(waitFor(a, 2))
+    assert(waitFor(b, 2))
     assertEquals(buffer.result().toSeq, Seq(2))
 
     a ! 3
-    assert(waitForResult(a, 3))
-    assert(waitForResult(b, 3))
+    assert(waitFor(a, 3))
+    assert(waitFor(b, 3))
     assertEquals(buffer.result().toSeq, Seq(2, 3))
     assert(b.isClosed)
 
     a ! 4
-    assert(waitForResult(a, 4))
-    assert(waitForResult(b, 3))
+    assert(waitFor(a, 4))
+    assert(waitFor(b, 3))
     assertEquals(buffer.result().toSeq, Seq(2, 3))
     assert(b.isClosed)
   }
@@ -183,16 +192,16 @@ class IndexedSignalSpec extends munit.FunSuite {
     c.foreach {cBuffer.addOne}
 
     a ! 1
-    assert(waitForResult(a, 1))
+    assert(waitFor(a, 1))
 
     a ! 2
-    assert(waitForResult(a, 2))
+    assert(waitFor(a, 2))
 
     a ! 3
-    assert(waitForResult(a, 3))
+    assert(waitFor(a, 3))
 
     a ! 4
-    assert(waitForResult(a, 4))
+    assert(waitFor(a, 4))
 
     val cSeq = cBuffer.result().toSeq
     assertEquals(cSeq, Seq(2))
@@ -209,17 +218,17 @@ class IndexedSignalSpec extends munit.FunSuite {
     c.foreach {cBuffer.addOne}
 
     a ! 1
-    assert(waitForResult(b, 1))
+    assert(waitFor(b, 1))
 
     a ! 2
-    assert(waitForResult(b, 2))
-    waitForResult(b.isClosedSignal, true)
+    assert(waitFor(b, 2))
+    waitFor(b.isClosedSignal, true)
 
     a ! 3
-    assert(waitForResult(c, 3))
+    assert(waitFor(c, 3))
 
     a ! 4
-    assert(waitForResult(c, 4))
+    assert(waitFor(c, 4))
 
     assertEquals(bBuffer.result().toSeq, Seq(1, 2))
     assertEquals(cBuffer.result().toSeq, Seq(3, 4))
@@ -241,11 +250,11 @@ class IndexedSignalSpec extends munit.FunSuite {
     }
 
     a ! 1
-    assert(waitForResult(a, 1))
+    assert(waitFor(a, 1))
     a ! 2
-    assert(waitForResult(a, 2))
+    assert(waitFor(a, 2))
     a ! 3
-    assert(waitForResult(a, 3))
+    assert(waitFor(a, 3))
 
     assertEquals(hn, 1)
 
@@ -265,11 +274,11 @@ class IndexedSignalSpec extends munit.FunSuite {
     f.foreach(fValue = _)
 
     a ! 1
-    assert(waitForResult(a, 1))
+    assert(waitFor(a, 1))
     a ! 2
-    assert(waitForResult(a, 2))
+    assert(waitFor(a, 2))
     a ! 3
-    assert(waitForResult(a, 3))
+    assert(waitFor(a, 3))
 
     assertEquals(cBuffer.result().toSeq, Seq(1, 2))
     assertEquals(fValue, 2)
