@@ -1,5 +1,6 @@
-package io.github.makingthematrix.signals3.generators
+package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.generators.{GeneratorSignal, GeneratorStream}
 import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, result, tryResult, waitFor}
 import io.github.makingthematrix.signals3.{CloseableFuture, DispatchQueue, DoneSignal, EventContext, SerialDispatchQueue, Signal}
 
@@ -8,7 +9,7 @@ import scala.concurrent.duration.*
 import scala.concurrent.{Future, Promise}
 import scala.language.postfixOps
 
-class TransformersSpec extends munit.FunSuite {
+class CloseableTransformersSpec extends munit.FunSuite {
   private val eventContext = EventContext()
   given dq: DispatchQueue = SerialDispatchQueue()
 
@@ -31,7 +32,7 @@ class TransformersSpec extends munit.FunSuite {
       b = t
       res
     }
-    val mapped = Transformers.map(original) { _._2 }
+    val mapped = Closeable.map(original) { _._2 }
 
     val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Int]
@@ -57,7 +58,7 @@ class TransformersSpec extends munit.FunSuite {
       res
     }
 
-    val signal = Transformers.signalFromStream(Transformers.map(original) { _._2 })
+    val signal = Closeable.signalFromStream(Closeable.map(original) { _._2 })
 
     val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Int]
@@ -83,7 +84,7 @@ class TransformersSpec extends munit.FunSuite {
       res
     }
 
-    val signal = Transformers.signalFromStream(0, Transformers.map(original) { _._2 })
+    val signal = Closeable.signalFromStream(0, Closeable.map(original) { _._2 })
 
     val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Int]
@@ -100,7 +101,7 @@ class TransformersSpec extends munit.FunSuite {
 
   test("counter stream but filtered only for odd integers") {
     var counter = 0
-    val stream = Transformers.filter[Int](GeneratorStream.generate(HeartBeatMs) { counter += 1; counter }) {
+    val stream = Closeable.filter[Int](GeneratorStream.generate(HeartBeatMs) { counter += 1; counter }) {
       _ % 2 != 0
     }
 
@@ -117,7 +118,7 @@ class TransformersSpec extends munit.FunSuite {
   }
 
   test("counter signal but filtered only for odd integers") {
-    val signal = Transformers.filter[Int](GeneratorSignal.counter(HeartBeatMs)) { _ % 2 != 0 }
+    val signal = Closeable.filter[Int](GeneratorSignal.counter(HeartBeatMs)) { _ % 2 != 0 }
 
     val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Int]
@@ -144,7 +145,7 @@ class TransformersSpec extends munit.FunSuite {
       res
     }
 
-    val mapped = Transformers.mapSync(original)(mapInFuture)
+    val mapped = Closeable.mapSync(original)(mapInFuture)
 
     val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Int]
@@ -161,7 +162,7 @@ class TransformersSpec extends munit.FunSuite {
 
   test("counter stream but collecting only odd integers as strings") {
     var counter = 0
-    val stream = Transformers.collect(
+    val stream = Closeable.collect(
       GeneratorStream.generate(HeartBeatMs) { counter += 1; counter }
     ){
       case n if n % 2 != 0 => n.toString
@@ -180,7 +181,7 @@ class TransformersSpec extends munit.FunSuite {
   }
 
   test("counter signal but collecting only odd integers as strings") {
-    val signal = Transformers.collect(GeneratorSignal.counter(HeartBeatMs)) {
+    val signal = Closeable.collect(GeneratorSignal.counter(HeartBeatMs)) {
       case n if n % 2 != 0 => n.toString
     }
 
@@ -208,7 +209,7 @@ class TransformersSpec extends munit.FunSuite {
       c2
     }
 
-    val stream = Transformers.zip(
+    val stream = Closeable.zip(
       GeneratorStream.generate(HeartBeatMs)(bump1()),
       GeneratorStream.generate((HeartBeatMs.toMillis + 10L).millis)(bump2())
     )
@@ -226,9 +227,9 @@ class TransformersSpec extends munit.FunSuite {
   }
 
   test("zip two generator signals") {
-    val signal = Transformers.zip(
+    val signal = Closeable.zip(
       GeneratorSignal.counter(HeartBeatMs),
-      Transformers.map(GeneratorSignal.counter((HeartBeatMs.toMillis + 10L).millis)){ n => -n },
+      Closeable.map(GeneratorSignal.counter((HeartBeatMs.toMillis + 10L).millis)){ n => -n },
     )
 
     val isSuccess = Signal(false)
@@ -244,7 +245,7 @@ class TransformersSpec extends munit.FunSuite {
   }
 
   test("zip three generator signals") {
-    val signal = Transformers.zip(
+    val signal = Closeable.zip(
       GeneratorSignal.counter(HeartBeatMs),
       GeneratorSignal.counter((HeartBeatMs.toMillis + 10L).millis),
       GeneratorSignal.counter((HeartBeatMs.toMillis + 20L).millis)
@@ -263,7 +264,7 @@ class TransformersSpec extends munit.FunSuite {
   }
 
   test("sequence three generator signals") {
-    val signal = Transformers.sequence(
+    val signal = Closeable.sequence(
       GeneratorSignal.counter(HeartBeatMs),
       GeneratorSignal.counter((HeartBeatMs.toMillis + 10L).millis),
       GeneratorSignal.counter((HeartBeatMs.toMillis + 20L).millis)
@@ -282,9 +283,9 @@ class TransformersSpec extends munit.FunSuite {
   }
 
   test("combine two generator signals") {
-    val signal = Transformers.combine(
+    val signal = Closeable.combine(
       GeneratorSignal.counter(HeartBeatMs),
-      Transformers.map(GeneratorSignal.counter((HeartBeatMs.toMillis + 20L).millis)) { n => -n },
+      Closeable.map(GeneratorSignal.counter((HeartBeatMs.toMillis + 20L).millis)) { n => -n },
     ) {
       case (a, b) => s"$a:$b"
     }
@@ -305,7 +306,7 @@ class TransformersSpec extends munit.FunSuite {
     val delay = 250.millis
     val promise = Promise[Long]()
     val t = System.currentTimeMillis()
-    val stream = Transformers.streamFromFuture(CloseableFuture.delay(delay))
+    val stream = Closeable.streamFromFuture(CloseableFuture.delay(delay))
 
     stream.onCurrent { _ => promise.success(System.currentTimeMillis() - t) }
 
@@ -317,7 +318,7 @@ class TransformersSpec extends munit.FunSuite {
     val promise = Promise[Long]()
     val t = System.currentTimeMillis()
     val cFuture = CloseableFuture.delay(delay)
-    val stream = Transformers.streamFromFuture(cFuture)
+    val stream = Closeable.streamFromFuture(cFuture)
 
     stream.onCurrent { _ => promise.success(System.currentTimeMillis() - t) }
 
@@ -332,7 +333,7 @@ class TransformersSpec extends munit.FunSuite {
     val delay = 250.millis
     val promise = Promise[Long]()
     val t = System.currentTimeMillis()
-    val signal = Transformers.signalFromFuture(CloseableFuture.delay(delay))
+    val signal = Closeable.signalFromFuture(CloseableFuture.delay(delay))
 
     signal.onCurrent { _ => promise.success(System.currentTimeMillis() - t) }
 
@@ -344,7 +345,7 @@ class TransformersSpec extends munit.FunSuite {
     val promise = Promise[Long]()
     val t = System.currentTimeMillis()
     val cFuture = CloseableFuture.delay(delay)
-    val signal = Transformers.signalFromFuture(cFuture)
+    val signal = Closeable.signalFromFuture(cFuture)
 
     signal.onCurrent { _ => promise.success(System.currentTimeMillis() - t) }
 
@@ -357,7 +358,7 @@ class TransformersSpec extends munit.FunSuite {
 
   test("Transformed stream calls onClose exactly once") {
     val original = GeneratorStream.heartbeat(HeartBeatMs)
-    val mapped = Transformers.map(original)(_ => "foo")
+    val mapped = Closeable.map(original)(_ => "foo")
 
     val isClosed = Signal(0)
     mapped.onClose { isClosed.mutate(_ + 1)  }
@@ -368,7 +369,7 @@ class TransformersSpec extends munit.FunSuite {
 
   test("Original stream calls onClose exactly once") {
     val original = GeneratorStream.heartbeat(HeartBeatMs)
-    val mapped = Transformers.map(original)(_ => "foo")
+    val mapped = Closeable.map(original)(_ => "foo")
 
     val isClosed = Signal(0)
     original.onClose { isClosed.mutate(_ + 1) }
@@ -379,7 +380,7 @@ class TransformersSpec extends munit.FunSuite {
 
   test("Closing the original stream calls onClose on the transformed one") {
     val original = GeneratorStream.heartbeat(HeartBeatMs)
-    val mapped = Transformers.map(original)(_ => "foo")
+    val mapped = Closeable.map(original)(_ => "foo")
 
     val isClosed = Signal(0)
     mapped.onClose { isClosed.mutate(_ + 1) }
@@ -394,7 +395,7 @@ class TransformersSpec extends munit.FunSuite {
   test("In a zipped stream, closing the transformed one closes all originals") {
     val original1 = GeneratorStream.heartbeat(HeartBeatMs)
     val original2 = GeneratorStream.heartbeat((HeartBeatMs.toMillis * 2).millis)
-    val zipped = Transformers.zip(original1, original2)
+    val zipped = Closeable.zip(original1, original2)
 
     zipped.close()
 
@@ -410,7 +411,7 @@ class TransformersSpec extends munit.FunSuite {
     original1.onClose { isClosed.mutate(_ + 1) }
     val original2 = GeneratorStream.heartbeat((HeartBeatMs.toMillis * 2).millis)
     original2.onClose { isClosed.mutate(_ + 1) }
-    val zipped = Transformers.zip(original1, original2)
+    val zipped = Closeable.zip(original1, original2)
     zipped.onClose { isClosed.mutate(_ + 1) }
 
     zipped.close()
@@ -428,7 +429,7 @@ class TransformersSpec extends munit.FunSuite {
     original1.onClose {isClosed.mutate(_ + 1)}
     val original2 = GeneratorStream.heartbeat((HeartBeatMs.toMillis * 2).millis)
     original2.onClose {isClosed.mutate(_ + 1)}
-    val zipped = Transformers.zip(original1, original2)
+    val zipped = Closeable.zip(original1, original2)
     zipped.onClose {isClosed.mutate(_ + 1)}
 
     original1.close()
@@ -456,8 +457,8 @@ class TransformersSpec extends munit.FunSuite {
       counter += 1
       counter
     }
-    val withRecover = Transformers.recover(original, _ => Some(-1))
-    val mapped = Transformers.map(withRecover) { n =>
+    val withRecover = Closeable.recover(original, _ => Some(-1))
+    val mapped = Closeable.map(withRecover) { n =>
       if (n == 2) throw new RuntimeException("recover test")
       n
     }
@@ -481,8 +482,8 @@ class TransformersSpec extends munit.FunSuite {
       counter += 1
       counter
     }
-    val withRecover = Transformers.recover(original, _ => None)
-    val mapped = Transformers.map(withRecover) { n =>
+    val withRecover = Closeable.recover(original, _ => None)
+    val mapped = Closeable.map(withRecover) { n =>
       if (n == 1) throw new RuntimeException("recover test")
       n
     }
@@ -499,8 +500,8 @@ class TransformersSpec extends munit.FunSuite {
 
   test("CloseableSignal recover from exception in map") {
     val original = GeneratorSignal.counter(HeartBeatMs)
-    val withRecover = Transformers.recover(original, _ => Some(-1))
-    val mapped = Transformers.map(withRecover) { n =>
+    val withRecover = Closeable.recover(original, _ => Some(-1))
+    val mapped = Closeable.map(withRecover) { n =>
       if (n == 2) throw new RuntimeException("recover test")
       n
     }
@@ -520,8 +521,8 @@ class TransformersSpec extends munit.FunSuite {
 
   test("CloseableSignal recover returns None on exception") {
     val original = GeneratorSignal.counter(HeartBeatMs)
-    val withRecover = Transformers.recover(original, _ => None)
-    val mapped = Transformers.map(withRecover) { n =>
+    val withRecover = Closeable.recover(original, _ => None)
+    val mapped = Closeable.map(withRecover) { n =>
       if (n == 0) throw new RuntimeException("recover test")
       n
     }
@@ -542,8 +543,8 @@ class TransformersSpec extends munit.FunSuite {
       counter += 1
       counter
     }
-    val withRecover = Transformers.recoverWith(original, { case _: IllegalArgumentException => Some(-1) })
-    val mapped = Transformers.map(withRecover) { n =>
+    val withRecover = Closeable.recoverWith(original, { case _: IllegalArgumentException => Some(-1) })
+    val mapped = Closeable.map(withRecover) { n =>
       if (n == 2) throw new IllegalArgumentException("recover test")
       n
     }
@@ -567,8 +568,8 @@ class TransformersSpec extends munit.FunSuite {
       counter += 1
       counter
     }
-    val withRecover = Transformers.recoverWith(original, { case _: IllegalArgumentException => Some(-1) })
-    val mapped = Transformers.map(withRecover) { n =>
+    val withRecover = Closeable.recoverWith(original, { case _: IllegalArgumentException => Some(-1) })
+    val mapped = Closeable.map(withRecover) { n =>
       if (n == 2) throw new RuntimeException("not matched")
       n
     }
@@ -587,8 +588,8 @@ class TransformersSpec extends munit.FunSuite {
       counter += 1
       counter
     }
-    val withRecover = Transformers.recoverWith(original, { case e: IllegalArgumentException => Some(e.getMessage.length) })
-    val mapped = Transformers.map(withRecover) { n =>
+    val withRecover = Closeable.recoverWith(original, { case e: IllegalArgumentException => Some(e.getMessage.length) })
+    val mapped = Closeable.map(withRecover) { n =>
       if (n == 2) throw new IllegalArgumentException("recover me")
       n
     }
@@ -610,8 +611,8 @@ class TransformersSpec extends munit.FunSuite {
 
   test("CloseableSignal recoverWith from matching exception") {
     val original = GeneratorSignal.counter(HeartBeatMs)
-    val withRecover = Transformers.recoverWith(original, { case _: IllegalArgumentException => Some(-1) })
-    val mapped = Transformers.map(withRecover) { n =>
+    val withRecover = Closeable.recoverWith(original, { case _: IllegalArgumentException => Some(-1) })
+    val mapped = Closeable.map(withRecover) { n =>
       if (n == 2) throw new IllegalArgumentException("recover test")
       n
     }
@@ -631,8 +632,8 @@ class TransformersSpec extends munit.FunSuite {
 
   test("CloseableSignal recoverWith does not catch non-matching exception") {
     val original = GeneratorSignal.counter(HeartBeatMs)
-    val withRecover = Transformers.recoverWith(original, { case _: IllegalArgumentException => Some(-1) })
-    val mapped = Transformers.map(withRecover) { n =>
+    val withRecover = Closeable.recoverWith(original, { case _: IllegalArgumentException => Some(-1) })
+    val mapped = Closeable.map(withRecover) { n =>
       if (n == 2) throw new RuntimeException("not matched")
       n
     }
@@ -647,8 +648,8 @@ class TransformersSpec extends munit.FunSuite {
 
   test("CloseableSignal recoverWith recovers with transformed value") {
     val original = GeneratorSignal.counter(HeartBeatMs)
-    val withRecover = Transformers.recoverWith(original, { case e: IllegalArgumentException => Some(e.getMessage.length) })
-    val mapped = Transformers.map(withRecover) { n =>
+    val withRecover = Closeable.recoverWith(original, { case e: IllegalArgumentException => Some(e.getMessage.length) })
+    val mapped = Closeable.map(withRecover) { n =>
       if (n == 2) throw new IllegalArgumentException("recover me")
       n
     }
@@ -674,7 +675,7 @@ class TransformersSpec extends munit.FunSuite {
       counter += 1
       if (counter <= 4) counter else counter - 5
     }
-    val scanned = Transformers.scan(original, 0)(_ + _)
+    val scanned = Closeable.scan(original, 0)(_ + _)
 
     val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Int]
@@ -695,7 +696,7 @@ class TransformersSpec extends munit.FunSuite {
       counter += 1
       counter
     }
-    val scanned = Transformers.scan(original, 10)(_ + _)
+    val scanned = Closeable.scan(original, 10)(_ + _)
 
     val isSuccess = DoneSignal()
     var  res = List[Int]()
@@ -714,7 +715,7 @@ class TransformersSpec extends munit.FunSuite {
 
   test("CloseableSignal scan accumulates values") {
     val original = GeneratorSignal.counter(HeartBeatMs)
-    val scanned = Transformers.scan(original, 0)(_ + _)
+    val scanned = Closeable.scan(original, 0)(_ + _)
 
     val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Int]
@@ -731,7 +732,7 @@ class TransformersSpec extends munit.FunSuite {
 
   test("CloseableSignal scan with initial value") {
     val original = GeneratorSignal.generate(1, HeartBeatMs)(_ + 1)
-    val scanned = Transformers.scan(original, 10)(_ + _)
+    val scanned = Closeable.scan(original, 10)(_ + _)
 
     val isSuccess = DoneSignal()
     var  res = List[Int]()
@@ -754,7 +755,7 @@ class TransformersSpec extends munit.FunSuite {
       counter += 1
       counter
     }
-    val grouped = Transformers.grouped(original, 3)
+    val grouped = Closeable.grouped(original, 3)
 
     val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Seq[Int]]
@@ -775,7 +776,7 @@ class TransformersSpec extends munit.FunSuite {
       counter += 1
       if (counter <= 5) counter else counter - 6
     }
-    val grouped = Transformers.grouped(original, 3)
+    val grouped = Closeable.grouped(original, 3)
 
     val isSuccess = DoneSignal()
     var res = List[Seq[Int]]()
@@ -794,7 +795,7 @@ class TransformersSpec extends munit.FunSuite {
 
   test("CloseableSignal grouped batches values") {
     val original = GeneratorSignal.counter(HeartBeatMs)
-    val grouped = Transformers.grouped(original, 3)
+    val grouped = Closeable.grouped(original, 3)
 
     val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Seq[Int]]
@@ -815,7 +816,7 @@ class TransformersSpec extends munit.FunSuite {
       counter += 1
       if (counter <= 5) counter else -1
     }
-    val grouped = Transformers.grouped(original, 3)
+    val grouped = Closeable.grouped(original, 3)
 
     val isSuccess = DoneSignal()
     var res = List[Seq[Int]]()
@@ -841,7 +842,7 @@ class TransformersSpec extends munit.FunSuite {
     // Create groups: 1,3,5 are odd (true), 2,4,6 are even (false)
     // But since they come consecutively with same predicate result, they get grouped
     // Actually all odd numbers will be in different groups since 1(true), 2(false), 3(true), 4(false)...
-    val grouped = Transformers.groupBy(original, _ % 2 != 0)
+    val grouped = Closeable.groupBy(original, _ % 2 != 0)
 
     val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Seq[Int]]
@@ -860,7 +861,7 @@ class TransformersSpec extends munit.FunSuite {
 
   test("CloseableSignal groupBy groups consecutive values by predicate") {
     val original = GeneratorSignal.counter(HeartBeatMs)
-    val grouped = Transformers.groupBy(original, _ % 2 == 0)
+    val grouped = Closeable.groupBy(original, _ % 2 == 0)
 
     val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Seq[Int]]
@@ -883,7 +884,7 @@ class TransformersSpec extends munit.FunSuite {
       counter += 1
       counter
     }
-    val dropped = Transformers.drop(original, 3)
+    val dropped = Closeable.drop(original, 3)
 
     val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Int]
@@ -904,7 +905,7 @@ class TransformersSpec extends munit.FunSuite {
       counter += 1
       counter
     }
-    val dropped = Transformers.drop(original, 0)
+    val dropped = Closeable.drop(original, 0)
 
     val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Int]
@@ -926,7 +927,7 @@ class TransformersSpec extends munit.FunSuite {
       counter += 1
       if (counter <= 3) counter else counter - 4
     }
-    val dropped = Transformers.drop(original, 10)
+    val dropped = Closeable.drop(original, 10)
 
     val isClosed = Signal(false)
     dropped.onClose { isClosed ! true }
@@ -940,7 +941,7 @@ class TransformersSpec extends munit.FunSuite {
 
   test("CloseableSignal drop skips first N values") {
     val original = GeneratorSignal.counter(HeartBeatMs)
-    val dropped = Transformers.drop(original, 3)
+    val dropped = Closeable.drop(original, 3)
 
     val isSuccess = DoneSignal()
     var res = List[Int]()
@@ -957,7 +958,7 @@ class TransformersSpec extends munit.FunSuite {
 
   test("CloseableSignal drop with N = 0 returns original") {
     val original = GeneratorSignal.counter(HeartBeatMs)
-    val dropped = Transformers.drop(original, 0)
+    val dropped = Closeable.drop(original, 0)
 
     val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Int]
@@ -980,7 +981,7 @@ class TransformersSpec extends munit.FunSuite {
       counter += 1
       counter
     }
-    val dropped = Transformers.dropWhile(original, _ < 3)
+    val dropped = Closeable.dropWhile(original, _ < 3)
 
     val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Int]
@@ -1001,7 +1002,7 @@ class TransformersSpec extends munit.FunSuite {
       counter += 1
       counter
     }
-    val dropped = Transformers.dropWhile(original, _ < 10)
+    val dropped = Closeable.dropWhile(original, _ < 10)
 
     val isClosed = Signal(false)
     dropped.onClose { isClosed ! true }
@@ -1017,7 +1018,7 @@ class TransformersSpec extends munit.FunSuite {
       counter += 1
       counter
     }
-    val dropped = Transformers.dropWhile(original, _ > 10)
+    val dropped = Closeable.dropWhile(original, _ > 10)
 
     val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Int]
@@ -1036,7 +1037,7 @@ class TransformersSpec extends munit.FunSuite {
 
   test("CloseableSignal dropWhile skips values while predicate is true") {
     val original = GeneratorSignal.counter(HeartBeatMs)
-    val dropped = Transformers.dropWhile(original, _ < 3)
+    val dropped = Closeable.dropWhile(original, _ < 3)
 
     val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Int]
@@ -1057,7 +1058,7 @@ class TransformersSpec extends munit.FunSuite {
       counter += 1
       counter
     }
-    val dropped = Transformers.dropWhile(original, _ < 3)
+    val dropped = Closeable.dropWhile(original, _ < 3)
 
     val isSuccess = Signal(false)
     val builder = mutable.ArrayBuilder.make[Int]
