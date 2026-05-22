@@ -266,7 +266,7 @@ object GeneratorSignal {
     */
   inline def unfold[V, Z](init: V, interval: FiniteDuration)(update: V => (V, Z))
                          (using ExecutionContext): CloseableSignal[Z] =
-    Transformers.map[(V, Z), Z](
+    Closeable.map[(V, Z), Z](
       new CloseableGeneratorSignal[(V, Z)](update(init), { (v, _) => update(v) }, interval, _ => false).tap(_.initialize())
     )(_._2)
 
@@ -296,7 +296,7 @@ object GeneratorSignal {
     */
   inline def unfold[V, Z](init: V, interval: V => FiniteDuration)(update: V => (V, Z))
                          (using ExecutionContext): CloseableSignal[Z] =
-    Transformers.map[(V, Z), Z](
+    Closeable.map[(V, Z), Z](
       new CloseableGeneratorSignal[(V, Z)](
         update(init),
         { case (v, _) => update(v) },
