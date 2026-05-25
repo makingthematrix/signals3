@@ -27,9 +27,12 @@ class TakeStream[E](source: Stream[E], take: Int)
       inc()
       dispatch(event, sourceContext)
     }
-    if (isClosed) lastPromise.foreach {
-      case p if !p.isCompleted => p.trySuccess(event)
-      case _ =>
+    if (isClosed) {
+      close()
+      lastPromise.foreach {
+        case p if !p.isCompleted => p.trySuccess(event)
+        case _ =>
+      }
     }
   }
 

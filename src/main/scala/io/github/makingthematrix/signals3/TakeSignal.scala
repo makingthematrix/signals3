@@ -26,15 +26,17 @@ final class TakeSignal[V](source: Signal[V], take: Int)
     }
     else current
 
-  private def takeOne(value: V): Unit =
-    if (incAndGet() < take) publish(value)
-    else {
-      close()
+  private def takeOne(value: V): Unit = if (counter < take) {
+    publish(value)
+    inc()
+    if (counter == take) {
       lastPromise match {
         case Some(promise) if !promise.isCompleted => promise.trySuccess(value)
         case _ =>
       }
+      close()
     }
+  }
 
   /**
    * A signal of all value changes of this signal except the last one. See [[Finite.last]].

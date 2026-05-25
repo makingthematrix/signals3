@@ -1,6 +1,10 @@
 package io.github.makingthematrix.signals3
 
-import scala.concurrent.{Future, Promise}
+import io.github.makingthematrix.signals3.Signal.SignalSubscriber
+import io.github.makingthematrix.signals3.Stream.EventSubscriber
+
+import scala.annotation.static
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.chaining.scalaUtilChainingOps
 
 /**
@@ -29,4 +33,127 @@ trait Finite[T] extends CanBeClosed {
 object Finite {
   type FiniteStream[E] = Stream[E] & Finite[E]
   type FiniteSignal[V] = Signal[V] & Finite[V]
+  
+  extension [E](stream: FiniteStream[E]) {
+    def >>(next: => Stream[E]): Stream[E] = ChainedStream[E](stream, next)
+    def >>>(next: => FiniteStream[E]): FiniteStream[E] = ChainedFiniteStream[E](stream, next)
+  }
+
+  extension [V](signal: FiniteSignal[V]) {
+    def >>(next: => Signal[V]): Signal[V] = ChainedSignal(signal, next)
+    def >>>(next: => FiniteSignal[V]): Signal[V] = ChainedSignal(signal, next)
+  }
+
+  @static final private[signals3] class ChainedSignal[V](first: FiniteSignal[V], second: => Signal[V])
+    extends Signal[V] with SignalSubscriber {
+    override protected[signals3] def onWire(): Unit =
+      if (!first.isClosed) {
+        first.subscribe(this)
+        first.onClose {
+          second.subscribe(this)
+          first.unsubscribe(this)
+        }
+      } else {
+        second.subscribe(this)
+      }
+
+    override protected[signals3] def onUnwire(): Unit =
+      if (!first.isClosed) first.unsubscribe(this)
+      else second.unsubscribe(this)
+
+    private def computeValue(current: Option[V]): Option[V] = {
+      if (!first.isClosed && current != first.value) first.value
+      else if (current != second.value) second.value
+      else current
+    }
+
+    override protected[signals3] def changed(currentContext: Option[ExecutionContext]): Unit =
+      update(computeValue, currentContext)
+  }
+
+  @static final private[signals3] class ChainedStream[E](first: FiniteStream[E], second: => Stream[E])
+    extends Stream[E] with EventSubscriber[E] {
+    override protected[signals3] def onWire(): Unit =
+      if (!first.isClosed) {
+        first.subscribe(this)
+        first.onClose {
+          second.subscribe(this)
+          first.unsubscribe(this)
+        }
+      }
+      else {
+        second.subscribe(this)
+      }
+
+    override protected[signals3] def onUnwire(): Unit =
+      if (!first.isClosed) first.unsubscribe(this)
+      else second.unsubscribe(this)
+
+    override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
+      dispatch(event, currentContext)
+  }
+
+  @static final private[signals3] class ChainedFiniteSignal[V](first: FiniteSignal[V], second: => FiniteSignal[V])
+    extends Signal[V] with Finite[V] with SignalSubscriber {
+    override protected[signals3] def onWire(): Unit =
+      if (!first.isClosed) {
+        first.subscribe(this)
+        first.onClose {
+          second.subscribe(this)
+          first.unsubscribe(this)
+        }
+      } else if (!second.isClosed) {
+        second.subscribe(this)
+        second.onClose {
+          second.subscribe(this)
+        }
+      }
+
+    override protected[signals3] def onUnwire(): Unit =
+      if (!first.isClosed) first.unsubscribe(this)
+      else if (!second.isClosed) second.unsubscribe(this)
+    
+    private def computeValue(current: Option[V]): Option[V] = {
+      if (!first.isClosed && current != first.value) first.value
+      else if (current != second.value) second.value
+      else current
+    }
+
+    override protected[signals3] def changed(currentContext: Option[ExecutionContext]): Unit = {
+      update(computeValue, currentContext)
+      if (first.isClosed && second.isClosed && !isClosed) {
+        close()
+        lastPromise.foreach(_.completeWith(second.last))
+      }
+    }
+  }
+  
+  @static final private[signals3] class ChainedFiniteStream[E](first: FiniteStream[E], second: => FiniteStream[E])
+    extends Stream[E] with Finite[E] with EventSubscriber[E]{
+    override protected[signals3] def onWire(): Unit =
+      if (!first.isClosed) {
+        first.subscribe(this)
+        first.onClose {
+          second.subscribe(this)
+          first.unsubscribe(this)
+        }
+      } else if (!second.isClosed) {
+        second.subscribe(this)
+        second.onClose {
+          second.subscribe(this)
+        }
+      }
+
+    override protected[signals3] def onUnwire(): Unit =
+      if (!first.isClosed) first.unsubscribe(this)
+      else if (!second.isClosed) second.unsubscribe(this)
+
+    override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit = if (!isClosed) {
+      dispatch(event, currentContext)
+      if (first.isClosed && second.isClosed && !isClosed) {
+        close()
+        lastPromise.foreach(_.completeWith(second.last))
+      }
+    }
+  }
 }

@@ -280,6 +280,9 @@ class IndexedSignalSpec extends munit.FunSuite {
     a ! 3
     assert(waitFor(a, 3))
 
+    await(f)
+    assert(c.isClosed)
+
     assertEquals(cBuffer.result().toSeq, Seq(1, 2))
     assertEquals(fValue, 2)
   }
