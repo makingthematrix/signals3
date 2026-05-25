@@ -33,18 +33,19 @@ trait Finite[T] extends CanBeClosed {
 object Finite {
   type FiniteStream[E] = Stream[E] & Finite[E]
   type FiniteSignal[V] = Signal[V] & Finite[V]
-  
+
+  // todo: Allow for chaining streams of subtypes
   extension [E](stream: FiniteStream[E]) {
     def >>(next: => Stream[E]): Stream[E] = ChainedStream[E](stream, next)
     def >>>(next: => FiniteStream[E]): FiniteStream[E] = ChainedFiniteStream[E](stream, next)
   }
 
   extension [V](signal: FiniteSignal[V]) {
-    def >>(next: => Signal[V]): Signal[V] = ChainedSignal(signal, next)
-    def >>>(next: => FiniteSignal[V]): Signal[V] = ChainedSignal(signal, next)
+    def >>[W <: V](next: => Signal[W]): Signal[V] = ChainedSignal(signal, next)
+    def >>>[W <: V](next: => FiniteSignal[W]): FiniteSignal[V] = ChainedFiniteSignal(signal, next)
   }
 
-  @static final private[signals3] class ChainedSignal[V](first: FiniteSignal[V], second: => Signal[V])
+  @static final private[signals3] class ChainedSignal[V, W <: V](first: FiniteSignal[V], second: => Signal[W])
     extends Signal[V] with SignalSubscriber {
     override protected[signals3] def onWire(): Unit =
       if (!first.isClosed) {
@@ -93,7 +94,7 @@ object Finite {
       dispatch(event, currentContext)
   }
 
-  @static final private[signals3] class ChainedFiniteSignal[V](first: FiniteSignal[V], second: => FiniteSignal[V])
+  @static final private[signals3] class ChainedFiniteSignal[V, W <: V](first: FiniteSignal[V], second: => FiniteSignal[W])
     extends Signal[V] with Finite[V] with SignalSubscriber {
     override protected[signals3] def onWire(): Unit =
       if (!first.isClosed) {
@@ -112,7 +113,7 @@ object Finite {
     override protected[signals3] def onUnwire(): Unit =
       if (!first.isClosed) first.unsubscribe(this)
       else if (!second.isClosed) second.unsubscribe(this)
-    
+
     private def computeValue(current: Option[V]): Option[V] = {
       if (!first.isClosed && current != first.value) first.value
       else if (current != second.value) second.value
@@ -127,7 +128,7 @@ object Finite {
       }
     }
   }
-  
+
   @static final private[signals3] class ChainedFiniteStream[E](first: FiniteStream[E], second: => FiniteStream[E])
     extends Stream[E] with Finite[E] with EventSubscriber[E]{
     override protected[signals3] def onWire(): Unit =
