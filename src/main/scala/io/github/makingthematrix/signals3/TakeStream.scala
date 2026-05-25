@@ -17,7 +17,7 @@ import scala.util.{Failure, Success}
  * @param take The number of events to take.
  * @tparam E The type of the events emitted by the stream.
  */
-class TakeStream[E](source: Stream[E], take: Int)
+final class TakeStream[E](source: Stream[E], take: Int)
   extends IndexedStream[E](source) with Finite[E] {
   
   override def isClosed: Boolean = super.isClosed || counter >= take

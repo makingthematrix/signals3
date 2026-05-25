@@ -110,11 +110,11 @@ class FiniteSpec extends munit.FunSuite {
   }
 
   test("Chain finite signals with >>> operator") {
-    val a: SourceStream[Int] = Stream()
-    val b: FiniteStream[Int] = a.take(3)
-    val c: SourceStream[Int] = Stream()
-    val d: FiniteStream[Int] = c.take(2)
-    val e: FiniteStream[Int] = b >>> d
+    val a: SourceSignal[Int] = Signal()
+    val b: FiniteSignal[Int] = a.take(3)
+    val c: SourceSignal[Int] = Signal()
+    val d: FiniteSignal[Int] = c.take(2)
+    val e: FiniteSignal[Int] = b >>> d
 
     var lastValue = 0
     e.last.foreach(lastValue = _)
@@ -132,17 +132,18 @@ class FiniteSpec extends munit.FunSuite {
     assertEquals(res.reverse, List(1, 2))
 
     a ! 3
-    waitFor(d, 3)
+    waitFor(e, 3)
     assert(b.isClosed)
-    assertEquals(res.reverse, List(1, 2, 3))
+    assertEquals(res.reverse, List(1, 2, 3, 20))
 
     a ! 4
     c ! 30
-    c ! 40
-    awaitAllTasks
-    assertEquals(res.reverse, Seq(1, 2, 3, 30, 40))
+    waitFor(e, 30)
     assert(d.isClosed)
     assert(e.isClosed)
-    assertEquals(lastValue, 40)
+    c ! 40
+    awaitAllTasks
+    assertEquals(res.reverse, Seq(1, 2, 3, 20, 30))
+    assertEquals(lastValue, 30)
   }
 }
