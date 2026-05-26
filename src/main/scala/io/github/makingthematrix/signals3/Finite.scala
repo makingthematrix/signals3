@@ -93,13 +93,18 @@ object Finite {
     override protected[signals3] def onWire(): Unit =
       if (!first.isClosed) {
         first.subscribe(this)
-        first.onClose { second.subscribe(this) }
+        first.onClose {
+          second.subscribe(this)
+          first.unsubscribe(this)
+        }
       } else {
         second.subscribe(this)
       }
 
-    override protected[signals3] def onUnwire(): Unit =
-      if (!first.isClosed) first.unsubscribe(this) else second.unsubscribe(this)
+    override protected[signals3] def onUnwire(): Unit = {
+      first.unsubscribe(this)
+      second.unsubscribe(this)
+    }
 
     private def computeValue(current: Option[V]): Option[V] =
       if (!first.isClosed && current != first.value) first.value
@@ -115,13 +120,18 @@ object Finite {
     override protected[signals3] def onWire(): Unit =
       if (!first.isClosed) {
         first.subscribe(this)
-        first.onClose { second.subscribe(this) }
+        first.onClose {
+          second.subscribe(this)
+          first.unsubscribe(this)
+        }
       } else {
         second.subscribe(this)
       }
 
-    override protected[signals3] def onUnwire(): Unit =
-      if (!first.isClosed) first.unsubscribe(this) else second.unsubscribe(this)
+    override protected[signals3] def onUnwire(): Unit = {
+      first.unsubscribe(this)
+      second.unsubscribe(this)
+    }
 
     override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
       dispatch(event, currentContext)
@@ -132,8 +142,9 @@ object Finite {
 
     private inline def switchToSecond(): Unit = {
       second.subscribe(this)
+      first.unsubscribe(this)
       lastPromise.foreach(_.completeWith(second.last))
-      second.onClose {close()}
+      second.onClose { close() }
     }
 
     override protected[signals3] def onWire(): Unit =
@@ -160,8 +171,9 @@ object Finite {
     extends Stream[E] with Finite[E] with EventSubscriber[E]{
     private inline def switchToSecond(): Unit = {
       second.subscribe(this)
+      first.unsubscribe(this)
       lastPromise.foreach(_.completeWith(second.last))
-      second.onClose {close()}
+      second.onClose { close() }
     }
 
     override protected[signals3] def onWire(): Unit =
@@ -172,8 +184,10 @@ object Finite {
         switchToSecond()
       }
 
-    override protected[signals3] def onUnwire(): Unit =
-      if (!first.isClosed) first.unsubscribe(this) else if (!second.isClosed) second.unsubscribe(this)
+    override protected[signals3] def onUnwire(): Unit = {
+      first.unsubscribe(this)
+      second.unsubscribe(this)
+    }
 
     override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
       if (!isClosed) dispatch(event, currentContext)
