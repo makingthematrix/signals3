@@ -9,11 +9,11 @@ protected[signals3] final class FlatMapStream[E, V](source: Stream[E], f: E => S
   @volatile private var mapped: Option[Stream[V]] = None
 
   private val subscriber = new EventSubscriber[V]{
-    override protected[signals3] def onEvent(event: V, currentContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent[W <: V](event: W, currentContext: Option[ExecutionContext]): Unit =
       dispatch(event, currentContext)
   }
 
-  override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit = {
+  override protected[signals3] def onEvent[W <: E](event: W, currentContext: Option[ExecutionContext]): Unit = {
     mapped.foreach(_.unsubscribe(subscriber))
     mapped = Some(f(event).tap(_.subscribe(subscriber)))
   }

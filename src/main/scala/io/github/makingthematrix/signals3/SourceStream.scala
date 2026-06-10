@@ -74,7 +74,7 @@ object SourceStream {
     override def publish(event: E): Unit =
       tryDispatch(event, None, recover)
 
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit =
       tryDispatch(event, sourceContext, recover)
 
     private def tryDispatch(event: E, sourceContext: Option[ExecutionContext], recover: Throwable => Option[E]): Unit =
@@ -93,7 +93,7 @@ object SourceStream {
 
     override def publish(event: E): Unit = tryDispatchWith(event, None, recoverWith)
 
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit =
       tryDispatchWith(event, sourceContext, recoverWith)
 
     private def tryDispatchWith(event: E, sourceContext: Option[ExecutionContext], recoverWith: PartialFunction[Throwable, Option[E]]): Unit =
