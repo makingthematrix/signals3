@@ -45,7 +45,7 @@ object Finite {
       * @return A new chained stream
       */
     @targetName("chain")
-    inline def >>(next: => Stream[E]): Stream[E] = ChainedStream[E](stream, next)
+    inline def ::(next: => Stream[E]): Stream[E] = ChainedStream[E](stream, next)
 
     /**
       * Chains two streams of the same event type where both are finite.
@@ -58,7 +58,7 @@ object Finite {
       * @return A new chained finite stream
       */
     @targetName("chainf")
-    inline def >>>(next: => FiniteStream[E]): FiniteStream[E] = ChainedFiniteStream[E](stream, next)
+    inline def :::(next: => FiniteStream[E]): FiniteStream[E] = ChainedFiniteStream[E](stream, next)
   }
 
   extension [V](signal: FiniteSignal[V]) {
@@ -72,7 +72,7 @@ object Finite {
       * @return A new chained signal
       */
     @targetName("chain")
-    inline def >>[W <: V](next: => Signal[W]): Signal[V] = ChainedSignal(signal, next)
+    inline def ::[W <: V](next: => Signal[W]): Signal[V] = ChainedSignal(signal, next)
 
     /**
       * Chains two signals where both are finite.
@@ -85,7 +85,7 @@ object Finite {
       * @return A new chained finite signal
       */
     @targetName("chainf")
-    inline def >>>[W <: V](next: => FiniteSignal[W]): FiniteSignal[V] = ChainedFiniteSignal(signal, next)
+    inline def :::[W <: V](next: => FiniteSignal[W]): FiniteSignal[V] = ChainedFiniteSignal(signal, next)
   }
 
   @static final private[signals3] class ChainedSignal[V, W <: V](first: FiniteSignal[V], second: => Signal[W])
@@ -133,7 +133,7 @@ object Finite {
       second.unsubscribe(this)
     }
 
-    override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent[W <: E](event: W, currentContext: Option[ExecutionContext]): Unit =
       dispatch(event, currentContext)
   }
 
@@ -189,7 +189,7 @@ object Finite {
       second.unsubscribe(this)
     }
 
-    override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent[W <: E](event: W, currentContext: Option[ExecutionContext]): Unit =
       if (!isClosed) dispatch(event, currentContext)
   }
 }

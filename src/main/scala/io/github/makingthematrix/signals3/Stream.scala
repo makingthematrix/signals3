@@ -200,26 +200,12 @@ class Stream[E] extends EventSource[E, EventSubscriber[E]] {
     */
   inline final def join(stream: Stream[E]): Stream[E] = new JoinStream[E](this, stream)
 
-  /** An alias for `join`.
-   * TODO: This is wrong. It's very easy to confuse with how ::: works for sequences and assume that the second stream will
-   * start firing only after the first one finishes. Let's remove this alias from here and from Signal, and instead create
-   * a new ::: functionality in FiniteStream/Signal where it makes sense.
-   * */
-  inline final def :::(stream: Stream[E]): Stream[E] = join(stream)
-
   /**
     * Creates a new stream that emits all the events of the original stream + one event emited by the provided [[Future]].
     * @param future A future which will result with a new event
     * @return A new stream, emitting events from both the original stream and the future.
     */
   inline final def join(future: Future[E])(using ExecutionContext): Stream[E] = join(Stream.apply(future))
-
-  /**
-   * TODO: Similarly to :::, this one shouldn't be here. Let's remove it from here and from Signal.
-   * Instead, there should be a conversion between a Future and a FiniteStream of one element,
-   * and :: can be implemented for FiniteStream as a special case of :::.
-   * */
-  inline final def ::(future: Future[E])(using ExecutionContext): Stream[E] = join(future)
 
   /** A shorthand for registering a subscriber function in this stream which only purpose is to publish events emitted
     * by this stream in a given [[SourceStream]]. The subscriber function will be called in the execution context of the
@@ -404,7 +390,7 @@ object Stream {
 
   @static private[signals3] trait EventSubscriber[E] {
     // 'currentContext' is the context this method IS run in, NOT the context any subsequent methods SHOULD run in
-    protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit
+    protected[signals3] def onEvent[W <: E](event: W, currentContext: Option[ExecutionContext]): Unit
   }
 
   @static final private class StreamSubscription[E](source:            Stream[E],
@@ -413,7 +399,7 @@ object Stream {
                                                    )(using context: WeakReference[EventContext])
     extends BaseSubscription(context) with EventSubscriber[E] {
 
-    override def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
+    override def onEvent[W <: E](event: W, currentContext: Option[ExecutionContext]): Unit =
       if (subscribed)
         executionContext match {
           case Some(ec) if !currentContext.contains(ec) => Future(if (subscribed) Try(f(event)))(using ec)

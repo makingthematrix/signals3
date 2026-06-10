@@ -1,4 +1,4 @@
-val _scalaVersion = "3.8.3"
+val _scalaVersion = "3.8.4"
 
 ThisBuild / organization := "io.github.makingthematrix"
 name := "signals3"
@@ -45,7 +45,7 @@ lazy val root = (project in file("."))
     name := "signals3",
     libraryDependencies ++= Seq(
       //Test dependencies
-      "org.scalameta" %% "munit" % "1.3.0" % "test"
+      "org.scalameta" %% "munit" % "1.3.2" % "test"
     ),
     scalacOptions ++= standardOptions ++ scala3Options
   )

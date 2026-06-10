@@ -117,7 +117,7 @@ class StreamSpec extends munit.FunSuite {
   test("Join the first stream with another and emit an event coming from either of them") {
     val stream1 = Stream[Int]()
     val stream2 = Stream[Int]()
-    val join = stream1 ::: stream2
+    val join = stream1.join(stream2)
 
     val expected = Signal(0)
     val eventReceived = Signal(false)
@@ -143,7 +143,7 @@ class StreamSpec extends munit.FunSuite {
     val stream = Stream[Int]()
     val promise = Promise[Int]()
     val future = promise.future
-    val join = future :: stream
+    val join = Stream.toStream(future).join(stream)
 
     val expected = Signal(0)
     val eventReceived = Signal(false)

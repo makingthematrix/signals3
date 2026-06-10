@@ -20,7 +20,7 @@ class EventSourceSpec extends munit.FunSuite {
 
   private class DummySubscriber[E] extends Stream.EventSubscriber[E] {
     var events: Vector[(E, Option[ExecutionContext])] = Vector.empty
-    override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent[W <: E](event: W, currentContext: Option[ExecutionContext]): Unit =
       events = events :+ (event -> currentContext)
   }
 

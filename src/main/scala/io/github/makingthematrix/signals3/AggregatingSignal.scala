@@ -59,14 +59,13 @@ object AggregatingSignal {
   */
 final class AggregatingSignal[E, V](loader: () => Future[V], sourceStream: Stream[E], updater: (V, E) => V)
                                    (using ec: ExecutionContext)
-  extends Signal[V] with EventSubscriber[E] {
-  self =>
+  extends Signal[V] with EventSubscriber[E] { self =>
   private object valueMonitor
 
   private val loadId = new AtomicInteger(0)
   @volatile private var stash = Vector.empty[E]
 
-  override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit = valueMonitor.synchronized {
+  override protected[signals3] def onEvent[W <: E](event: W, currentContext: Option[ExecutionContext]): Unit = valueMonitor.synchronized {
     if (loadId.intValue() == 0)
       value.foreach(v => self.setValue(Some(updater(v, event)), currentContext))
     else

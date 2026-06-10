@@ -24,7 +24,7 @@ abstract private[signals3] class ProxyStream[A, E](sources: Stream[A]*) extends 
 private[signals3] object ProxyStream {
   @static class RecoverStream[E](source: Stream[E], recover: Throwable => Option[E])
     extends ProxyStream[E, E](source) {
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit =
       try dispatch(event, sourceContext) catch {
         case t: Throwable => recover(t).foreach(dispatch(_, sourceContext))
       }
@@ -32,7 +32,7 @@ private[signals3] object ProxyStream {
 
   @static class RecoverWithStream[E](source: Stream[E], recoverWith: PartialFunction[Throwable, Option[E]])
     extends ProxyStream[E, E](source) {
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit =
       try dispatch(event, sourceContext) catch {
         case t: Throwable if recoverWith.isDefinedAt(t) =>
           recoverWith(t).foreach(dispatch(_, sourceContext))
@@ -40,7 +40,7 @@ private[signals3] object ProxyStream {
   }
 
   @static class MapStream[E, V](source: Stream[E], f: E => V) extends ProxyStream[E, V](source) {
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit =
       dispatch(f(event), sourceContext)
   }
 
@@ -54,7 +54,7 @@ private[signals3] object ProxyStream {
   @static class FutureStream[E, V](source: Stream[E], f: E => Future[V]) extends ProxyStream[E, V](source) {
     private val key = java.util.UUID.randomUUID()
   
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit =
       Serialized.future(key.toString)(f(event)).andThen {
         case Success(v) => dispatch(v, sourceContext)
         case Failure(_: NoSuchElementException) => // do nothing to allow Future.filter/collect
@@ -64,25 +64,25 @@ private[signals3] object ProxyStream {
   }
 
   @static class CollectStream[E, V](source: Stream[E], pf: PartialFunction[E, V]) extends ProxyStream[E, V](source) {
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit =
       if (pf.isDefinedAt(event)) dispatch(pf(event), sourceContext)
   }
 
   @static class FilterStream[E](source: Stream[E], predicate: E => Boolean) extends ProxyStream[E, E](source) {
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
+    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit = {
       if (predicate(event)) dispatch(event, sourceContext)
     }
   }
 
   @static class JoinStream[E](sources: Stream[E]*) extends ProxyStream[E, E](sources*) {
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit =
       dispatch(event, sourceContext)
   }
 
   @static class ScanStream[E, V](source: Stream[E], zero: V, f: (V, E) => V) extends ProxyStream[E, V](source) {
     @volatile private var value = zero
   
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
+    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit = {
       value = f(value, event)
       dispatch(value, sourceContext)
     }
@@ -92,7 +92,7 @@ private[signals3] object ProxyStream {
     require(n > 0, "n must be positive")
     private val buffer = ArrayBuffer.empty[E]
 
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
+    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit = {
       buffer.addOne(event)
       if (buffer.size == n) {
         val res = buffer.toSeq
@@ -105,7 +105,7 @@ private[signals3] object ProxyStream {
   @static class GroupByStream[E](source: Stream[E], groupBy: E => Boolean) extends ProxyStream[E, Seq[E]](source) {
     private val buffer = ArrayBuffer.empty[E]
 
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
+    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit = {
       if (groupBy(event)) {
         val res = buffer.toSeq
         buffer.clear()
@@ -116,20 +116,20 @@ private[signals3] object ProxyStream {
   }
 
   @static class IndexedStream[E](source: Stream[E]) extends ProxyStream[E, E](source) with Indexed {
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
+    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit = {
       inc()
       dispatch(event, sourceContext)
     }
   }
 
   @static class DropStream[E](source: Stream[E], drop: Int) extends IndexedStream[E](source) {
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit =
       if (counter < drop) inc() else dispatch(event, sourceContext)
   }
 
   @static class DropWhileStream[E](source: Stream[E], p: E => Boolean) extends ProxyStream[E, E](source) {
     @volatile private var dropping = true
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
+    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit = {
       if (dropping) dropping = p(event)
       if (!dropping) dispatch(event, sourceContext)
     }
@@ -137,7 +137,7 @@ private[signals3] object ProxyStream {
 
   @static final class CloseableStream[E](source: Stream[E])
     extends ProxyStream[E, E](source) with Closeable {
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit =
       if (!isClosed) dispatch(event, sourceContext)
   }
 
@@ -146,7 +146,7 @@ private[signals3] object ProxyStream {
 
     private var previousEvent: Option[E] = None
 
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = if (!isClosed) {
+    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit = if (!isClosed) {
       if (p(event)) {
         dispatch(event, sourceContext)
         previousEvent = Some(event)

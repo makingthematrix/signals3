@@ -29,9 +29,11 @@ import scala.concurrent.ExecutionContext
   * @tparam B The type of values in the auxiliary signal.
   */
 final class StreamWithAuxSignal[A, B](source: Stream[A], aux: Signal[B]) extends Stream[(A, Option[B])] {
-  protected val subscriber: EventSubscriber[A] =
-    (event: A, sourceContext: Option[ExecutionContext]) => dispatch((event, aux.currentValue), sourceContext)
-
+  protected val subscriber: EventSubscriber[A] = new EventSubscriber[A]{
+    override protected[signals3] def onEvent[W <: A](event: W, sourceContext: Option[ExecutionContext]): Unit =
+      dispatch((event, aux.currentValue), sourceContext)
+  }
+  
   private lazy val auxSubscriber: SignalSubscriber =
     (_: Option[ExecutionContext]) => ()
 

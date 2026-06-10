@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import io.github.makingthematrix.signals3.Finite.{FiniteSignal, FiniteStream}
+import io.github.makingthematrix.signals3.Finite.{::, FiniteSignal, FiniteStream}
 import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, waitFor}
 
 import scala.collection.mutable
@@ -18,11 +18,11 @@ class FiniteSpec extends munit.FunSuite {
   override def afterEach(context: AfterEach): Unit =
     eventContext.stop()
 
-  test("Chain a finite stream with >> operator") {
+  test("Chain a finite stream with :: operator") {
     val a: SourceStream[Int] = Stream()
     val b: FiniteStream[Int] = a.take(3)
     val c: SourceStream[Int] = Stream()
-    val d: Stream[Int] = b >> c
+    val d: Stream[Int] = b :: c
 
     val dBuffer = mutable.ArrayBuilder.make[Int]
     d.foreach(dBuffer.addOne)
@@ -50,7 +50,7 @@ class FiniteSpec extends munit.FunSuite {
     val b: FiniteStream[Int] = a.take(3)
     val c: SourceStream[Int] = Stream()
     val d: FiniteStream[Int] = c.take(2)
-    val e: FiniteStream[Int] = b >>> d
+    val e: FiniteStream[Int] = b ::: d
 
     val buffer = mutable.ArrayBuilder.make[Int]
     e.foreach(buffer.addOne)
@@ -84,7 +84,7 @@ class FiniteSpec extends munit.FunSuite {
     val a: SourceSignal[Int] = Signal()
     val b: FiniteSignal[Int] = a.take(3)
     val c: SourceSignal[Int] = Signal()
-    val d: Signal[Int] = b >> c
+    val d: Signal[Int] = b :: c
 
     var res: List[Int] = Nil
     d.foreach { n =>
@@ -114,7 +114,7 @@ class FiniteSpec extends munit.FunSuite {
     val b: FiniteSignal[Int] = a.take(3)
     val c: SourceSignal[Int] = Signal()
     val d: FiniteSignal[Int] = c.take(2)
-    val e: FiniteSignal[Int] = b >>> d
+    val e: FiniteSignal[Int] = b ::: d
 
     var lastValue = 0
     e.last.foreach(lastValue = _)
