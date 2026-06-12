@@ -1,6 +1,7 @@
 package io.github.makingthematrix.signals3.ui
 
-import io.github.makingthematrix.signals3.{DispatchQueue, EventContext, Stream, Signal, Subscription}
+import io.github.makingthematrix.signals3.priv.Subscription
+import io.github.makingthematrix.signals3.{DispatchQueue, EventContext, Stream, Signal}
 
 /** This is a utility class to help you set up signals3 to transport events between the default execution context
   * (`Threading.defaultContext`) and other custom contexts, and a secondary execution context usually associated with GUI.

@@ -1,5 +1,6 @@
-package io.github.makingthematrix.signals3
+package io.github.makingthematrix.signals3.priv
 
+import io.github.makingthematrix.signals3.EventContext
 import scala.ref.WeakReference
 
 /** When you add a new subscriber to your [[Stream]] or [[Signal]], in return you get a [[Subscription]].
@@ -17,7 +18,7 @@ import scala.ref.WeakReference
   * reacts to the aforementioned events. For an example of how to do it on a small scale, please
   * @see [[CloseableFuture.withAutoClosing]]
   */
-trait Subscription {
+private[signals3] trait Subscription {
   /** You can think of `enable()`/`disable()` as of `subscribe()`/`unsubscribe()` on a higher level.
     * In the default implementation, `enable()` is called automatically when the subscription is created,
     * and it calls `subscribe()`. Later, the subscriber can `unsubscribe()` but the subscription will stay enabled,
@@ -72,7 +73,7 @@ trait Subscription {
   * @see [[Stream]]
   * @param context A weak reference to the event context within which the subscription lives.
   */
-abstract class BaseSubscription(context: WeakReference[EventContext]) extends Subscription {
+private[signals3] abstract class BaseSubscription(context: WeakReference[EventContext]) extends Subscription {
   protected object monitor
   protected[signals3] var subscribed = false
   private var enabled = false

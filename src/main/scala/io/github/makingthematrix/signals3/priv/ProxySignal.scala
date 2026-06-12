@@ -1,9 +1,10 @@
-package io.github.makingthematrix.signals3
+package io.github.makingthematrix.signals3.priv
 
-import scala.concurrent.ExecutionContext
-import Signal.SignalSubscriber
+import io.github.makingthematrix.signals3.Signal.SignalSubscriber
+import io.github.makingthematrix.signals3.{Closeable, EventContext, Finite, Indexed, Signal, Stream}
 
 import scala.annotation.static
+import scala.concurrent.ExecutionContext
 
 abstract private[signals3] class ProxySignal[V](sources: Signal[?]*) extends Signal[V] with SignalSubscriber {
   override def onWire(): Unit = {

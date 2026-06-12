@@ -1,5 +1,6 @@
 package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.priv.DoneSignal
 import testutils.*
 
 class DoneSignalSpec extends munit.FunSuite {

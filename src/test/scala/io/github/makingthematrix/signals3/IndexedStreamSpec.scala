@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.Closeable.CloseableStream
-import io.github.makingthematrix.signals3.ProxyStream.IndexedStream
+import io.github.makingthematrix.signals3.priv.ProxyStream.IndexedStream
 import io.github.makingthematrix.signals3.Finite.FiniteStream
 import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, result, waitFor}
 

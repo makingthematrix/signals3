@@ -1,8 +1,9 @@
 package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.priv.DoneSignal
 import io.github.makingthematrix.signals3.generators.{GeneratorSignal, GeneratorStream}
 import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, result, tryResult, waitFor}
-import io.github.makingthematrix.signals3.{CloseableFuture, DispatchQueue, DoneSignal, EventContext, SerialDispatchQueue, Signal}
+import io.github.makingthematrix.signals3.{CloseableFuture, DispatchQueue, EventContext, SerialDispatchQueue, Signal}
 
 import scala.collection.mutable
 import scala.concurrent.duration.*

@@ -2,7 +2,8 @@ package io.github.makingthematrix.signals3
 
 import Stream.{EmptyTakeStream, StreamSubscriber, StreamSubscription}
 import Finite.FiniteStream
-import ProxyStream.*
+import io.github.makingthematrix.signals3.priv.ProxyStream.*
+import io.github.makingthematrix.signals3.priv.{BaseSubscription, EventSource, FlatMapStream, Subscription}
 
 import scala.annotation.static
 import scala.concurrent.{ExecutionContext, Future, Promise}

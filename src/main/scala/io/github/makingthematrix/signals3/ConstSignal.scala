@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import EventSource.NoAutowiring
+import io.github.makingthematrix.signals3.priv.EventSource.NoAutowiring
 import scala.concurrent.ExecutionContext
 
 /** A signal holding an immutable value.

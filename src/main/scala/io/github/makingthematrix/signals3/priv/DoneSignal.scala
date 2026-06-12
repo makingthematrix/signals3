@@ -1,4 +1,6 @@
-package io.github.makingthematrix.signals3
+package io.github.makingthematrix.signals3.priv
+
+import io.github.makingthematrix.signals3.Signal
 
 import scala.concurrent.ExecutionContext
 

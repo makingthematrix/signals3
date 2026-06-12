@@ -1,4 +1,6 @@
-package io.github.makingthematrix.signals3
+package io.github.makingthematrix.signals3.priv
+
+import io.github.makingthematrix.signals3.EventContext
 
 import scala.annotation.static
 import scala.concurrent.ExecutionContext
@@ -11,7 +13,7 @@ import scala.concurrent.ExecutionContext
  * @tparam E Event/value type of the given event source
  * @tparam S The subscriber type, i.e. [[Stream.EventSubscriber]] or [[Signal.SignalSubscriber]]
  */
-abstract class EventSource[E, S] {
+private[signals3] abstract class EventSource[E, S] {
   private object subscribersMonitor
 
   private var autowiring = true
@@ -126,7 +128,7 @@ abstract class EventSource[E, S] {
   inline final def wired: Boolean = hasSubscribers || !autowiring
 }
 
-object EventSource {
+private[signals3] object EventSource {
   /** By default, a new event source is initialized lazily, i.e. only when the first subscriber function is registered in it.
     * You can decorate it with `NoAutowiring` to enforce initialization.
     */

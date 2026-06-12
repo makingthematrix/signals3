@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import io.github.makingthematrix.signals3.ProxyStream.IndexedStream
+import io.github.makingthematrix.signals3.priv.ProxyStream.IndexedStream
 
 import scala.annotation.static
 import scala.concurrent.{ExecutionContext, Future, Promise}

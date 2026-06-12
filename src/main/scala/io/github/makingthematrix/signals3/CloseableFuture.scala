@@ -1,5 +1,7 @@
 package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.priv.{BaseSubscription, Subscription}
+
 import java.util.{Timer, TimerTask}
 import scala.annotation.static
 import scala.collection.mutable.ArrayBuffer

@@ -1,10 +1,12 @@
-package io.github.makingthematrix.signals3
+package io.github.makingthematrix.signals3.priv
 
+import io.github.makingthematrix.signals3.Stream
 import io.github.makingthematrix.signals3.Stream.StreamSubscriber
+
 import scala.concurrent.ExecutionContext
 import scala.util.chaining.scalaUtilChainingOps
 
-protected[signals3] final class FlatMapStream[E, V](source: Stream[E], f: E => Stream[V])
+private[signals3] final class FlatMapStream[E, V](source: Stream[E], f: E => Stream[V])
   extends Stream[V] with StreamSubscriber[E]{
   @volatile private var mapped: Option[Stream[V]] = None
 

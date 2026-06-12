@@ -1,5 +1,7 @@
 package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.priv.Subscription
+
 object EventContext {
   /** Creates a new default implementation of an [[EventContext]]
     *
