@@ -1,5 +1,7 @@
 package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.priv.Subscription
+
 class EventContextSpec extends munit.FunSuite {
   private var received = Seq[Int]()
   private val capture = (value: Int) => received = received :+ value

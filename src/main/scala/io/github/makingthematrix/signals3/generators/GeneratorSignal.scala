@@ -2,7 +2,7 @@ package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.Closeable.CloseableSignal
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Finite, Indexed, Signal}
-import io.github.makingthematrix.signals3.EventSource.NoAutowiring
+import io.github.makingthematrix.signals3.priv.EventSource.NoAutowiring
 import io.github.makingthematrix.signals3.Finite.FiniteSignal
 
 import java.util.concurrent.atomic.AtomicBoolean

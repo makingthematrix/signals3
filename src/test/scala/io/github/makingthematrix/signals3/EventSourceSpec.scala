@@ -1,5 +1,7 @@
 package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.priv.EventSource
+
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.ExecutionContext
 

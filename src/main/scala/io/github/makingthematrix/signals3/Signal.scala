@@ -2,7 +2,8 @@ package io.github.makingthematrix.signals3
 
 import Signal.{EmptyTakeSignal, SignalSubscriber, SignalSubscription}
 import Finite.FiniteSignal
-import ProxySignal.*
+import io.github.makingthematrix.signals3.priv.ProxySignal.*
+import io.github.makingthematrix.signals3.priv.{BaseSubscription, DoneSignal, EventSource, FlatMapSignal, ProxySignal, Subscription}
 
 import scala.annotation.static
 import scala.concurrent.duration.FiniteDuration

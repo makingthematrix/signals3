@@ -1,6 +1,7 @@
-package io.github.makingthematrix.signals3
+package io.github.makingthematrix.signals3.priv
 
 import io.github.makingthematrix.signals3.Stream.StreamSubscriber
+import io.github.makingthematrix.signals3.{Closeable, Finite, Indexed, Serialized, Stream, Threading}
 
 import scala.annotation.static
 import scala.collection.mutable.ArrayBuffer

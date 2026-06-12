@@ -1,5 +1,7 @@
 package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.priv.Subscription
+
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success}
 /** A signal which initializes its value by executing the `loader` closeable future and then updates the value the same way

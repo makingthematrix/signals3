@@ -1,5 +1,7 @@
 package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.priv.DoneSignal
+
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.ExecutionContext
 import scala.util.chaining.scalaUtilChainingOps
@@ -43,20 +45,4 @@ trait CanBeClosed {
    */
   def isClosedSignal(using ExecutionContext): Signal[Boolean] =
     DoneSignal().tap { signal => if (isClosed) signal.done() else onClose(signal.done()) }
-
-  /**
-    * Triggers another instance when this one is being closed.
-    * Example use case: A finite stream is chained with a constructor of another stream. When the finite stream ends,
-    * only then the constructor is called and a new stream starts to work.
-    * @param body The functionality that is being called when this CanBeClosed instance is closed
-    * @tparam T The concrete type of the new CanBeClosed instance
-    * @return The new CanBeClosed instance which starts to work when this one is closed
-    *//*
-  infix def next[T <: CanBeClosed](body: => T): T = {
-    onClose(body)
-    body
-  }
-
-  /* An alias to `next` */
-  inline def >>[T <: CanBeClosed](body: => T): T = next(body)*/
 }

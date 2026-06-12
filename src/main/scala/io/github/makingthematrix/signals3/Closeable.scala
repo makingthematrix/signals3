@@ -1,5 +1,7 @@
 package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.priv.{ProxySignal, ProxyStream}
+
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.chaining.*
 

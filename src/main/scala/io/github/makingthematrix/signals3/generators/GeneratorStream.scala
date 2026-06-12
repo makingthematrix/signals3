@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.generators
 
-import io.github.makingthematrix.signals3.EventSource.NoAutowiring
+import io.github.makingthematrix.signals3.priv.EventSource.NoAutowiring
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Finite, Indexed, Stream, TakeStream}
 
 import java.util.concurrent.atomic.AtomicBoolean

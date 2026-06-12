@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import io.github.makingthematrix.signals3.ProxySignal.IndexedSignal
+import io.github.makingthematrix.signals3.priv.ProxySignal.IndexedSignal
 
 /**
  * A signal which closes after a given number of value changes.
