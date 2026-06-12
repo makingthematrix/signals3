@@ -45,7 +45,7 @@ class FiniteSpec extends munit.FunSuite {
     assertEquals(dBuffer.result().toSeq, Seq(1, 2, 3, 30))
   }
 
-  test("Chain finite streams with >>> operator") {
+  test("Chain finite streams with ::: operator") {
     val a: SourceStream[Int] = Stream()
     val b: FiniteStream[Int] = a.take(3)
     val c: SourceStream[Int] = Stream()
@@ -80,7 +80,7 @@ class FiniteSpec extends munit.FunSuite {
     assertEquals(lastValue, 40)
   }
 
-  test("Chain a finite signal with >> operator") {
+  test("Chain a finite signal with :: operator") {
     val a: SourceSignal[Int] = Signal()
     val b: FiniteSignal[Int] = a.take(3)
     val c: SourceSignal[Int] = Signal()
@@ -109,7 +109,7 @@ class FiniteSpec extends munit.FunSuite {
     assertEquals(res.reverse, Seq(1, 2, 3, 30))
   }
 
-  test("Chain finite signals with >>> operator") {
+  test("Chain finite signals with ::: operator") {
     val a: SourceSignal[Int] = Signal()
     val b: FiniteSignal[Int] = a.take(3)
     val c: SourceSignal[Int] = Signal()
@@ -145,5 +145,134 @@ class FiniteSpec extends munit.FunSuite {
     awaitAllTasks
     assertEquals(res.reverse, Seq(1, 2, 3, 20, 30))
     assertEquals(lastValue, 30)
+  }
+
+  // Tests for subtype chaining
+
+  sealed trait Animal
+  case class Dog(name: String) extends Animal
+  case class Cat(name: String) extends Animal
+
+  test("Chain a finite stream with :: operator with subtype") {
+    val a: SourceStream[Animal] = Stream()
+    val b: FiniteStream[Animal] = a.take(3)
+    val c: SourceStream[Dog] = Stream()
+    val d: Stream[Animal] = b :: c
+
+    val dBuffer = mutable.ArrayBuilder.make[Animal]
+    d.foreach(dBuffer.addOne)
+
+    a !! Dog("Rex")
+    c !! Dog("Max")  // Published before b closes, will be lost
+    a !! Cat("Whiskers")
+    awaitAllTasks
+    assertEquals(dBuffer.result().toSeq, Seq(Dog("Rex"), Cat("Whiskers")))
+
+    a !! Dog("Buddy")
+    assert(b.isClosed)
+    awaitAllTasks
+    assertEquals(dBuffer.result().toSeq, Seq(Dog("Rex"), Cat("Whiskers"), Dog("Buddy")))
+
+    a !! Dog("Ignored")  // Published after b closes, b won't emit it
+    c !! Dog("Charlie")  // Published after b closes, will be captured
+    awaitAllTasks
+    assertEquals(dBuffer.result().toSeq, Seq(Dog("Rex"), Cat("Whiskers"), Dog("Buddy"), Dog("Charlie")))
+  }
+
+  test("Chain finite streams with ::: operator with subtype") {
+    val a: SourceStream[Animal] = Stream()
+    val b: FiniteStream[Animal] = a.take(3)
+    val c: SourceStream[Animal] = Stream()
+    val d: FiniteStream[Animal] = c.take(2)
+    val e: FiniteStream[Animal] = b ::: d
+
+    val buffer = mutable.ArrayBuilder.make[Animal]
+    e.foreach(buffer.addOne)
+
+    var lastValue: Animal = null
+    e.last.foreach(lastValue = _)
+
+    a !! Dog("Rex")
+    c !! Dog("Max")  // Published before b closes, will be lost
+    a !! Cat("Whiskers")
+    awaitAllTasks
+    assertEquals(buffer.result().toSeq, Seq(Dog("Rex"), Cat("Whiskers")))
+
+    a !! Dog("Buddy")
+    assert(b.isClosed)
+    awaitAllTasks
+    assertEquals(buffer.result().toSeq, Seq(Dog("Rex"), Cat("Whiskers"), Dog("Buddy")))
+
+    c !! Dog("Charlie")  // Published after b closes, will be captured
+    c !! Dog("Cooper")
+    awaitAllTasks
+    assertEquals(buffer.result().toSeq, Seq(Dog("Rex"), Cat("Whiskers"), Dog("Buddy"), Dog("Charlie"), Dog("Cooper")))
+    assert(d.isClosed)
+    assert(e.isClosed)
+    assertEquals(lastValue, Dog("Cooper"))
+  }
+
+  test("Chain a finite signal with :: operator with subtype") {
+    val a: SourceSignal[Animal] = Signal()
+    val b: FiniteSignal[Animal] = a.take(3)
+    val c: SourceSignal[Dog] = Signal()
+    val d: Signal[Animal] = b :: c
+
+    var res: List[Animal] = Nil
+    d.foreach { n =>
+      res = n :: res
+    }
+
+    a ! Dog("Rex")
+    c ! Dog("Max")
+    a ! Cat("Whiskers")
+    awaitAllTasks
+    assertEquals(res.reverse, List(Dog("Rex"), Cat("Whiskers")))
+
+    a ! Dog("Buddy")
+    waitFor(d, Dog("Buddy"))
+    assert(b.isClosed)
+    assertEquals(res.reverse, List(Dog("Rex"), Cat("Whiskers"), Dog("Buddy")))
+
+    c ! Dog("Charlie")
+    awaitAllTasks
+    assertEquals(res.reverse, Seq(Dog("Rex"), Cat("Whiskers"), Dog("Buddy"), Dog("Charlie")))
+  }
+
+  test("Chain finite signals with ::: operator with subtype") {
+    val a: SourceSignal[Animal] = Signal()
+    val b: FiniteSignal[Animal] = a.take(3)
+    val c: SourceSignal[Dog] = Signal()
+    val d: FiniteSignal[Dog] = c.take(2)
+    val e: FiniteSignal[Animal] = b ::: d
+
+    var lastValue: Animal = null
+    e.last.foreach(lastValue = _)
+
+    var res: List[Animal] = Nil
+    e.foreach { n =>
+      res = n :: res
+    }
+
+    a ! Dog("Rex")
+    c ! Dog("Max")
+    a ! Cat("Whiskers")
+    awaitAllTasks
+    assertEquals(res.reverse, List(Dog("Rex"), Cat("Whiskers")))
+
+    a ! Dog("Buddy")
+    waitFor(e, Dog("Buddy"))
+    assert(b.isClosed)
+    // When b closes, we subscribe to d (which is c.take(2)), and we immediately get the current value from c (Dog("Max"))
+    assertEquals(res.reverse, List(Dog("Rex"), Cat("Whiskers"), Dog("Buddy"), Dog("Max")))
+
+    c ! Dog("Charlie")
+    waitFor(e, Dog("Charlie"))
+    assert(d.isClosed)
+    assert(e.isClosed)
+    c ! Dog("Cooper")  // Published after d closes, will be ignored
+    awaitAllTasks
+    assertEquals(res.reverse, Seq(Dog("Rex"), Cat("Whiskers"), Dog("Buddy"), Dog("Max"), Dog("Charlie")))
+    assertEquals(lastValue, Dog("Charlie"))
   }
 }

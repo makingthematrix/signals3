@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.SourceStream.{SourceRecoverStream, SourceRecoverWithStream}
-import io.github.makingthematrix.signals3.Stream.EventSubscriber
+import io.github.makingthematrix.signals3.Stream.StreamSubscriber
 
 import scala.annotation.targetName
 import scala.concurrent.ExecutionContext
@@ -64,7 +64,7 @@ class SourceStream[E] extends Stream[E] {
 
 object SourceStream {
   private[signals3] final class SourceRecoverStream[E](source: SourceStream[E], recover: Throwable => Option[E])
-    extends SourceStream[E] with EventSubscriber[E] {
+    extends SourceStream[E] with StreamSubscriber[E] {
     override protected[signals3] def onWire(): Unit = source.subscribe(this)
     override protected[signals3] def onUnwire(): Unit = source.unsubscribe(this)
 
@@ -74,7 +74,7 @@ object SourceStream {
     override def publish(event: E): Unit =
       tryDispatch(event, None, recover)
 
-    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       tryDispatch(event, sourceContext, recover)
 
     private def tryDispatch(event: E, sourceContext: Option[ExecutionContext], recover: Throwable => Option[E]): Unit =
@@ -84,7 +84,7 @@ object SourceStream {
   }
 
   private[signals3] final class SourceRecoverWithStream[E](source: SourceStream[E], recoverWith: PartialFunction[Throwable, Option[E]])
-    extends SourceStream[E] with EventSubscriber[E] {
+    extends SourceStream[E] with StreamSubscriber[E] {
     override protected[signals3] def onWire(): Unit = source.subscribe(this)
     override protected[signals3] def onUnwire(): Unit = source.unsubscribe(this)
 
@@ -93,7 +93,7 @@ object SourceStream {
 
     override def publish(event: E): Unit = tryDispatchWith(event, None, recoverWith)
 
-    override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
       tryDispatchWith(event, sourceContext, recoverWith)
 
     private def tryDispatchWith(event: E, sourceContext: Option[ExecutionContext], recoverWith: PartialFunction[Throwable, Option[E]]): Unit =

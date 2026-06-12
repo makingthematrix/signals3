@@ -65,9 +65,9 @@ abstract class EventSource[E, S] {
     *
     * @param subscriber An instance of a subscriber class, known to the class implementing this `EventRelay`
     */
-  def subscribe(subscriber: S): Unit = subscribersMonitor.synchronized {
+  def subscribe(subscriber: Any): Unit = subscribersMonitor.synchronized {
     val wiredAlready = wired
-    subscribers += subscriber
+    subscribers += subscriber.asInstanceOf[S]
     if (!wiredAlready) onWire()
   }
 
@@ -76,8 +76,8 @@ abstract class EventSource[E, S] {
     *
     * @param subscriber An instance of a subscriber class, known to the class implementing this `EventRelay`
     */
-  def unsubscribe(subscriber: S): Unit = subscribersMonitor.synchronized {
-    subscribers -= subscriber
+  def unsubscribe(subscriber: Any): Unit = subscribersMonitor.synchronized {
+    subscribers -= subscriber.asInstanceOf[S]
     if (autowiring && !hasSubscribers) onUnwire()
   }
 

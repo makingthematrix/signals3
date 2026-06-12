@@ -1,6 +1,5 @@
 package io.github.makingthematrix.signals3
 
-import Signal.SignalSubscriber
 import EventSource.NoAutowiring
 import scala.concurrent.ExecutionContext
 
@@ -12,8 +11,8 @@ import scala.concurrent.ExecutionContext
   */
 final private[signals3] class ConstSignal[V] (private val v: Option[V])
   extends Signal[V](v) with NoAutowiring with CanBeClosed {
-  override inline def subscribe(subscriber: SignalSubscriber): Unit = {}
-  override inline def unsubscribe(subscriber: SignalSubscriber): Unit = {}
+  override inline def subscribe(subscriber: Any): Unit = {}
+  override inline def unsubscribe(subscriber: Any): Unit = {}
   override inline protected[signals3] def update(f: Option[V] => Option[V], ec: Option[ExecutionContext]): Boolean = false
   override inline protected[signals3] def setValue(v: Option[V], ec: Option[ExecutionContext]): Boolean = false
   override inline def isClosed: Boolean = true
