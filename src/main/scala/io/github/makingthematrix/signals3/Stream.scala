@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import Stream.{EmptyTakeStream, EventSubscriber, StreamSubscription}
+import Stream.{EmptyTakeStream, StreamSubscriber, StreamSubscription}
 import Finite.FiniteStream
 import ProxyStream.*
 
@@ -23,7 +23,7 @@ import scala.util.chaining.scalaUtilChainingOps
   *
   * @see `ExecutionContext`
   */
-class Stream[E] extends EventSource[E, EventSubscriber[E]] {
+class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
   /** Dispatches the event to all subscribers.
     *
     * @param event The event to be dispatched.
@@ -388,18 +388,18 @@ object Stream {
 
   private final val EmptyTakeStream: TakeStream[Any] = new TakeStream[Any](Stream[Any](), 0)
 
-  @static private[signals3] trait EventSubscriber[E] {
+  @static private[signals3] trait StreamSubscriber[E] {
     // 'currentContext' is the context this method IS run in, NOT the context any subsequent methods SHOULD run in
-    protected[signals3] def onEvent[W <: E](event: W, currentContext: Option[ExecutionContext]): Unit
+    protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit
   }
 
   @static final private class StreamSubscription[E](source:            Stream[E],
                                                     f:                 E => Unit,
                                                     executionContext:  Option[ExecutionContext] = None
                                                    )(using context: WeakReference[EventContext])
-    extends BaseSubscription(context) with EventSubscriber[E] {
+    extends BaseSubscription(context) with StreamSubscriber[E] {
 
-    override def onEvent[W <: E](event: W, currentContext: Option[ExecutionContext]): Unit =
+    override def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
       if (subscribed)
         executionContext match {
           case Some(ec) if !currentContext.contains(ec) => Future(if (subscribed) Try(f(event)))(using ec)

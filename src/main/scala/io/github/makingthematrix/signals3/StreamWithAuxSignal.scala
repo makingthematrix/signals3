@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import Stream.EventSubscriber
+import Stream.StreamSubscriber
 import Signal.SignalSubscriber
 
 import scala.concurrent.ExecutionContext
@@ -29,8 +29,8 @@ import scala.concurrent.ExecutionContext
   * @tparam B The type of values in the auxiliary signal.
   */
 final class StreamWithAuxSignal[A, B](source: Stream[A], aux: Signal[B]) extends Stream[(A, Option[B])] {
-  protected val subscriber: EventSubscriber[A] = new EventSubscriber[A]{
-    override protected[signals3] def onEvent[W <: A](event: W, sourceContext: Option[ExecutionContext]): Unit =
+  protected val subscriber: StreamSubscriber[A] = new StreamSubscriber[A]{
+    override protected[signals3] def onEvent(event: A, sourceContext: Option[ExecutionContext]): Unit =
       dispatch((event, aux.currentValue), sourceContext)
   }
   

@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.Signal.SignalSubscriber
-import io.github.makingthematrix.signals3.Stream.EventSubscriber
+import io.github.makingthematrix.signals3.Stream.StreamSubscriber
 
 import scala.annotation.{static, targetName}
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -45,7 +45,7 @@ object Finite {
       * @return A new chained stream
       */
     @targetName("chain")
-    inline def ::(next: => Stream[E]): Stream[E] = ChainedStream[E](stream, next)
+    inline def ::[W <: E](next: => Stream[W]): Stream[E] = ChainedStream[E, W](stream, next)
 
     /**
       * Chains two streams of the same event type where both are finite.
@@ -115,8 +115,8 @@ object Finite {
       update(computeValue, currentContext)
   }
 
-  @static final private[signals3] class ChainedStream[E](first: FiniteStream[E], second: => Stream[E])
-    extends Stream[E] with EventSubscriber[E] {
+  @static final private[signals3] class ChainedStream[E, W <: E](first: FiniteStream[E], second: => Stream[W])
+    extends Stream[E] with StreamSubscriber[E] {
     override protected[signals3] def onWire(): Unit =
       if (!first.isClosed) {
         first.subscribe(this)
@@ -133,7 +133,7 @@ object Finite {
       second.unsubscribe(this)
     }
 
-    override protected[signals3] def onEvent[W <: E](event: W, currentContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
       dispatch(event, currentContext)
   }
 
@@ -168,7 +168,7 @@ object Finite {
   }
 
   @static final private[signals3] class ChainedFiniteStream[E](first: FiniteStream[E], second: => FiniteStream[E])
-    extends Stream[E] with Finite[E] with EventSubscriber[E]{
+    extends Stream[E] with Finite[E] with StreamSubscriber[E]{
     private inline def switchToSecond(): Unit = {
       second.subscribe(this)
       first.unsubscribe(this)
@@ -189,7 +189,7 @@ object Finite {
       second.unsubscribe(this)
     }
 
-    override protected[signals3] def onEvent[W <: E](event: W, currentContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
       if (!isClosed) dispatch(event, currentContext)
   }
 }

@@ -14,13 +14,13 @@ class EventSourceSpec extends munit.FunSuite {
     override protected def onUnwire(): Unit = onUnwireCount += 1
 
     // Expose the protected notifySubscribers for tests
-    def testNotify(call: Stream.EventSubscriber[E] => Unit): Unit =
+    def testNotify(call: Stream.StreamSubscriber[E] => Unit): Unit =
       notifySubscribers(call)
   }
 
-  private class DummySubscriber[E] extends Stream.EventSubscriber[E] {
+  private class DummySubscriber[E] extends Stream.StreamSubscriber[E] {
     var events: Vector[(E, Option[ExecutionContext])] = Vector.empty
-    override protected[signals3] def onEvent[W <: E](event: W, currentContext: Option[ExecutionContext]): Unit =
+    override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
       events = events :+ (event -> currentContext)
   }
 

@@ -22,7 +22,7 @@ final class TakeStream[E](source: Stream[E], take: Int)
   
   override def isClosed: Boolean = super.isClosed || counter >= take
 
-  override protected[signals3] def onEvent[W <: E](event: W, sourceContext: Option[ExecutionContext]): Unit = {
+  override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {
     if (!isClosed) {
       inc()
       dispatch(event, sourceContext)
