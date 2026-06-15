@@ -1,8 +1,6 @@
 package io.github.makingthematrix.signals3.priv
 
 import io.github.makingthematrix.signals3.EventContext
-
-import scala.annotation.static
 import scala.concurrent.ExecutionContext
 
 /** A common superclass for all event sources, i.e. [[Stream]] and [[Signal]].
@@ -129,6 +127,7 @@ private[signals3] abstract class EventSource[E, S] {
 }
 
 private[signals3] object EventSource {
+  import scala.annotation.static
   /** By default, a new event source is initialized lazily, i.e. only when the first subscriber function is registered in it.
     * You can decorate it with `NoAutowiring` to enforce initialization.
     */

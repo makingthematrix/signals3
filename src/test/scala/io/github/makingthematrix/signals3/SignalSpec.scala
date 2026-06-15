@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.Closeable.CloseableSignal
-import io.github.makingthematrix.signals3.priv.Subscription
+import io.github.makingthematrix.signals3.priv.{SourceSignal, Subscription}
 
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, CyclicBarrier, TimeUnit}

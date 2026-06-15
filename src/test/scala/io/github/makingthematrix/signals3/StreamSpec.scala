@@ -1,5 +1,6 @@
 package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.priv.SourceStream
 import testutils.{awaitAllTasks, result, waitForResult}
 
 import scala.collection.mutable.ArrayBuffer

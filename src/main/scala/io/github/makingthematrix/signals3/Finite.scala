@@ -1,10 +1,9 @@
 package io.github.makingthematrix.signals3
 
-import io.github.makingthematrix.signals3.Signal.SignalSubscriber
-import io.github.makingthematrix.signals3.Stream.StreamSubscriber
+import io.github.makingthematrix.signals3.priv.{ChainedFiniteSignal, ChainedSignal, ChainedStream, ChainedFiniteStream}
 
-import scala.annotation.{static, targetName}
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.annotation.targetName
+import scala.concurrent.{Future, Promise}
 import scala.util.chaining.scalaUtilChainingOps
 
 /**
@@ -86,110 +85,5 @@ object Finite {
       */
     @targetName("chainf")
     inline def :::[W <: V](next: => FiniteSignal[W]): FiniteSignal[V] = ChainedFiniteSignal(signal, next)
-  }
-
-  @static final private[signals3] class ChainedSignal[V, W <: V](first: FiniteSignal[V], second: => Signal[W])
-    extends Signal[V] with SignalSubscriber {
-    override protected[signals3] def onWire(): Unit =
-      if (!first.isClosed) {
-        first.subscribe(this)
-        first.onClose {
-          second.subscribe(this)
-          first.unsubscribe(this)
-        }
-      } else {
-        second.subscribe(this)
-      }
-
-    override protected[signals3] def onUnwire(): Unit = {
-      first.unsubscribe(this)
-      second.unsubscribe(this)
-    }
-
-    private def computeValue(current: Option[V]): Option[V] =
-      if (!first.isClosed && current != first.value) first.value
-      else if (current != second.value) second.value
-      else current
-
-    override protected[signals3] def changed(currentContext: Option[ExecutionContext]): Unit =
-      update(computeValue, currentContext)
-  }
-
-  @static final private[signals3] class ChainedStream[E, W <: E](first: FiniteStream[E], second: => Stream[W])
-    extends Stream[E] with StreamSubscriber[E] {
-    override protected[signals3] def onWire(): Unit =
-      if (!first.isClosed) {
-        first.subscribe(this)
-        first.onClose {
-          second.subscribe(this)
-          first.unsubscribe(this)
-        }
-      } else {
-        second.subscribe(this)
-      }
-
-    override protected[signals3] def onUnwire(): Unit = {
-      first.unsubscribe(this)
-      second.unsubscribe(this)
-    }
-
-    override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
-      dispatch(event, currentContext)
-  }
-
-  @static final private[signals3] class ChainedFiniteSignal[V, W <: V](first: FiniteSignal[V], second: => FiniteSignal[W])
-    extends Signal[V] with Finite[V] with SignalSubscriber {
-
-    private inline def switchToSecond(): Unit = {
-      second.subscribe(this)
-      first.unsubscribe(this)
-      lastPromise.foreach(_.completeWith(second.last))
-      second.onClose { close() }
-    }
-
-    override protected[signals3] def onWire(): Unit =
-      if (!first.isClosed) {
-        first.subscribe(this)
-        first.onClose { switchToSecond() }
-      } else if (!second.isClosed) {
-        switchToSecond()
-      }
-
-    override protected[signals3] def onUnwire(): Unit =
-      if (!first.isClosed) first.unsubscribe(this) else if (!second.isClosed) second.unsubscribe(this)
-
-    private def computeValue(current: Option[V]): Option[V] =
-      if (!first.isClosed && current != first.value) first.value
-      else if (current != second.value) second.value
-      else current
-
-    override protected[signals3] def changed(currentContext: Option[ExecutionContext]): Unit =
-      if (!isClosed) update(computeValue, currentContext)
-  }
-
-  @static final private[signals3] class ChainedFiniteStream[E](first: FiniteStream[E], second: => FiniteStream[E])
-    extends Stream[E] with Finite[E] with StreamSubscriber[E]{
-    private inline def switchToSecond(): Unit = {
-      second.subscribe(this)
-      first.unsubscribe(this)
-      lastPromise.foreach(_.completeWith(second.last))
-      second.onClose { close() }
-    }
-
-    override protected[signals3] def onWire(): Unit =
-      if (!first.isClosed) {
-        first.subscribe(this)
-        first.onClose { switchToSecond() }
-      } else if (!second.isClosed) {
-        switchToSecond()
-      }
-
-    override protected[signals3] def onUnwire(): Unit = {
-      first.unsubscribe(this)
-      second.unsubscribe(this)
-    }
-
-    override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
-      if (!isClosed) dispatch(event, currentContext)
   }
 }

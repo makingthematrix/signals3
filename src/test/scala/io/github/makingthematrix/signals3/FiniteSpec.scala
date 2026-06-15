@@ -1,6 +1,7 @@
 package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.Finite.{::, FiniteSignal, FiniteStream}
+import io.github.makingthematrix.signals3.priv.{SourceSignal, SourceStream}
 import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, waitFor}
 
 import scala.collection.mutable

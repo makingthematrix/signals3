@@ -1,15 +1,13 @@
 package io.github.makingthematrix.signals3
 
-import Signal.{EmptyTakeSignal, SignalSubscriber, SignalSubscription}
+import Signal.EmptyTakeSignal
 import Finite.FiniteSignal
-import io.github.makingthematrix.signals3.priv.ProxySignal.*
-import io.github.makingthematrix.signals3.priv.{BaseSubscription, DoneSignal, EventSource, FlatMapSignal, ProxySignal, Subscription}
-
+import io.github.makingthematrix.signals3.priv.*
+import io.github.makingthematrix.signals3.priv.ZipSignal.*
 import scala.annotation.static
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.ref.WeakReference
-import scala.util.Try
 import scala.util.chaining.scalaUtilChainingOps
 
 /** A signal is a stream with a cache.
@@ -677,36 +675,6 @@ object Signal {
     */
   object `::` {
     def unapply[V](signal: Signal[V]): (Future[V], Signal[V]) = (signal.head, signal.tail)
-  }
-
-  @static private[signals3] trait SignalSubscriber {
-    // 'currentContext' is the context this method IS run in, NOT the context any subsequent methods SHOULD run in
-    protected[signals3] def changed(currentContext: Option[ExecutionContext]): Unit
-  }
-
-  @static final private class SignalSubscription[V](source:           Signal[V],
-                                                    f:                V => Unit,
-                                                    executionContext: Option[ExecutionContext] = None
-                                                   )(using context: WeakReference[EventContext])
-    extends BaseSubscription(context) with SignalSubscriber {
-
-    override def changed(currentContext: Option[ExecutionContext]): Unit = synchronized {
-      source.value.foreach { event =>
-        if (subscribed) executionContext match {
-          case Some(ec) if !currentContext.contains(ec) => Future(if (subscribed) Try(f(event)))(using ec)
-          case _ => f(event)
-        }
-      }
-    }
-
-    override protected[signals3] def onSubscribe(): Unit = monitor.synchronized {
-      source.subscribe(this)
-      changed(None) // refresh the subscriber with current value
-    }
-
-    override protected[signals3] def onUnsubscribe(): Unit = monitor.synchronized {
-      source.unsubscribe(this)
-    }
   }
 
   /** Creates a new [[SourceSignal]] of values of the type `V`. A usual entry point for the signals network.

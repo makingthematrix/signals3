@@ -1,7 +1,7 @@
-package io.github.makingthematrix.signals3
+package io.github.makingthematrix.signals3.priv
 
-import io.github.makingthematrix.signals3.SourceStream.{SourceRecoverStream, SourceRecoverWithStream}
-import io.github.makingthematrix.signals3.Stream.StreamSubscriber
+import io.github.makingthematrix.signals3.Stream
+import io.github.makingthematrix.signals3.priv.{SourceRecoverStream, SourceRecoverWithStream}
 
 import scala.annotation.targetName
 import scala.concurrent.ExecutionContext
@@ -14,7 +14,7 @@ import scala.concurrent.ExecutionContext
   *
   * @tparam E the type of the event
   */
-class SourceStream[E] extends Stream[E] {
+private[signals3] class SourceStream[E] extends Stream[E] {
   /** Publishes the event to all subscribers.
     *
     * @see [[Stream.publish]]
@@ -60,46 +60,4 @@ class SourceStream[E] extends Stream[E] {
   override def recoverWith(pf: PartialFunction[Throwable, E]): SourceStream[E] = recoverWithPriv(pf.andThen(Some(_)))
   override def ignoreExceptionsWith(pf: PartialFunction[Throwable, Unit]): SourceStream[E] = recoverWithPriv(pf.andThen(_ => None))
   override def withDefault(value: E): SourceStream[E] = recover(_ => value)
-}
-
-object SourceStream {
-  private[signals3] final class SourceRecoverStream[E](source: SourceStream[E], recover: Throwable => Option[E])
-    extends SourceStream[E] with StreamSubscriber[E] {
-    override protected[signals3] def onWire(): Unit = source.subscribe(this)
-    override protected[signals3] def onUnwire(): Unit = source.unsubscribe(this)
-
-    override def dispatch(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      tryDispatch(event, sourceContext, recover)
-
-    override def publish(event: E): Unit =
-      tryDispatch(event, None, recover)
-
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      tryDispatch(event, sourceContext, recover)
-
-    private def tryDispatch(event: E, sourceContext: Option[ExecutionContext], recover: Throwable => Option[E]): Unit =
-      try super.dispatch(event, sourceContext) catch {
-        case t: Throwable => recover(t).foreach(super.dispatch(_, sourceContext))
-      }
-  }
-
-  private[signals3] final class SourceRecoverWithStream[E](source: SourceStream[E], recoverWith: PartialFunction[Throwable, Option[E]])
-    extends SourceStream[E] with StreamSubscriber[E] {
-    override protected[signals3] def onWire(): Unit = source.subscribe(this)
-    override protected[signals3] def onUnwire(): Unit = source.unsubscribe(this)
-
-    override def dispatch(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      tryDispatchWith(event, sourceContext, recoverWith)
-
-    override def publish(event: E): Unit = tryDispatchWith(event, None, recoverWith)
-
-    override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-      tryDispatchWith(event, sourceContext, recoverWith)
-
-    private def tryDispatchWith(event: E, sourceContext: Option[ExecutionContext], recoverWith: PartialFunction[Throwable, Option[E]]): Unit =
-      try super.dispatch(event, sourceContext) catch {
-        case t: Throwable if recoverWith.isDefinedAt(t) =>
-          recoverWith(t).foreach(super.dispatch(_, sourceContext))
-      }
-  }
 }

@@ -1,7 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import Stream.StreamSubscriber
-import Signal.SignalSubscriber
+import io.github.makingthematrix.signals3.priv.{SignalSubscriber, StreamSubscriber}
 
 import scala.concurrent.ExecutionContext
 
@@ -47,7 +46,3 @@ final class StreamWithAuxSignal[A, B](source: Stream[A], aux: Signal[B]) extends
     aux.unsubscribe(auxSubscriber)
   }
 }
-
-object StreamWithAuxSignal {
-  inline def apply[A, B](source: Stream[A], aux: Signal[B]): StreamWithAuxSignal[A, B] =
-    new StreamWithAuxSignal(source, aux)}

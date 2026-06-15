@@ -1,7 +1,8 @@
 package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.priv.EventSource.NoAutowiring
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Finite, Indexed, Stream, TakeStream}
+import io.github.makingthematrix.signals3.priv.TakeStream
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Finite, Indexed, Stream}
 
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.ExecutionContext

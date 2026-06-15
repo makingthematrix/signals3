@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import CloseableFuture.{Closed, toUncloseable, toFuture, toCloseable}
+import CloseableFuture.{Closed, toCloseable, toFuture, toUncloseable}
 
 import scala.language.implicitConversions
 import scala.util.chaining.scalaUtilChainingOps
@@ -8,6 +8,7 @@ import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration.*
 import testutils.*
 import io.github.makingthematrix.signals3.Closeable.{CloseableSignal, CloseableStream}
+import io.github.makingthematrix.signals3.priv.{SourceSignal, SourceStream}
 
 class CloseableSpec extends munit.FunSuite {
   import EventContext.Implicits.global

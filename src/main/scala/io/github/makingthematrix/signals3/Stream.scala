@@ -1,14 +1,10 @@
 package io.github.makingthematrix.signals3
 
-import Stream.{EmptyTakeStream, StreamSubscriber, StreamSubscription}
+import Stream.EmptyTakeStream
 import Finite.FiniteStream
-import io.github.makingthematrix.signals3.priv.ProxyStream.*
-import io.github.makingthematrix.signals3.priv.{BaseSubscription, EventSource, FlatMapStream, Subscription}
-
-import scala.annotation.static
+import io.github.makingthematrix.signals3.priv.*
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.ref.WeakReference
-import scala.util.Try
 import scala.util.chaining.scalaUtilChainingOps
 
 /** A stream of type `E` dispatches events (of type `E`) to all functions of type `(E) => Unit` which were registered in
@@ -388,33 +384,6 @@ object Stream {
   }
 
   private final val EmptyTakeStream: TakeStream[Any] = new TakeStream[Any](Stream[Any](), 0)
-
-  @static private[signals3] trait StreamSubscriber[E] {
-    // 'currentContext' is the context this method IS run in, NOT the context any subsequent methods SHOULD run in
-    protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit
-  }
-
-  @static final private class StreamSubscription[E](source:            Stream[E],
-                                                    f:                 E => Unit,
-                                                    executionContext:  Option[ExecutionContext] = None
-                                                   )(using context: WeakReference[EventContext])
-    extends BaseSubscription(context) with StreamSubscriber[E] {
-
-    override def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
-      if (subscribed)
-        executionContext match {
-          case Some(ec) if !currentContext.contains(ec) => Future(if (subscribed) Try(f(event)))(using ec)
-          case _ => f(event)
-        }
-
-    override protected[signals3] def onSubscribe(): Unit = monitor.synchronized {
-      source.subscribe(this)
-    }
-
-    override protected[signals3] def onUnsubscribe(): Unit = monitor.synchronized {
-      source.unsubscribe(this)
-    }
-  }
 
   /** Creates a new [[SourceStream]] of events of the type `E`. A usual entry point for the event streams network.
     *

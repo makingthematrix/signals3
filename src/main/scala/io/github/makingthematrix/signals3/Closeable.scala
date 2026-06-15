@@ -1,9 +1,9 @@
 package io.github.makingthematrix.signals3
 
-import io.github.makingthematrix.signals3.priv.{ProxySignal, ProxyStream}
-
+import io.github.makingthematrix.signals3.priv.*
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.chaining.*
+import io.github.makingthematrix.signals3.priv.ZipSignal.*
 
 /**
   * A stream or a signal can be closeable, meaning that it can be closed and after that it will not publish new events
@@ -25,9 +25,6 @@ trait Closeable extends java.lang.AutoCloseable with CanBeClosed {
 }
 
 object Closeable {
-  import ProxySignal.*
-  import ProxyStream.*
-
   /**
     * A type alias for a closeable stream.
     * @tparam E The event type of the stream.
@@ -38,30 +35,6 @@ object Closeable {
     * @tparam V The value type of the signal.
     */
   type CloseableSignal[V] = Signal[V] & Closeable
-
-  /**
-    * Encapsulates logic for closing original streams/signals/c-futures, checking if they are closed, and calling
-    * the registered `onClose` code (but only once, not once per the original source).
-    */
-  private trait Closeability(sources: Closeable*) extends Closeable{
-    private var callOnCloseList: List[() => Unit] = Nil
-    @volatile private var open = sources.length
-
-    sources.foreach(_.onClose {
-      synchronized {
-        open -= 1
-        if (open == 0) callOnCloseList.foreach(_())
-      }
-    })
-
-    final override def closeAndCheck(): Boolean =
-      sources.map(_.closeAndCheck()).forall(p => p)
-
-    final override def isClosed: Boolean = sources.forall(_.isClosed)
-
-    final override def onClose(body: => Unit): Unit =
-      callOnCloseList = (() => body) :: callOnCloseList
-  }
 
   /**
     * Creates a new `CloseableStream[V]` by mapping events of the type `E` emitted by the original generator or
