@@ -1,8 +1,10 @@
 package io.github.makingthematrix.signals3.priv
 
+import io.github.makingthematrix.signals3.priv.EventSource.Subscriber
+
 import scala.concurrent.ExecutionContext
 
-private[signals3] trait SignalSubscriber {
+private[signals3] trait SignalSubscriber extends Subscriber {
   // 'currentContext' is the context this method IS run in, NOT the context any subsequent methods SHOULD run in
   protected[signals3] def changed(currentContext: Option[ExecutionContext]): Unit
 }
