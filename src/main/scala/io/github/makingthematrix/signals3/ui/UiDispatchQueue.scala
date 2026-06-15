@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.ui
 
 import io.github.makingthematrix.signals3.priv.Subscription
-import io.github.makingthematrix.signals3.{DispatchQueue, EventContext, Stream, Signal}
+import io.github.makingthematrix.signals3.{DispatchQueue, EventContext, Signal, Stream}
 
 /** This is a utility class to help you set up signals3 to transport events between the default execution context
   * (`Threading.defaultContext`) and other custom contexts, and a secondary execution context usually associated with GUI.
@@ -71,7 +71,7 @@ object UiDispatchQueue {
     *
     * @return the Ui dispatch queue
     */
-  def Ui: DispatchQueue = _ui
+  inline def Ui: DispatchQueue = _ui
 
   /** Sets the dispatch queue for the UI. In practice, you will usually start the program without the Ui initialized, and
     * only later call `UiDispatchQueue.setUi` to do it, but you probably won't change it again.

@@ -29,10 +29,10 @@ import GeneratorSignal.VPausable
   * @param ec       The execution context in which the generator works.
   * @tparam V       The type of the signal's value.
   */
-class LazyListGeneratorSignal[V](interval: FiniteDuration | (V => FiniteDuration),
-                                 val values: LazyList[V],
-                                 override val paused: V => Boolean)
-                                (using ec: ExecutionContext)
+class LazyListGeneratorSignal[V] protected[signals3] (interval: FiniteDuration | (V => FiniteDuration),
+                                                      val values: LazyList[V],
+                                                      override val paused: V => Boolean)
+                                                     (using ec: ExecutionContext)
   extends GeneratorSignal[V](values.head, interval) with Indexed with VPausable[V] {
   inc() // the first value in values becomes the initial value, so we already increase the counter to 1
 
@@ -55,7 +55,7 @@ object LazyListGeneratorSignal {
     * @tparam V The type of the value.
     * @return A generator signal.
     */
-  inline def apply[V](values: LazyList[V], interval: FiniteDuration | (V => FiniteDuration))
-                     (using ExecutionContext): LazyListGeneratorSignal[V] =
+  def apply[V](values: LazyList[V], interval: FiniteDuration | (V => FiniteDuration))
+              (using ExecutionContext): LazyListGeneratorSignal[V] =
     new LazyListGeneratorSignal[V](interval, values, (_: V) => false).tap(_.initialize())
 }

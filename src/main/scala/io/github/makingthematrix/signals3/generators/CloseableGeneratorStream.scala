@@ -27,10 +27,10 @@ import scala.concurrent.duration.FiniteDuration
   *                 the `generate` function will not be called.
   * @tparam E       The type of the generated event.
   */
-class CloseableGeneratorStream[E](interval: FiniteDuration | (() => FiniteDuration),
-                                  generate: () => E,
-                                  override val paused: () => Boolean)
-                                 (using ExecutionContext)
+class CloseableGeneratorStream[E] protected[signals3] (interval: FiniteDuration | (() => FiniteDuration),
+                                                       generate: () => E,
+                                                       override val paused: () => Boolean)
+                                                      (using ExecutionContext)
   extends GeneratorStream[E](interval) with Closeable with EPausable {
 
   override protected def onBeat(): Unit = {

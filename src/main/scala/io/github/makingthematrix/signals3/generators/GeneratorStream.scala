@@ -24,8 +24,8 @@ import scala.util.chaining.scalaUtilChainingOps
   *                 called on initialization, and then after each generated event.
   * @tparam E       The type of the generated event.
   */
-abstract class GeneratorStream[E](interval: FiniteDuration | (() => FiniteDuration))
-                                 (using ExecutionContext)
+abstract class GeneratorStream[E] protected[signals3] (interval: FiniteDuration | (() => FiniteDuration))
+                                                      (using ExecutionContext)
   extends Stream[E] with NoAutowiring {
 
   protected lazy val beat: CloseableFuture[Unit] =
@@ -47,7 +47,7 @@ abstract class GeneratorStream[E](interval: FiniteDuration | (() => FiniteDurati
 }
 
 object GeneratorStream {
-  private[signals3] trait EPausable{
+  private[signals3] trait EPausable {
     val paused: () => Boolean
   }
 
@@ -84,8 +84,8 @@ object GeneratorStream {
     * @tparam E       The type of the generated event.
     * @return         A generator stream.
     */
-  inline def generate[E](interval: FiniteDuration | (() => FiniteDuration))(body: => E)
-                        (using ExecutionContext): CloseableGeneratorStream[E] =
+  def generate[E](interval: FiniteDuration | (() => FiniteDuration))(body: => E)
+                 (using ExecutionContext): CloseableGeneratorStream[E] =
     new CloseableGeneratorStream[E](interval, () => body, () => false).tap(_.initialize())
 
   /**
@@ -97,8 +97,8 @@ object GeneratorStream {
     * @tparam E       The type of the generated event.
     * @return         A generator stream.
     */
-  inline def repeat[E](event: E, interval: FiniteDuration | (() => FiniteDuration))
-                      (using ExecutionContext): CloseableGeneratorStream[E] =
+  def repeat[E](event: E, interval: FiniteDuration | (() => FiniteDuration))
+               (using ExecutionContext): CloseableGeneratorStream[E] =
     new CloseableGeneratorStream[E](interval, () => event, () => false).tap(_.initialize())
 
   /**

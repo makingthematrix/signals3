@@ -28,10 +28,10 @@ import scala.util.chaining.scalaUtilChainingOps
   *                 the generator will pause going through the events collection.
   * @tparam E       The type of the generated event.
   */
-class FiniteGeneratorStream[E](interval: FiniteDuration | (() => FiniteDuration),
-                               val events: Iterable[E],
-                               override val paused : () => Boolean)
-                              (using ExecutionContext)
+class FiniteGeneratorStream[E] protected[signals3] (interval: FiniteDuration | (() => FiniteDuration),
+                                                    val events: Iterable[E],
+                                                    override val paused : () => Boolean)
+                                                   (using ExecutionContext)
   extends GeneratorStream[E](interval) with Finite[E] with Indexed with EPausable {
   private val it = events.iterator
   override def isClosed: Boolean = super.isClosed || it.isEmpty
@@ -68,8 +68,8 @@ object FiniteGeneratorStream {
     * @tparam E       The type of the generated event.
     * @return         A generator stream.
     */
-  inline def apply[E](events: Iterable[E], interval: FiniteDuration | (() => FiniteDuration))
-                     (using ExecutionContext): FiniteGeneratorStream[E] =
+  def apply[E](events: Iterable[E], interval: FiniteDuration | (() => FiniteDuration))
+              (using ExecutionContext): FiniteGeneratorStream[E] =
     new FiniteGeneratorStream[E](interval, events, () => false).tap(_.initialize())
 
   /**

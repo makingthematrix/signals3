@@ -30,10 +30,10 @@ import GeneratorSignal.VPausable
   * @param ec       The execution context in which the generator works.
   * @tparam V       The type of the signal's value.
   */
-class FiniteGeneratorSignal[V](interval: FiniteDuration | (V => FiniteDuration),
-                               val values: Iterable[V],
-                               override val paused: V => Boolean)
-                              (using ec: ExecutionContext)
+class FiniteGeneratorSignal[V] protected[signals3] (interval: FiniteDuration | (V => FiniteDuration),
+                                                    val values: Iterable[V],
+                                                    override val paused: V => Boolean)
+                                                   (using ec: ExecutionContext)
   extends GeneratorSignal[V](values.head, interval) with Finite[V] with Indexed with VPausable[V] {
   inc() // the first value in values becomes the initial value, so we already increase the counter to 1
   private val it = values.tail.iterator
@@ -72,8 +72,8 @@ object FiniteGeneratorSignal {
     * @tparam V The type of the value.
     * @return A generator signal.
     */
-  inline def apply[V](values: Iterable[V], interval: FiniteDuration | (V => FiniteDuration))
-                     (using ExecutionContext): FiniteGeneratorSignal[V] =
+  def apply[V](values: Iterable[V], interval: FiniteDuration | (V => FiniteDuration))
+              (using ExecutionContext): FiniteGeneratorSignal[V] =
     new FiniteGeneratorSignal[V](interval, values, (_: V) => false).tap(_.initialize())
 
   /**

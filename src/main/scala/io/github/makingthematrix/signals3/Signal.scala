@@ -33,7 +33,7 @@ import scala.util.chaining.scalaUtilChainingOps
   * @param value The option of the last value published in the signal or `None` if the signal was not initialized yet.
   * @tparam V The type of the value held in the signal.
   */
-class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) extends EventSource[V, SignalSubscriber] { 
+class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extends EventSource[V, SignalSubscriber] {
   self =>
   private object updateMonitor
 
@@ -46,12 +46,12 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     * @param currentContext The execution context on which the subscriber functions will be called if subscriptions don't specify otherwise (optional).
     * @return true if the update actually happened and subscribers will be notified, false if the new value is the same as the old one.
     */
-  protected[signals3] def update(f: Option[V] => Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
+  private[signals3] def update(f: Option[V] => Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
     updateMonitor.synchronized {
       setValue(f(value), currentContext)
     }
 
-  protected[signals3] def updateWith(v: Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
+  private[signals3] def updateWith(v: Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
     updateMonitor.synchronized {
       setValue(v, currentContext)
     }
@@ -67,7 +67,7 @@ class Signal[V] (@volatile protected[signals3] var value: Option[V] = None) exte
     * @return true if the new value is different from the old one and so a change actually happens and the subscribers will be notified,
     *         false if the new value is the same as the old one.
     */
-  protected[signals3] def setValue(v: Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
+  private[signals3] def setValue(v: Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
     if (value != v) {
       value = v
       notifySubscribers(currentContext)

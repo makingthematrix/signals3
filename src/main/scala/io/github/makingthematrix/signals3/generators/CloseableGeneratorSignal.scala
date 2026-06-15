@@ -30,11 +30,11 @@ import GeneratorSignal.VPausable
   * @param ec       The execution context in which the generator works.
   * @tparam V       The type of the signal's value.
   */
-class CloseableGeneratorSignal[V](init: V,
-                                  update: V => V,
-                                  interval: FiniteDuration | (V => FiniteDuration),
-                                  override val paused: V => Boolean)
-                                 (using ec: ExecutionContext)
+class CloseableGeneratorSignal[V] protected[signals3] (init: V,
+                                                       update: V => V,
+                                                       interval: FiniteDuration | (V => FiniteDuration),
+                                                       override val paused: V => Boolean)
+                                                      (using ec: ExecutionContext)
   extends GeneratorSignal[V](init, interval) with Closeable with VPausable[V] {
   override protected def onBeat(): Unit = {
     super.onBeat()
