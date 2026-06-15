@@ -57,7 +57,7 @@ object Finite {
       * @return A new chained finite stream
       */
     @targetName("chainf")
-    inline def :::(next: => FiniteStream[E]): FiniteStream[E] = ChainedFiniteStream[E](stream, next)
+    inline def :::[W <: E](next: => FiniteStream[W]): FiniteStream[E] = ChainedFiniteStream[E, W](stream, next)
   }
 
   extension [V](signal: FiniteSignal[V]) {

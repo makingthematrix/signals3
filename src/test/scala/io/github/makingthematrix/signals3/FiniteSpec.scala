@@ -183,8 +183,8 @@ class FiniteSpec extends munit.FunSuite {
   test("Chain finite streams with ::: operator with subtype") {
     val a: SourceStream[Animal] = Stream()
     val b: FiniteStream[Animal] = a.take(3)
-    val c: SourceStream[Animal] = Stream()
-    val d: FiniteStream[Animal] = c.take(2)
+    val c: SourceStream[Dog] = Stream()
+    val d: FiniteStream[Dog] = c.take(2)
     val e: FiniteStream[Animal] = b ::: d
 
     val buffer = mutable.ArrayBuilder.make[Animal]

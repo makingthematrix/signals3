@@ -5,8 +5,8 @@ import io.github.makingthematrix.signals3.{Finite, Stream}
 
 import scala.concurrent.ExecutionContext
 
-final private[signals3] class ChainedFiniteStream[E](first: FiniteStream[E], second: => FiniteStream[E])
-  extends Stream[E] with Finite[E] with StreamSubscriber[E]{
+final private[signals3] class ChainedFiniteStream[E, W <: E](first: FiniteStream[E], second: => FiniteStream[W])
+  extends Stream[E] with Finite[E] with StreamSubscriber[E] {
   private inline def switchToSecond(): Unit = {
     second.subscribe(this)
     first.unsubscribe(this)

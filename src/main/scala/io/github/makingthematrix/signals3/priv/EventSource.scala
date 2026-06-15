@@ -2,6 +2,7 @@ package io.github.makingthematrix.signals3.priv
 
 import io.github.makingthematrix.signals3.EventContext
 import scala.concurrent.ExecutionContext
+import EventSource.Subscriber
 
 /** A common superclass for all event sources, i.e. [[Stream]] and [[Signal]].
  * It handles common logic around subscribing and unsubscribing, as well as the logic around triggering the subscribers.
@@ -11,7 +12,7 @@ import scala.concurrent.ExecutionContext
  * @tparam E Event/value type of the given event source
  * @tparam S The subscriber type, i.e. [[Stream.EventSubscriber]] or [[Signal.SignalSubscriber]]
  */
-private[signals3] abstract class EventSource[E, S] {
+private[signals3] abstract class EventSource[E, S <: Subscriber] {
   private object subscribersMonitor
 
   private var autowiring = true
@@ -65,7 +66,7 @@ private[signals3] abstract class EventSource[E, S] {
     *
     * @param subscriber An instance of a subscriber class, known to the class implementing this `EventRelay`
     */
-  def subscribe(subscriber: Any): Unit = subscribersMonitor.synchronized {
+  def subscribe(subscriber: Subscriber): Unit = subscribersMonitor.synchronized {
     val wiredAlready = wired
     subscribers += subscriber.asInstanceOf[S]
     if (!wiredAlready) onWire()
@@ -76,7 +77,7 @@ private[signals3] abstract class EventSource[E, S] {
     *
     * @param subscriber An instance of a subscriber class, known to the class implementing this `EventRelay`
     */
-  def unsubscribe(subscriber: Any): Unit = subscribersMonitor.synchronized {
+  def unsubscribe(subscriber: Subscriber): Unit = subscribersMonitor.synchronized {
     subscribers -= subscriber.asInstanceOf[S]
     if (autowiring && !hasSubscribers) onUnwire()
   }
@@ -135,4 +136,6 @@ private[signals3] object EventSource {
     self: EventSource[?, ?] =>
     self.disableAutowiring()
   }
+
+  trait Subscriber
 }
