@@ -43,7 +43,7 @@ object EventContext {
   *
   * @see [[EventSource]]
   */
-trait EventContext {
+sealed trait EventContext {
   /** An[[EventContext]] has to be started before it can register subscriptions.
     * A newly created one is started by default.
     * If the event context maintains subscriptions, they will be re-subscribed.

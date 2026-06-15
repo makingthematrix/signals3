@@ -27,10 +27,10 @@ import scala.util.chaining.scalaUtilChainingOps
   *                 the generator will pause going through the events collection.
   * @tparam E       The type of the generated event.
   */
-class LazyListGeneratorStream[E](interval: FiniteDuration | (() => FiniteDuration),
-                                 val events: LazyList[E],
-                                 override val paused : () => Boolean)
-                                (using ExecutionContext)
+class LazyListGeneratorStream[E] protected[signals3] (interval: FiniteDuration | (() => FiniteDuration),
+                                                      val events: LazyList[E],
+                                                      override val paused : () => Boolean)
+                                                     (using ExecutionContext)
   extends GeneratorStream[E](interval) with Indexed with EPausable {
 
   override protected def onBeat(): Unit = {
@@ -52,7 +52,7 @@ object LazyListGeneratorStream {
     * @tparam E       The type of the generated event.
     * @return         A generator stream.
     */
-  inline def apply[E](events: LazyList[E], interval: FiniteDuration | (() => FiniteDuration))
-                     (using ExecutionContext): LazyListGeneratorStream[E] =
+  def apply[E](events: LazyList[E], interval: FiniteDuration | (() => FiniteDuration))
+              (using ExecutionContext): LazyListGeneratorStream[E] =
     new LazyListGeneratorStream[E](interval, events, () => false).tap(_.initialize())
 }

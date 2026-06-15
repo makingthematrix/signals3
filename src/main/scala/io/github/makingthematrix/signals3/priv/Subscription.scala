@@ -75,7 +75,7 @@ private[signals3] trait Subscription {
   */
 private[signals3] abstract class BaseSubscription(context: WeakReference[EventContext]) extends Subscription {
   protected object monitor
-  protected[signals3] var subscribed = false
+  private[signals3] var subscribed = false
   private var enabled = false
   private var pauseWithContext = true
 

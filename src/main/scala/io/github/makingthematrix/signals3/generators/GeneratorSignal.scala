@@ -27,8 +27,8 @@ import scala.util.chaining.scalaUtilChainingOps
   * @tparam V       The type of the signal's value.
   */
 
-abstract class GeneratorSignal[V](init : V, interval: FiniteDuration | (V => FiniteDuration))
-                                 (using ExecutionContext)
+abstract class GeneratorSignal[V] protected[signals3] (init: V, interval: FiniteDuration | (V => FiniteDuration))
+                                                      (using ExecutionContext)
   extends Signal[V](Some(init)) with NoAutowiring {
 
   protected lazy val beat: CloseableFuture[Unit] = (interval match {
@@ -87,8 +87,8 @@ object GeneratorSignal {
     * @tparam V       The type of the signal's value.
     * @return         A new generator signal.
     */
-  inline def generate[V](init: V, interval: FiniteDuration | (V => FiniteDuration))(update: V => V)
-                        (using ExecutionContext): CloseableGeneratorSignal[V] =
+  def generate[V](init: V, interval: FiniteDuration | (V => FiniteDuration))(update: V => V)
+                 (using ExecutionContext): CloseableGeneratorSignal[V] =
     new CloseableGeneratorSignal[V](init, update, interval, (_: V) => false).tap(_.initialize())
 
 
@@ -121,8 +121,8 @@ object GeneratorSignal {
     * @tparam Z       The type of the generator's published value.
     * @return         A new generator signal.
     */
-  inline def unfold[V, Z](init: V, interval: FiniteDuration)(update: V => (V, Z))
-                         (using ExecutionContext): CloseableSignal[Z] =
+  def unfold[V, Z](init: V, interval: FiniteDuration)(update: V => (V, Z))
+                  (using ExecutionContext): CloseableSignal[Z] =
     Closeable.map[(V, Z), Z](
       new CloseableGeneratorSignal[(V, Z)](update(init), { (v, _) => update(v) }, interval, _ => false).tap(_.initialize())
     )(_._2)
@@ -151,8 +151,8 @@ object GeneratorSignal {
     * @tparam Z       The type of the generator's published value.
     * @return         A new generator signal.
     */
-  inline def unfold[V, Z](init: V, interval: V => FiniteDuration)(update: V => (V, Z))
-                         (using ExecutionContext): CloseableSignal[Z] =
+  def unfold[V, Z](init: V, interval: V => FiniteDuration)(update: V => (V, Z))
+                  (using ExecutionContext): CloseableSignal[Z] =
     Closeable.map[(V, Z), Z](
       new CloseableGeneratorSignal[(V, Z)](
         update(init),

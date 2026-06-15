@@ -29,14 +29,14 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     *                         the subscriber, the subscriber will be called immediately. Otherwise, a future working in the subscriber's
     *                         execution context will be created.
     */
-  protected[signals3] def dispatch(event: E, executionContext: Option[ExecutionContext]): Unit =
+  private[signals3] def dispatch(event: E, executionContext: Option[ExecutionContext]): Unit =
     notifySubscribers(_.onEvent(event, executionContext))
 
   /** Publishes the event to all subscribers using the current execution context.
     *
     * @param event The event to be published.
     */
-  protected[signals3] def publish(event: E): Unit = dispatch(event, None)
+  private[signals3] def publish(event: E): Unit = dispatch(event, None)
 
   /** Registers a subscriber in a specified execution context and returns the subscription. An optional event context can also
     * be provided by the user for managing the subscription instead of doing it manually. When an event is published in
