@@ -1,8 +1,8 @@
 package io.github.makingthematrix.signals3
 
-import java.util.concurrent.atomic.AtomicInteger
-import Stream.StreamSubscriber
+import io.github.makingthematrix.signals3.priv.StreamSubscriber
 
+import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 

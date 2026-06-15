@@ -1,7 +1,6 @@
 package io.github.makingthematrix.signals3.priv
 
 import io.github.makingthematrix.signals3.Stream
-import io.github.makingthematrix.signals3.Stream.StreamSubscriber
 
 import scala.concurrent.ExecutionContext
 import scala.util.chaining.scalaUtilChainingOps

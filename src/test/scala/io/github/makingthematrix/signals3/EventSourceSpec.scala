@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import io.github.makingthematrix.signals3.priv.EventSource
+import io.github.makingthematrix.signals3.priv.{EventSource, StreamSubscriber}
 
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.ExecutionContext
@@ -16,11 +16,11 @@ class EventSourceSpec extends munit.FunSuite {
     override protected def onUnwire(): Unit = onUnwireCount += 1
 
     // Expose the protected notifySubscribers for tests
-    def testNotify(call: Stream.StreamSubscriber[E] => Unit): Unit =
+    def testNotify(call: StreamSubscriber[E] => Unit): Unit =
       notifySubscribers(call)
   }
 
-  private class DummySubscriber[E] extends Stream.StreamSubscriber[E] {
+  private class DummySubscriber[E] extends StreamSubscriber[E] {
     var events: Vector[(E, Option[ExecutionContext])] = Vector.empty
     override protected[signals3] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit =
       events = events :+ (event -> currentContext)

@@ -1,6 +1,6 @@
-package io.github.makingthematrix.signals3
+package io.github.makingthematrix.signals3.priv
 
-import io.github.makingthematrix.signals3.priv.ProxySignal.IndexedSignal
+import io.github.makingthematrix.signals3.{Finite, Signal}
 
 /**
  * A signal which closes after a given number of value changes.
@@ -13,7 +13,7 @@ import io.github.makingthematrix.signals3.priv.ProxySignal.IndexedSignal
  * @param take The number of values to take.
  * @tparam V The type of the value held by the signal.
  */
-final class TakeSignal[V](source: Signal[V], take: Int)
+final private[signals3] class TakeSignal[V](source: Signal[V], take: Int)
   extends IndexedSignal[V](source) with Finite[V] {
   override def isClosed: Boolean = super.isClosed || counter >= take
 
