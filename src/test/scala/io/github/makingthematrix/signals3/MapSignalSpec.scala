@@ -49,7 +49,7 @@ class MapSignalSpec extends munit.FunSuite {
 
     val s = Signal(1)
     val f = s.map (_ * 2)
-    val sub = f.onCurrent(capture)
+    val sub = f.onCurrentPriv(capture)
     Seq(2, 3) foreach (s ! _)
     assert(s.hasSubscribers)
     assert(f.hasSubscribers)
@@ -65,7 +65,7 @@ class MapSignalSpec extends munit.FunSuite {
     lazy val s = s1.map { _ => 1 }
 
     assert(!s1.wired)
-    val o = s.foreach { _ => () }
+    val o = s.onCurrentPriv { _ => () }
 
     assert(s.wired)
 

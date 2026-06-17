@@ -1,5 +1,6 @@
-package io.github.makingthematrix.signals3.priv
+package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.priv.IndexedStream
 import io.github.makingthematrix.signals3.{CloseableFuture, Finite, Stream}
 
 import scala.annotation.static
@@ -17,7 +18,7 @@ import scala.util.{Failure, Success}
  * @param take The number of events to take.
  * @tparam E The type of the events emitted by the stream.
  */
-final private[signals3] class TakeStream[E](source: Stream[E], take: Int) extends IndexedStream[E](source) with Finite[E] {
+final class TakeStream[E](source: Stream[E], take: Int) extends IndexedStream[E](source) with Finite[E] {
   override def isClosed: Boolean = super.isClosed || counter >= take
 
   override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = {

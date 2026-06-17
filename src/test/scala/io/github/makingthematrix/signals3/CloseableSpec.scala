@@ -8,7 +8,6 @@ import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration.*
 import testutils.*
 import io.github.makingthematrix.signals3.Closeable.{CloseableSignal, CloseableStream}
-import io.github.makingthematrix.signals3.priv.{SourceSignal, SourceStream}
 
 class CloseableSpec extends munit.FunSuite {
   import EventContext.Implicits.global

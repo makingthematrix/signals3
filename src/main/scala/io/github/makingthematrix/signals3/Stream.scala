@@ -2,7 +2,10 @@ package io.github.makingthematrix.signals3
 
 import Stream.EmptyTakeStream
 import Finite.FiniteStream
-import io.github.makingthematrix.signals3.priv.*
+import Closeable.CloseableStream
+import io.github.makingthematrix.signals3.Indexed.IndexedStream
+import io.github.makingthematrix.signals3.priv.{CollectStream, DropStream, DropWhileStream, EventSource, FilterStream, FlatMapStream, FutureStream, GroupByStream, GroupedStream, JoinStream, MapStream, RecoverStream, RecoverWithStream, ScanStream, StreamSubscriber, StreamSubscription, Subscription, TakeWhileStream}
+
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.ref.WeakReference
 import scala.util.chaining.scalaUtilChainingOps
@@ -46,11 +49,9 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     * @param ec An `ExecutionContext` in which the body function will be executed.
     * @param body A function which consumes the event
     * @param eventContext An [[EventContext]] which will register the [[Subscription]] for further management (optional)
-    * @return A [[Subscription]] representing the created connection between the stream and the body function
     */
-  override def on(ec: ExecutionContext)
-                 (body: E => Unit)
-                 (using eventContext: EventContext = EventContext.Global): Subscription =
+  override protected[signals3] def onPriv(ec: ExecutionContext)(body: E => Unit)
+                                         (using eventContext: EventContext = EventContext.Global): Subscription =
     new StreamSubscription[E](this, body, Some(ec))(using WeakReference(eventContext)).tap(_.enable())
 
   /** Registers a subscriber which will always be called in the same execution context in which the event was published.
@@ -59,10 +60,8 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     * @see [[EventSource]]
     * @param body A function which consumes the event
     * @param eventContext An [[EventContext]] which will register the [[Subscription]] for further management (optional)
-    * @return A [[Subscription]] representing the created connection between the stream and the body function
     */
-  override def onCurrent(body: E => Unit)
-                        (using eventContext: EventContext = EventContext.Global): Subscription =
+  override protected [signals3] def onCurrentPriv(body: E => Unit)(using eventContext: EventContext = EventContext.Global): Subscription =
     new StreamSubscription[E](this, body, None)(using WeakReference(eventContext)).tap(_.enable())
 
   protected def recoverPriv(f: Throwable => Option[E]): Stream[E] = RecoverStream[E](this, f)
@@ -127,7 +126,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     * @tparam V The type of the resulting event.
     * @return A new stream of type `V`.
     */
-  inline final def map[V](f: E => V): Stream[V] = new MapStream[E, V](this, f)
+  inline final def map[V](f: E => V): Stream[V] = MapStream[E, V](this, f)
 
   /** Creates a new `Stream[V]` by mapping each event of the original `Stream[E]` to a new stream and
     * switching to it. The usual use case is that the event from the original stream serves to make a decision which
@@ -138,7 +137,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     * @tparam V The type of the resulting stream.
     * @return A new or already existing stream to which we switch as the result of receiving the original event.
     */
-  inline final def flatMap[V](f: E => Stream[V]): Stream[V] = new FlatMapStream[E, V](this, f)
+  inline final def flatMap[V](f: E => Stream[V]): Stream[V] = FlatMapStream[E, V](this, f)
 
   /** Flattens a stream whose value type is also a stream.
     *
@@ -156,7 +155,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     * @tparam V The type of the resulting event.
     * @return A new stream of type `V`.
     */
-  inline final def mapSync[V](f: E => Future[V]): Stream[V] = new FutureStream[E, V](this, f)
+  inline final def mapSync[V](f: E => Future[V]): Stream[V] = FutureStream[E, V](this, f)
 
   /** Creates a new `Stream[E]` by filtering events emitted by the original one.
     *
@@ -164,7 +163,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     *                  Only events for which `predicate(event)` returns true will be emitted in the resulting stream.
     * @return          A new stream emitting only filtered events.
     */
-  inline final def filter(predicate: E => Boolean): Stream[E] = new FilterStream[E](this, predicate)
+  inline final def filter(predicate: E => Boolean): Stream[E] = FilterStream[E](this, predicate)
 
   /** An alias for `filter` used in the for/yield notation.  */
   inline final def withFilter(predicate: E => Boolean): Stream[E] = filter(predicate)
@@ -177,7 +176,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     * @tparam V The type of the resulting event.
     * @return A new stream of type `V`.
     */
-  inline final def collect[V](pf: PartialFunction[E, V]): Stream[V] = new CollectStream[E, V](this, pf)
+  inline final def collect[V](pf: PartialFunction[E, V]): Stream[V] = CollectStream[E, V](this, pf)
 
   /** Creates a new stream of events of type `V` where each event is a result of applying a function which combines
     * the previous result of type `V` with the original event of type `E` that triggers the emission of the new one.
@@ -187,7 +186,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     * @tparam V The type of the resulting event.
     * @return A new stream of type `V`.
     */
-  inline final def scan[V](zero: V)(f: (V, E) => V): Stream[V] = new ScanStream[E, V](this, zero, f)
+  inline final def scan[V](zero: V)(f: (V, E) => V): Stream[V] = ScanStream[E, V](this, zero, f)
 
   /** Creates a new stream by merging the original stream with another one of the same type. The resulting stream
     * will emit events coming from both sources.
@@ -195,7 +194,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     * @param stream The other stream of the same type of events.
     * @return A new stream, emitting events from both original streams.
     */
-  inline final def join(stream: Stream[E]): Stream[E] = new JoinStream[E](this, stream)
+  inline final def join(stream: Stream[E]): Stream[E] = JoinStream[E](this, stream)
 
   /**
     * Creates a new stream that emits all the events of the original stream + one event emited by the provided [[Future]].
@@ -214,11 +213,11 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     * @param ec An [[EventContext]] which can be used to manage the subscription (optional).
     * @return A new [[Subscription]] to this stream.
     */
-  inline final def pipeTo(sourceStream: SourceStream[E])(using ec: EventContext = EventContext.Global): Subscription =
-    onCurrent(sourceStream ! _)
+  inline final def pipeTo(sourceStream: SourceStream[E])(using ec: EventContext = EventContext.Global): Unit =
+    onCurrentPriv(sourceStream ! _)
 
   /** An alias for `pipeTo`. */
-  inline final def |(sourceStream: SourceStream[E])(using ec: EventContext = EventContext.Global): Subscription = 
+  inline final def |(sourceStream: SourceStream[E])(using ec: EventContext = EventContext.Global): Unit = 
     pipeTo(sourceStream)
 
   /**
@@ -227,7 +226,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     */
   final def indexed: IndexedStream[E] = this match {
     case that: IndexedStream[E] => that
-    case _ => new IndexedStream[E](this)
+    case _ => priv.IndexedStream[E](this)
   }
 
   /**
@@ -235,7 +234,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     * @param n The number of events to drop
     * @return A new stream that drops n events and then starts to emit all consecutive events
     */
-  final def drop(n: Int): Stream[E] = if (n <= 0) this else new DropStream[E](this, n)
+  final def drop(n: Int): Stream[E] = if (n <= 0) this else DropStream[E](this, n)
 
   /**
     * Drops events while they fulfill the condition `p`. The first event that fails is emited and the all consecutive
@@ -243,7 +242,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     * @param p The condition function
     * @return A new stream that drops events while `p` is fulfilled
     */
-  inline final def dropWhile(p: E => Boolean): Stream[E] = new DropWhileStream[E](this, p)
+  inline final def dropWhile(p: E => Boolean): Stream[E] = DropWhileStream[E](this, p)
 
   /**
     * Emits a given number of events and closes the stream.
@@ -258,7 +257,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     * @param p The condition function
     * @return A new stream that emits events while `p` is fulfilled
     */
-  inline final def takeWhile(p: E => Boolean): FiniteStream[E] = new TakeWhileStream[E](this, p)
+  inline final def takeWhile(p: E => Boolean): FiniteStream[E] = TakeWhileStream[E](this, p)
 
   /**
     * Splits the stream into a finite stream that emits the given number of event and closes, and another stream that picks up
@@ -283,7 +282,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     */
   final def closeable: CloseableStream[E] = this match {
     case that: CloseableStream[E] => that
-    case _ => new CloseableStream[E](this)
+    case _ => priv.CloseableStream[E](this)
   }
 
   /**
@@ -291,7 +290,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     * @param n The size of the sequence
     * @return A new stream where the event type is a sequence of original events
     */
-  inline final def grouped(n: Int): Stream[Seq[E]] = new GroupedStream[E](this, n)
+  inline final def grouped(n: Int): Stream[Seq[E]] = GroupedStream[E](this, n)
 
   /**
     * Groups events in sequences of uneven size and emits each sequence as one event.
@@ -303,7 +302,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     * @param p A condition function
     * @return A new stream where the event type is a sequence of original events
     */
-  inline final def groupBy(p: E => Boolean): Stream[Seq[E]] = new GroupByStream[E](this, p)
+  inline final def groupBy(p: E => Boolean): Stream[Seq[E]] = GroupByStream[E](this, p)
 
   /** Produces a [[CloseableFuture]] which will finish when the next event is emitted in the parent stream.
     *
@@ -315,7 +314,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     */
   final def next(using eventContext: EventContext = EventContext.Global, executionContext: ExecutionContext): CloseableFuture[E] = {
     val p = Promise[E]()
-    val o = onCurrent { p.trySuccess }
+    val o = onCurrentPriv { p.trySuccess }
     p.future.onComplete(_ => o.destroy())
     CloseableFuture.from(p)
   }
@@ -390,7 +389,7 @@ object Stream {
     * @tparam E The event type.
     * @return A new stream of events of the type `E`.
     */
-  inline def apply[E]() = new SourceStream[E]
+  inline def apply[E](): SourceStream[E] = new SourceStream[E]
 
   /** Creates a new stream by joining together the original streams of the same type of events, `E`.
     * The resulting stream will emit all events published to any of the original streams.
@@ -402,7 +401,7 @@ object Stream {
     * @tparam E The event type.
     * @return A new stream of events of type `E`.
     */
-  inline def join[E](streams: Stream[E]*): Stream[E] = new JoinStream(streams*)
+  inline def join[E](streams: Stream[E]*): Stream[E] = JoinStream(streams*)
 
   /** Creates a new event source from a signal of the same type of events.
     * The event source will publish a new event every time the value of the signal changes or its set of subscribers changes.
@@ -421,7 +420,7 @@ object Stream {
     * @tparam E The type of the event.
     * @return A new stream.
     */
-  inline def apply[E](future: Future[E])(using ExecutionContext): TakeStream[E] = apply(CloseableFuture.from(future))
+  inline def apply[E](future: Future[E])(using ExecutionContext): FiniteStream[E] & Indexed = apply(CloseableFuture.from(future))
 
   /** Creates a stream from a promise. The stream will emit one event if the promise finishes with success, zero otherwise.
    *
@@ -429,7 +428,7 @@ object Stream {
    * @tparam E The type of the event.
    * @return A new stream.
    */
-  inline def apply[E](promise: Promise[E])(using ExecutionContext): TakeStream[E] = apply(CloseableFuture.from(promise))
+  inline def apply[E](promise: Promise[E])(using ExecutionContext): FiniteStream[E] & Indexed = apply(CloseableFuture.from(promise))
 
   /** Creates a stream from a closeable future. The stream will emit one event if the future finishes with success,
    * zero otherwise.
@@ -437,5 +436,5 @@ object Stream {
    * @tparam E The type of the event.
    * @return A new stream.
    */
-  inline def apply[E](cf: CloseableFuture[E])(using ExecutionContext): TakeStream[E] = TakeStream[E](cf)
+  inline def apply[E](cf: CloseableFuture[E])(using ExecutionContext): FiniteStream[E] & Indexed = TakeStream[E](cf)
 }

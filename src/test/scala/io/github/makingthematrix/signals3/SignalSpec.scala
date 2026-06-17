@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.Closeable.CloseableSignal
-import io.github.makingthematrix.signals3.priv.{SourceSignal, Subscription}
+import io.github.makingthematrix.signals3.priv.Subscription
 
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, CyclicBarrier, TimeUnit}
@@ -39,7 +39,7 @@ class SignalSpec extends munit.FunSuite {
   test("Basic subscriber lifecycle") {
     val s = Signal(1)
     assert(!s.hasSubscribers)
-    val sub = s.foreach { _ => () }
+    val sub = s.onCurrentPriv { _ => () }
     assert(s.hasSubscribers)
     sub.destroy()
     assert(!s.hasSubscribers)
@@ -50,7 +50,7 @@ class SignalSpec extends munit.FunSuite {
     val capture: Int => Unit = { value => received.mutate(_ :+ value) }
 
     val s = Signal(1)
-    val sub = s.foreach(capture)
+    val sub = s.onCurrentPriv(capture)
 
     waitFor(received, Seq(1))
 
@@ -148,7 +148,7 @@ class SignalSpec extends munit.FunSuite {
 
     def add(barrier: CyclicBarrier): Future[Subscription] = Future(blocking {
       barrier.await()
-      s.onCurrent { _ => num.incrementAndGet() }
+      s.onCurrentPriv { _ => num.incrementAndGet() }
     })
 
     val subs = Await.result(Future.sequence(Seq.fill(50)(add(barrier))), 10.seconds)
@@ -293,14 +293,14 @@ class SignalSpec extends munit.FunSuite {
                                    eventContext: EventContext,
                                    dispatchExecutionContext: Option[ExecutionContext],
                                    actualExecutionContext: ExecutionContext
-                                  )(subscribe: Signal[Int] => (Int => Unit) => Subscription = s => g => s.onCurrent(g)(using eventContext)): Unit =
+                                  )(subscribe: Signal[Int] => (Int => Unit) => Subscription = s => g => s.onCurrentPriv(g)(using eventContext)): Unit =
     concurrentUpdates(dispatches, several, (s, n) => s.updateWith(Some(n), dispatchExecutionContext), actualExecutionContext, subscribe)
 
   private def concurrentMutations(dispatches: Int,
                                   several: Int,
                                   eventContext: EventContext,
                                   actualExecutionContext: ExecutionContext
-                                 )(subscribe: Signal[Int] => (Int => Unit) => Subscription = s => g => s.onCurrent(g)(using eventContext)): Unit =
+                                 )(subscribe: Signal[Int] => (Int => Unit) => Subscription = s => g => s.onCurrentPriv(g)(using eventContext)): Unit =
     concurrentUpdates(dispatches, several, (s, n) => s.mutate(_ + n), actualExecutionContext, subscribe, _.currentValue.get == 55)
 
   private def concurrentUpdates(dispatches: Int,
@@ -399,14 +399,14 @@ class SignalSpec extends munit.FunSuite {
     val s = Signal[Int](0)
     var p = Promise[Int]()
 
-    var sub = s.onChanged.onCurrent(p.success)
+    var sub = s.onChanged.onCurrentPriv(p.success)
 
     s ! 1
 
     assertEquals(result(p.future), 1)
     sub.destroy()
     p = Promise()
-    sub = s.onChanged.onCurrent(p.success)
+    sub = s.onChanged.onCurrentPriv(p.success)
 
     s ! 2
 

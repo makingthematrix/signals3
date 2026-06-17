@@ -1,5 +1,7 @@
 package io.github.makingthematrix.signals3.priv
 
+import io.github.makingthematrix.signals3.SourceSignal
+
 import scala.concurrent.ExecutionContext
 
 private[signals3] final class SourceRecoverSignal[V](source: SourceSignal[V], recover: Throwable => Option[V])

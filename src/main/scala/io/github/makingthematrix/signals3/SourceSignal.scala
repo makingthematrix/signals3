@@ -1,7 +1,7 @@
-package io.github.makingthematrix.signals3.priv
+package io.github.makingthematrix.signals3
 
-import io.github.makingthematrix.signals3.priv.{SourceRecoverSignal, SourceRecoverWithSignal}
 import io.github.makingthematrix.signals3.Signal
+import io.github.makingthematrix.signals3.priv.{SourceRecoverSignal, SourceRecoverWithSignal}
 
 import scala.annotation.targetName
 import scala.concurrent.ExecutionContext
@@ -14,7 +14,7 @@ import scala.concurrent.ExecutionContext
   *
   * @tparam V the type of the value held by the signal.
   */
-private[signals3] class SourceSignal[V](v: Option[V]) extends Signal[V](v) {
+class SourceSignal[V](v: Option[V]) extends Signal[V](v) {
   /** Changes the value of the signal.
     *
     * The original `publish` method of the [[Signal]] class is `protected` to ensure that intermediate signals - those created

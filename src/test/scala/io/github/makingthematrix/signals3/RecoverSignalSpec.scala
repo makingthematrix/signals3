@@ -1,6 +1,5 @@
 package io.github.makingthematrix.signals3
 
-import io.github.makingthematrix.signals3.priv.SourceSignal
 import testutils.*
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}

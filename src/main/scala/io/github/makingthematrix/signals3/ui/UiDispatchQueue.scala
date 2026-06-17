@@ -1,6 +1,5 @@
 package io.github.makingthematrix.signals3.ui
 
-import io.github.makingthematrix.signals3.priv.Subscription
 import io.github.makingthematrix.signals3.{DispatchQueue, EventContext, Signal, Stream}
 
 /** This is a utility class to help you set up signals3 to transport events between the default execution context
@@ -105,7 +104,7 @@ object UiDispatchQueue {
     * @return A new `Subscription` to the signal.
     */
   extension [E](stream: Stream[E]) {
-    def onUi(subscriber: E => Unit)(using EventContext): Subscription = stream.on(_ui)(subscriber)
+    def onUi(subscriber: E => Unit)(using EventContext): Unit = stream.on(_ui)(subscriber)
   }
 
   /** An extension method to the `Signal` class. You can use `signal.onUi { value => ... }` instead of
@@ -117,6 +116,6 @@ object UiDispatchQueue {
     * @return A new `Subscription` to the signal.
     */
   extension [V](signal: Signal[V]) {
-    def onUi(subscriber: V => Unit)(using EventContext): Subscription = signal.on(_ui)(subscriber)
+    def onUi(subscriber: V => Unit)(using EventContext): Unit = signal.on(_ui)(subscriber)
   }
 }

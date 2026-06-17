@@ -119,7 +119,7 @@ class FlatMapSignalSpec extends munit.FunSuite {
     val s2 = Signal(2)
 
     val fm = s.flatMap { Seq(s1, s2) }
-    val sub = fm.foreach(capture)
+    val sub = fm.onCurrentPriv(capture)
 
     s1 ! 3
     s2 ! 4
@@ -145,7 +145,7 @@ class FlatMapSignalSpec extends munit.FunSuite {
 
     assert(!s1.wired)
     assert(!s.wired)
-    val o = s.foreach { _ => () }
+    val o = s.onCurrentPriv { _ => () }
 
     assert(s1.wired)
     assert(s.wired)
@@ -166,7 +166,7 @@ class FlatMapSignalSpec extends munit.FunSuite {
       case false => s2
     }
 
-    val o = fm.foreach(_ => ())
+    val o = fm.onCurrentPriv(_ => ())
 
     assert(s.wired)
     assert(s1.wired)

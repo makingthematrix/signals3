@@ -1,5 +1,7 @@
 package io.github.makingthematrix.signals3.priv
 
+import io.github.makingthematrix.signals3.SourceStream
+
 import scala.concurrent.ExecutionContext
 
 private[signals3] final class SourceRecoverWithStream[E](source: SourceStream[E], recoverWith: PartialFunction[Throwable, Option[E]])

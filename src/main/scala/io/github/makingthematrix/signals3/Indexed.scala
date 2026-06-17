@@ -18,3 +18,8 @@ trait Indexed {
   /** Increments the counter by one and returns the previous value. */
   inline protected def getAndInc(): Int = _counter.getAndIncrement()
 }
+
+object Indexed {
+  type IndexedStream[E] = Stream[E] & Indexed
+  type IndexedSignal[V] = Signal[V] & Indexed
+}
