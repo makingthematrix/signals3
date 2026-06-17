@@ -117,7 +117,7 @@ class FlatMapStreamSpec extends munit.FunSuite {
     assert(!source1.hasSubscribers)
     assert(!source2.hasSubscribers)
 
-    val sub = result.foreach(capture)
+    val sub = result.onCurrentPriv(capture)
 
     assert(result.hasSubscribers)
     assert(switch.hasSubscribers) // result is subscribed to switch
@@ -154,7 +154,7 @@ class FlatMapStreamSpec extends munit.FunSuite {
 
     assert(!es1.wired)
     assert(!es2.wired)
-    val o = res.foreach { _ => () }
+    val o = res.onCurrentPriv { _ => () }
 
     assert(es1.wired)
     assert(!es2.wired)

@@ -56,7 +56,7 @@ class ScanSignalSpec extends munit.FunSuite {
 
     val s = Signal(1)
     val scanned = s.scan(0)(_ + _)
-    val sub = scanned.onCurrent(capture)
+    val sub = scanned.onCurrentPriv(capture)
     Seq(2, 3) foreach (s ! _)
     assert(s.hasSubscribers)
     assert(scanned.hasSubscribers)

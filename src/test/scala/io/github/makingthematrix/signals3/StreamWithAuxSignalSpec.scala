@@ -1,7 +1,5 @@
 package io.github.makingthematrix.signals3
 
-import io.github.makingthematrix.signals3.priv.{SourceSignal, SourceStream}
-
 class StreamWithAuxSignalSpec extends munit.FunSuite {
   private lazy val aux = new SourceSignal[Int](None)
   private lazy val e = new SourceStream[String]()
@@ -10,7 +8,7 @@ class StreamWithAuxSignalSpec extends munit.FunSuite {
   private var events = List.empty[(String, Option[Int])]
 
   test("Subscribe, send stuff, unsubscribe, send more stuff") {
-    val sub = r.onCurrent { r =>
+    val sub = r.onCurrentPriv { r =>
       events = r :: events
     }
 

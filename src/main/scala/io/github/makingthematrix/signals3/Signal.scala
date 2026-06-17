@@ -2,8 +2,11 @@ package io.github.makingthematrix.signals3
 
 import Signal.EmptyTakeSignal
 import Finite.FiniteSignal
-import io.github.makingthematrix.signals3.priv.*
+import Closeable.CloseableSignal
+import Indexed.IndexedSignal
+import io.github.makingthematrix.signals3.priv.{CollectSignal, CombineSignal, ConstSignal, DoneSignal, DropSignal, DropWhileSignal, EventSource, FilterSignal, FlatMapSignal, FoldLeftSignal, GroupBySignal, GroupedSignal, MapSignal, PartialUpdateSignal, ProxySignal, RecoverSignal, RecoverWithSignal, ScanSignal, SequenceSignal, SignalSubscriber, SignalSubscription, StreamSignal, Subscription, TakeWhileSignal, ThrottledSignal}
 import io.github.makingthematrix.signals3.priv.ZipSignal.*
+
 import scala.annotation.static
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -244,7 +247,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @return A new signal with values being tuples of the value of this signal and the other one.
     *         The value of the other signal will be updated every time this or the other signal's value is updated.
     */
-  inline final def zip[Z](other: Signal[Z]): Signal[(V, Z)] = new Zip2Signal[V, Z](this, other)
+  inline final def zip[Z](other: Signal[Z]): Signal[(V, Z)] = Zip2Signal[V, Z](this, other)
 
   /** Creates a new `Signal[Z]` by mapping the value of the type `V` of this signal.
     *
@@ -252,7 +255,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @tparam Z The value type of the new signal.
     * @return A new signal
     */
-  inline final def map[Z](f: V => Z): Signal[Z] = new MapSignal[V, Z](this, f)
+  inline final def map[Z](f: V => Z): Signal[Z] = MapSignal[V, Z](this, f)
 
   /** Creates a new `Signal[V]` which updates its value only if the new value of the original signal satisfies the filter,
     * and changes to empty otherwise. Also, if the initial value of the original signal does not satisfy the filter,
@@ -261,7 +264,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @param predicate A filtering function which for any value of the original signal returns true or false.
     * @return          A new signal of the same value type.
     */
-  final def filter(predicate: V => Boolean): Signal[V] = new FilterSignal(this, predicate)
+  final def filter(predicate: V => Boolean): Signal[V] = FilterSignal(this, predicate)
 
   /** An alias for `filter` used in the for/yield notation.
     *
@@ -314,7 +317,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @return A new signal with values of the type `Z`, holding the value produced from the original signal's value by
     *         the partial function, or empty if that's not possible.
     */
-  inline final def collect[Z](pf: PartialFunction[V, Z]): Signal[Z] = new CollectSignal[V, Z](this, pf)
+  inline final def collect[Z](pf: PartialFunction[V, Z]): Signal[Z] = CollectSignal[V, Z](this, pf)
 
   /** Creates a new `Signal[Z]` by mapping each event of the original `Signal[V]` to a new signal and switching to it.
     * The usual use case is to create a new complex signal not as one big entity with the value being the result of
@@ -326,7 +329,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @tparam Z The value type of the new signal.
     * @return A new or already existing signal to which we switch as the result of a change in the value of the original signal.
     */
-  inline final def flatMap[Z](f: V => Signal[Z]): Signal[Z] = new FlatMapSignal[V, Z](this, f)
+  inline final def flatMap[Z](f: V => Signal[Z]): Signal[Z] = FlatMapSignal[V, Z](this, f)
 
   /** Flattens a signal whose value type is also a signal.
     *
@@ -346,7 +349,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @tparam Z The value type of the new signal.
     * @return A new signal with the value of the type `Z`.
     */
-  inline final def scan[Z](zero: Z)(f: (Z, V) => Z): Signal[Z] = new ScanSignal[V, Z](this, zero, f)
+  inline final def scan[Z](zero: Z)(f: (Z, V) => Z): Signal[Z] = ScanSignal[V, Z](this, zero, f)
 
   /** Combines the current values of this and another signal of the same or different types `V` and `Z` to produce a signal with the value
     * of yet another type `Y`. Basically, zip + map.
@@ -367,7 +370,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @param delay The time interval used for throttling.
     * @return A new throttled signal of the same value type as the parent.
     */
-  inline final def throttle(delay: FiniteDuration): Signal[V] = new ThrottledSignal(this, delay)
+  inline final def throttle(delay: FiniteDuration): Signal[V] = ThrottledSignal(this, delay)
 
   /** Creates a version of this signal which, if the parent signal becomes empty, temporarily uses the value of the given
     * `fallback` signal. The moment the parent signal is set to a new value again, the new signal switches back to it.
@@ -405,11 +408,11 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @param ec An [[EventContext]] which can be used to manage the subscription (optional).
     * @return A new [[Subscription]] to this signal.
     */
-  inline final def pipeTo(sourceSignal: SourceSignal[V])(using ec: EventContext = EventContext.Global): Subscription =
+  inline final def pipeTo(sourceSignal: SourceSignal[V])(using ec: EventContext = EventContext.Global): Unit =
     onCurrent(sourceSignal ! _)
 
   /** An alias for `pipeTo`. */
-  inline final def |(sourceSignal: SourceSignal[V])(using ec: EventContext = EventContext.Global): Subscription = 
+  inline final def |(sourceSignal: SourceSignal[V])(using ec: EventContext = EventContext.Global): Unit = 
     pipeTo(sourceSignal)
 
   /**
@@ -418,7 +421,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @param n The size of the sequence
     * @return A new signal where the value type is a sequence of original values
     */
-  inline final def grouped(n: Int): Signal[Seq[V]] = new GroupedSignal(this, n)
+  inline final def grouped(n: Int): Signal[Seq[V]] = GroupedSignal(this, n)
 
   /**
     * Groups values in sequences of uneven size and uses each sequence as one value.
@@ -430,7 +433,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @param p A condition function
     * @return A new signal where the value type is a sequence of original values
     */
-  inline final def groupBy(p: V => Boolean): Signal[Seq[V]] = new GroupBySignal(this, p)
+  inline final def groupBy(p: V => Boolean): Signal[Seq[V]] = GroupBySignal(this, p)
 
   /** Creates a new signal of the same value type which changes its value to the changed value of the parent signal only if
     * the given `select` function returns different results for the old and the new value. If the results of the `select`
@@ -454,7 +457,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @return A new signal of the same value type as this one, which updates only if the `select` function gives different
     *         results for the old and the new value of the parent signal.
     */
-  inline final def onPartialUpdate[Z](select: V => Z): Signal[V] = new PartialUpdateSignal[V, Z](this)(select)
+  inline final def onPartialUpdate[Z](select: V => Z): Signal[V] = PartialUpdateSignal[V, Z](this)(select)
 
   /** @todo This is an old comment to this method. Consider writing the same in a simpler way.
     *
@@ -482,7 +485,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @param eventContext An [[EventContext]] which will register the [[Subscription]] for further management (optional)
     * @return A [[Subscription]] representing the created connection between the signal and the body function
     */
-  override def on(ec: ExecutionContext)(body: V => Unit)(using eventContext: EventContext = EventContext.Global): Subscription =
+  override protected[signals3] def onPriv(ec: ExecutionContext)(body: V => Unit)(using eventContext: EventContext = EventContext.Global): Subscription =
     new SignalSubscription[V](this, body, Some(ec))(using WeakReference(eventContext)).tap(_.enable())
 
   /** Registers a subscriber which will always be called in the same execution context in which the value of the signal was changed.
@@ -494,7 +497,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @param eventContext An [[EventContext]] which will register the [[Subscription]] for further management (optional)
     * @return A [[Subscription]] representing the created connection between the signal and the body function
     */
-  override def onCurrent(body: V => Unit)(using eventContext: EventContext = EventContext.Global): Subscription =
+  override protected[signals3] def onCurrentPriv(body: V => Unit)(using eventContext: EventContext = EventContext.Global): Subscription =
     new SignalSubscription[V](this, body, None)(using WeakReference(eventContext)).tap(_.enable())
 
   /** Sets the value of the signal to the given value. Notifies the subscribers if the value actually changes.
@@ -600,7 +603,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     */
   final def indexed: IndexedSignal[V] = this match {
     case that: IndexedSignal[V] => that
-    case _ => new IndexedSignal[V](this)
+    case _ => priv.IndexedSignal[V](this)
   }
 
   /**
@@ -609,7 +612,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     */
   final def closeable: CloseableSignal[V] = this match {
     case that: CloseableSignal[V] => that
-    case _ => new CloseableSignal[V](this)
+    case _ => priv.CloseableSignal[V](this)
   }
 
   /**
@@ -618,7 +621,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @param n The number of values to drop
     * @return A new signal that drops n values and then starts to use all consecutive values
     */
-  final def drop(n: Int): Signal[V] = if (n <= 0) this else new DropSignal[V](this, n)
+  final def drop(n: Int): Signal[V] = if (n <= 0) this else DropSignal[V](this, n)
 
   /**
     * Ignores new values while they fulfill the condition `p`. The first event that fails is emited and the all consecutive
@@ -627,7 +630,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @param p The condition function
     * @return A new signal that drops events while `p` is fulfilled
     */
-  final inline def dropWhile(p: V => Boolean): Signal[V] = new DropWhileSignal[V](this, p)
+  final inline def dropWhile(p: V => Boolean): Signal[V] = DropWhileSignal[V](this, p)
 
   /**
     * Updates the value a given number of times and then closes
@@ -636,7 +639,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @return A new signal that updates n times and closes
     */
   final def take(n: Int): TakeSignal[V] =
-    if (n <= 0) EmptyTakeSignal.asInstanceOf[TakeSignal[V]] else new TakeSignal[V](this, n)
+    if (n <= 0) EmptyTakeSignal.asInstanceOf[TakeSignal[V]] else TakeSignal[V](this, n)
 
   /**
     * Updates the value while it fulfills the condition `p`. The first update that fails closes the signal.
@@ -644,7 +647,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @param p The condition function
     * @return A new signal that updates events while `p` is fulfilled
     */
-  final inline def takeWhile(p: V => Boolean): FiniteSignal[V] = new TakeWhileSignal[V](this, p)
+  final inline def takeWhile(p: V => Boolean): FiniteSignal[V] = TakeWhileSignal[V](this, p)
 
   /**
     * Splits the signal into a finite signal that updates the given number of values and closes, and another signal that picks up
@@ -667,7 +670,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
 
 object Signal {
   @static final private val EmptyTakeSignal: TakeSignal[Any] = new TakeSignal[Any](Signal[Any](), 0)
-  @static final private val Empty = new ConstSignal[Any](None)
+  @static final private val Empty = ConstSignal[Any](None)
 
   /**
     * Splits the signal into a future which completes when the current value - or the first new value if the original signal
@@ -812,8 +815,7 @@ object Signal {
     * @tparam Z The type of the initial and result value of the new signal.
     * @return A new signal of values of the type `Z`.
     */
-  inline def foldLeft[V, Z](sources: Signal[V]*)(zero: Z)(f: (Z, V) => Z): Signal[Z] =
-    new FoldLeftSignal[V, Z](sources*)(zero)(f)
+  inline def foldLeft[V, Z](sources: Signal[V]*)(zero: Z)(f: (Z, V) => Z): Signal[Z] = FoldLeftSignal[V, Z](sources*)(zero)(f)
 
   /**
     * Combines the current values of two signals of the same or different types `V` and `Z` to produce a signal with
@@ -828,8 +830,7 @@ object Signal {
     * @tparam Y      The value type of the new signal.
     * @return        A new signal with the value of the type `Y`.
     */
-  inline def combine[V, Z, Y](vSignal: Signal[V], zSignal: Signal[Z])(f: (V, Z) => Y): Signal[Y] =
-    new CombineSignal[V, Z, Y](vSignal, zSignal, f)
+  inline def combine[V, Z, Y](vSignal: Signal[V], zSignal: Signal[Z])(f: (V, Z) => Y): Signal[Y] = CombineSignal[V, Z, Y](vSignal, zSignal, f)
 
   /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
     * The new signal's value will be `true` if both parent signals values are `true` - or `false` otherwise.
@@ -847,8 +848,7 @@ object Signal {
     * @param sources  A variable arguments list of parent signals of the type `Boolean`.
     * @return A new signal of `Boolean`.
     */
-  inline def and(sources: Signal[Boolean]*): Signal[Boolean] =
-    foldLeft[Boolean, Boolean](sources*)(true)(_ && _)
+  inline def and(sources: Signal[Boolean]*): Signal[Boolean] = foldLeft[Boolean, Boolean](sources*)(true)(_ && _)
 
   /** Creates a `Signal[Boolean]` from two parent signals of `Boolean`.
     * The new signal's value will be `true` if any of the parent signals values is `true` - or `false` otherwise.
@@ -920,7 +920,7 @@ object Signal {
     * @tparam V The type of the values in the parent signals.
     * @return A new signal with its value being a sequence of current values of the parent signals.
     */
-  inline def sequence[V](sources: Signal[V]*): Signal[Seq[V]] = new SequenceSignal[V](sources*)
+  inline def sequence[V](sources: Signal[V]*): Signal[Seq[V]] = SequenceSignal[V](sources*)
 
   /** Creates a new signal from a future.
     * The signal will start uninitialized and initialize to its only, never again changing value if the future finishes with success.
@@ -958,7 +958,7 @@ object Signal {
     * @tparam V The type of both the initial value and the events in the parent stream.
     * @return A new signal with the value of the type `V`.
     */
-  inline def from[V](initial: V, source: Stream[V]): Signal[V] = new StreamSignal[V](source, Option(initial))
+  inline def from[V](initial: V, source: Stream[V]): Signal[V] = StreamSignal[V](source, Option(initial))
 
   /** Creates a new signal from a stream.
     * The signal will start uninitialized and subscribe to the parent stream. Subsequently, it will update its value
@@ -968,7 +968,7 @@ object Signal {
     * @tparam V The type of the events in the parent stream.
     * @return A new signal with the value of the type `V`.
     */
-  inline def from[V](source: Stream[V]): Signal[V] = new StreamSignal[V](source)
+  inline def from[V](source: Stream[V]): Signal[V] = StreamSignal[V](source)
 
   @static private[signals3] def done(): DoneSignal = new DoneSignal()
 

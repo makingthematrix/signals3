@@ -1,8 +1,7 @@
 package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.generators.GeneratorStream.EPausable
-import io.github.makingthematrix.signals3.{Finite, Indexed}
-import io.github.makingthematrix.signals3.priv.TakeStream
+import io.github.makingthematrix.signals3.{Finite, Indexed, TakeStream}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration

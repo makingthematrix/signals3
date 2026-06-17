@@ -54,7 +54,7 @@ class ThrottledSignalSpec extends munit.FunSuite {
     val m = s.throttle(100.millis)
     assert(!m.wired)
 
-    val o = m.onCurrent { _ => () }
+    val o = m.onCurrentPriv { _ => () }
     assert(m.wired)
 
     o.disable()

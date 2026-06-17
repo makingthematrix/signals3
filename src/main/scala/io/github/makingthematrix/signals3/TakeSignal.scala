@@ -1,5 +1,6 @@
-package io.github.makingthematrix.signals3.priv
+package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.priv.IndexedSignal
 import io.github.makingthematrix.signals3.{Finite, Signal}
 
 /**

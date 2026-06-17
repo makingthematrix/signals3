@@ -47,7 +47,7 @@ final class RefreshingSignal[V](loader: () => CloseableFuture[V], refreshStream:
   override protected def onWire(): Unit = {
     super.onWire()
     Future {
-      subscription = Some(refreshStream.on(ec)(_ => reload())(using EventContext.Global))
+      subscription = Some(refreshStream.onPriv(ec)(_ => reload())(using EventContext.Global))
       reload()
     }(using ec)
   }

@@ -1,4 +1,4 @@
-package io.github.makingthematrix.signals3.priv
+package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.Stream
 import io.github.makingthematrix.signals3.priv.{SourceRecoverStream, SourceRecoverWithStream}
@@ -14,7 +14,7 @@ import scala.concurrent.ExecutionContext
   *
   * @tparam E the type of the event
   */
-private[signals3] class SourceStream[E] extends Stream[E] {
+class SourceStream[E] extends Stream[E] {
   /** Publishes the event to all subscribers.
     *
     * @see [[Stream.publish]]

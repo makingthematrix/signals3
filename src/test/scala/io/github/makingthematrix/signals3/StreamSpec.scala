@@ -1,6 +1,5 @@
 package io.github.makingthematrix.signals3
 
-import io.github.makingthematrix.signals3.priv.SourceStream
 import testutils.{awaitAllTasks, result, waitForResult}
 
 import scala.collection.mutable.ArrayBuffer
@@ -16,7 +15,7 @@ class StreamSpec extends munit.FunSuite {
     val a: SourceStream[Int] = Stream()
     val b: SourceStream[Int] = Stream()
 
-    val subscription = a.flatMap(_ => b).onCurrent { _ => }
+    val subscription = a.flatMap(_ => b).onCurrentPriv { _ => }
     a ! 1
 
     assert(b.hasSubscribers, "mapped stream should have subscriber after element emitting from source stream")
@@ -38,7 +37,7 @@ class StreamSpec extends munit.FunSuite {
       val count = if (flatMapCalledCount == 0) b else c
       flatMapCalledCount += 1
       count
-    }.onCurrent {
+    }.onCurrentPriv {
       elem => lastReceivedElement = Some(elem)
     }
 

@@ -38,9 +38,10 @@ private[signals3] abstract class EventSource[E, S <: Subscriber] {
     * @param ec An `ExecutionContext` in which the given function will be executed.
     * @param body A function which consumes the event
     * @param eventContext An [[EventContext]] which will register the [[Subscription]] for further management (optional)
-    * @return A [[Subscription]] representing the created connection between the event source and the body function.
     */
-  def on(ec: ExecutionContext)(body: E => Unit)(using eventContext: EventContext = EventContext.Global): Subscription
+  inline final def on(ec: ExecutionContext)(body: E => Unit)(using eventContext: EventContext = EventContext.Global): Unit = onPriv(ec)(body)
+  
+  protected[signals3] def onPriv(ec: ExecutionContext)(body: E => Unit)(using eventContext: EventContext): Subscription
 
   /** Creates a [[Subscription]] to a function which will consume events in the same `ExecutionContext` as
     * the one in which the events are being emitted.
@@ -50,14 +51,15 @@ private[signals3] abstract class EventSource[E, S <: Subscriber] {
     * The [[Subscription]] will be automatically enabled ([[Subscription.enable]]).
     * @param body A function which consumes the event
     * @param eventContext an [[EventContext]] which will register the [[Subscription]] for further management (optional)
-    * @return a [[Subscription]] representing the created connection between the [[EventSource]] and the body function
     */
-  def onCurrent(body: E => Unit)(using eventContext: EventContext = EventContext.Global): Subscription
+  inline final def onCurrent(body: E => Unit)(using eventContext: EventContext = EventContext.Global): Unit = onCurrentPriv(body)
+  
+  protected def onCurrentPriv(body: E => Unit)(using eventContext: EventContext = EventContext.Global): Subscription
 
-  /** An alias for the `on` method with the default [[ExecutionContext]]. */
+  /** An alias for the `on` method with the implicit [[ExecutionContext]]. */
   inline final def foreach(body: E => Unit)
                           (using executionContext: ExecutionContext,
-                           eventContext: EventContext = EventContext.Global): Subscription =
+                           eventContext: EventContext = EventContext.Global): Unit =
     on(executionContext)(body)
 
   /** Adds a new subscriber instance. The implementing class should handle notifying this subscriber

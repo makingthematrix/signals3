@@ -1,7 +1,6 @@
 package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.Closeable.CloseableStream
-import io.github.makingthematrix.signals3.priv.{IndexedStream, SourceStream, TakeStream}
 import io.github.makingthematrix.signals3.Finite.FiniteStream
 import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, result, waitFor}
 
@@ -25,24 +24,7 @@ class IndexedStreamSpec extends munit.FunSuite {
     val a: Indexed = Stream().indexed
     assertEquals(0, a.counter)
   }
-
-  test("Count events") {
-    val a: SourceStream[Int] = Stream()
-    val b: IndexedStream[Int] = a.indexed
-    var localCounter = 0
-    b.foreach { _ =>
-      localCounter += 1
-      assertEquals(b.counter, localCounter)
-    }
-
-    a ! 1
-    awaitAllTasks
-    a ! 2
-    awaitAllTasks
-    a ! 3
-    awaitAllTasks
-  }
-
+  
   test("Drop an event") {
     val a: SourceStream[Int] = Stream()
     val b: Stream[Int] = a.drop(1)

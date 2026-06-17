@@ -1,7 +1,8 @@
-package io.github.makingthematrix.signals3
+package io.github.makingthematrix.signals3.priv
 
-import CloseableFuture.delayed
+import io.github.makingthematrix.signals3.CloseableFuture.delayed
 import io.github.makingthematrix.signals3.priv.ProxySignal
+import io.github.makingthematrix.signals3.{CloseableFuture, Signal, Threading}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
