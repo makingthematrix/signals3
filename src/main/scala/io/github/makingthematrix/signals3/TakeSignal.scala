@@ -14,7 +14,7 @@ import io.github.makingthematrix.signals3.{Finite, Signal}
  * @param take The number of values to take.
  * @tparam V The type of the value held by the signal.
  */
-final private[signals3] class TakeSignal[V](source: Signal[V], take: Int)
+final class TakeSignal[V](source: Signal[V], take: Int)
   extends IndexedSignal[V](source) with Finite[V] {
   override def isClosed: Boolean = super.isClosed || counter >= take
 
