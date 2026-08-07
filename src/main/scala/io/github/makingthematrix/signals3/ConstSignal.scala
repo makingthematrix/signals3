@@ -13,9 +13,18 @@ import scala.concurrent.ExecutionContext
   */
 final class ConstSignal[V] (private val v: Option[V])
   extends Signal[V](v) with NoAutowiring with CanBeClosed {
+  /** Does nothing - ConstSignal does not accept subscriptions as its value never changes. */
   override inline def subscribe(subscriber: Subscriber): Unit = {}
+  
+  /** Does nothing - ConstSignal does not accept subscriptions as its value never changes. */
   override inline def unsubscribe(subscriber: Subscriber): Unit = {}
+  
+  /** Always returns false - ConstSignal value cannot be updated as it is constant. */
   override inline protected[signals3] def update(f: Option[V] => Option[V], ec: Option[ExecutionContext]): Boolean = false
+  
+  /** Always returns false - ConstSignal value cannot be changed as it is constant. */
   override inline protected[signals3] def setValue(v: Option[V], ec: Option[ExecutionContext]): Boolean = false
+  
+  /** Always returns true - ConstSignal is always treated as closed. */
   override inline def isClosed: Boolean = true
 }
