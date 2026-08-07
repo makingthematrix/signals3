@@ -165,7 +165,11 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     */
   inline final def filter(predicate: E => Boolean): Stream[E] = FilterStream[E](this, predicate)
 
-  /** An alias for `filter` used in the for/yield notation.  */
+  /** An alias for `filter` used in the for/yield notation.
+    *
+    * @param predicate A filtering function which for each event emitted by the original stream returns true or false.
+    * @return A new stream emitting only filtered events.
+    */
   inline final def withFilter(predicate: E => Boolean): Stream[E] = filter(predicate)
 
   /** Creates a new stream of events of type `V` by applying a partial function which maps the original event of type `E`
@@ -215,7 +219,11 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
   inline final def pipeTo(sourceStream: SourceStream[E])(using ec: EventContext = EventContext.Global): Unit =
     onCurrentPriv(sourceStream ! _)
 
-  /** An alias for `pipeTo`. */
+  /** An alias for `pipeTo`.
+    *
+    * @param sourceStream The source stream in which events emitted by this stream will be published.
+    * @param ec An [[EventContext]] which can be used to manage the subscription (optional).
+    */
   inline final def |(sourceStream: SourceStream[E])(using ec: EventContext = EventContext.Global): Unit = 
     pipeTo(sourceStream)
 
@@ -318,14 +326,26 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     CloseableFuture.from(p)
   }
 
-  /** A shorthand for `next` which additionally unwraps the closeable future */
+  /** A shorthand for `next` which additionally unwraps the closeable future.
+    *
+    * @param context An [[EventContext]] which can be used to manage the subscription (optional, default: Global)
+    * @param executionContext The execution context for the resulting future (optional)
+    * @return A future that completes with the next event from this stream
+    */
   inline final def future(using context: EventContext = EventContext.Global, executionContext: ExecutionContext): Future[E] =
     next.future
 
-  /** An alias to the `future` method. */
+  /** An alias to the `future` method.
+    *
+    * @param executionContext The execution context for the resulting future (optional)
+    * @return A future that completes with the next event from this stream
+    */
   inline final def head(using ExecutionContext): Future[E] = future
 
-  /** An alias for `drop(1)`, i.e. a stream that ignores one event and emits all the rest. */
+  /** An alias for `drop(1)`, i.e. a stream that ignores one event and emits all the rest.
+    *
+    * @return A new stream that skips the first event
+    */
   inline final def tail: Stream[E] = drop(1)
 
   /** Assuming that the event emitted by the stream can be interpreted as a boolean, this method creates a new stream

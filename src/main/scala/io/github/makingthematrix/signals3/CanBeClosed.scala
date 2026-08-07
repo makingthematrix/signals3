@@ -40,7 +40,8 @@ trait CanBeClosed {
   /**
    * Returns a signal that works on a given [[scala.concurrent.ExecutionContext]]; it starts with the value set to `false` (unless it's
    * created after the closeable is already closed) and it will be set to `true` when the closeable is closed.
-   * @param ec The execution context on which the signal will be executed.
+   *
+   * @param ec The execution context on which the signal will be executed (implicit).
    * @return A signal that will be set to `true` when the closeable is closed.
    */
   def isClosedSignal(using ExecutionContext): Signal[Boolean] =

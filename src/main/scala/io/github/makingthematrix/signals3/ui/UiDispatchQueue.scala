@@ -100,11 +100,11 @@ object UiDispatchQueue {
     * the default dispatch queue in the given code block is different.
     *
     * @param subscriber A subscriber function which consumes the event.
-    * @param context The event context the subscription is assigned to.
-    * @return A new `Subscription` to the signal.
+    * @param context The event context the subscription is assigned to (implicit).
+    * @return A new `Subscription` to the stream.
     */
   extension [E](stream: Stream[E]) {
-    def onUi(subscriber: E => Unit)(using EventContext): Unit = stream.on(_ui)(subscriber)
+    def onUi(subscriber: E => Unit)(using context: EventContext): Unit = stream.on(_ui)(subscriber)
   }
 
   /** An extension method to the `Signal` class. You can use `signal.onUi { value => ... }` instead of

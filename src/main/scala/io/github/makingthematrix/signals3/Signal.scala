@@ -139,6 +139,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     *
     * @param value The value to test
     * @return a future of boolean: true if the signal contains the given value, false otherwise
+    * @note Requires an ExecutionContext for async operations when the signal is empty
     */
   final def contains(value: V)(using ExecutionContext): Future[Boolean] =
     if (empty) Future.successful(false) else future.map(_ == value)
@@ -147,6 +148,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     *
     * @param f The condition tested on the signal's value
     * @return a future of boolean: true if the signal's value fulfills the given condition, false otherwise
+    * @note Requires an ExecutionContext for async operations when the signal is empty
     */
   final def exists(f: V => Boolean)(using ExecutionContext): Future[Boolean] =
     if (empty) Future.successful(false) else future.map(f)
@@ -281,6 +283,9 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * Here, `resultSignal` will be updated to the value of `signalC` only if the current values of `signalA` and `signalB` fulfill
     * the condition. If the check fails, `resultSignal` will become empty until `signalA` or `signalB` changes its value and the new
     * pair fulfills the condition.
+    *
+    * @param predicate A filtering function which for any value of the original signal returns true or false.
+    * @return A new signal of the same value type.
     */
   inline final def withFilter(predicate: V => Boolean): Signal[V] = filter(predicate)
 
@@ -398,13 +403,13 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     */
   inline final def either[Z](fallback: Signal[Z]): Signal[Either[Z, V]] = Signal.either(fallback, this)
 
-  /** A shorthand for registering a subscriber function in this signal which only purpose is to publish changes to the value
+  /** A shorthand for registering a subscriber function in this signal whose only purpose is to publish changes to the value
     * of this signal in another [[SourceSignal]]. The subscriber function will be called in the execution context of the
     * original publisher.
     *
     * @see [[SourceSignal]]
     *
-    * @param sourceSignal he signal in which changes to the value of this signal will be published.
+    * @param sourceSignal The signal in which changes to the value of this signal will be published.
     * @param ec An [[EventContext]] which can be used to manage the subscription (optional).
     */
   inline final def pipeTo(sourceSignal: SourceSignal[V])(using ec: EventContext = EventContext.Global): Unit =
@@ -526,7 +531,12 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     */
   final inline def sameAs[Z](other: Signal[Z]): Signal[Boolean] = combine(other)(_ == _)
 
-  /** An alias for `sameAs` */
+  /** An alias for `sameAs`
+    *
+    * @param other The other signal used in comparison
+    * @tparam Z The type of the values of the other signal.
+    * @return A new boolean signal
+    */
   final inline def ===[Z](other: Signal[Z]): Signal[Boolean] = sameAs(other)
 
   /** Assuming that the value of the signal can be interpreted as a boolean, this method creates a new signal
@@ -545,8 +555,10 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
   final inline def and[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] =
     Signal.and(this.asInstanceOf[Signal[Boolean]], other.asInstanceOf[Signal[Boolean]])
 
-  /**
-    * An alias to `and`.
+  /** An alias to `and`.
+    *
+    * @param other The other signal with the value type that can be interpreted as `Boolean`
+    * @return A new signal of `Boolean`.
     */
   final inline def &&[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] = and(other)
 
@@ -559,8 +571,10 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
   final inline def or[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] =
     Signal.or(this.asInstanceOf[Signal[Boolean]], other.asInstanceOf[Signal[Boolean]])
 
-  /**
-    * An alias to `or`.
+  /** An alias to `or`.
+    *
+    * @param other The other signal with the value type that can be interpreted as `Boolean`
+    * @return A new signal of `Boolean`.
     */
   final inline def ||[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] = or(other)
 
@@ -573,8 +587,10 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
   final inline def xor[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] =
     Signal.xor(this.asInstanceOf[Signal[Boolean]], other.asInstanceOf[Signal[Boolean]])
 
-  /**
-    * An alias to `xor`.
+  /** An alias to `xor`.
+    *
+    * @param other The other signal with the value type that can be interpreted as `Boolean`
+    * @return A new signal of `Boolean`.
     */
   final inline def ^^[Z](other: Signal[Z])(using V <:< Boolean, Z <:< Boolean): Signal[Boolean] = xor(other)
 

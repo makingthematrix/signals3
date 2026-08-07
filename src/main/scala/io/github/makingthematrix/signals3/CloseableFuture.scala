@@ -24,20 +24,27 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext)
   self =>
   import CloseableFuture._
 
-  /** Gives direct access to the underlying future. */
+  /** Gives direct access to the underlying future.
+    *
+    * @return The underlying Scala Future
+    */
   def future: Future[T]
 
   /** Returns if the future is actually closeable (not completed and not uncloseable)
+    *
     * @see `Uncloseable` for details on uncloseable futures
+    * @return true if the future can be closed, false otherwise
     */
   def isCloseable: Boolean
 
   /** Creates a copy of this future that cannot be closed
+    *
     * @see `Uncloseable` for details on uncloseable futures
+    * @return A new uncloseable future
     */
   def toUncloseable: CloseableFuture[T]
 
-  /** Tries to fails the future with the given exception as the failure's reason.
+  /** Tries to fail the future with the given exception as the failure's reason.
     *
     * @param th The reason for the failure
     * @return `true` if the future was closed, `false` if it was not possible to close it
