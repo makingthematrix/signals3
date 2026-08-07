@@ -463,7 +463,7 @@ object CloseableFuture {
     *
     * @note Since Signals3 1.1.0 this method tries to adjust for inevitable delays caused by calling its own code.
     *       We assume that the initialization will cause the first call to be executed with some delay, so the second
-    *       call will be executed a bit earlier than `interval` to accomodate that. The next calls should be executed
+    *       call will be executed a bit earlier than `interval` to accommodate that. The next calls should be executed
     *       as planned, unless external causes will make another delay, after which the `repeat` method will again
     *       try to adjust by shortening the delay for the consecutive call.
     *

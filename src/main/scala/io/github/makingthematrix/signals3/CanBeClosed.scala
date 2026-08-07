@@ -9,6 +9,7 @@ import scala.util.chaining.scalaUtilChainingOps
 /**
  * A common supertrait for [[CloseableFuture]] and all streams and signals that can be closed at some point,
  * either by the user or by internal logic.
+ * Implements automatic cleanup and resource management through the closeable lifecycle.
  */
 trait CanBeClosed {
   private val closed: AtomicBoolean = new AtomicBoolean(false)

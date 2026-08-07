@@ -57,6 +57,7 @@ class SourceSignal[V](v: Option[V]) extends Signal[V](v) {
   /** Changes the value of the signal by applying the given function to the current value.
     * If the signal is empty, it will stay empty.
     *
+    * @see [[Signal.update]] for the underlying implementation
     * @param f The function used to modify the signal's value.
     * @return true if the signal's value is actually changed to something different, and so the subscribers will be notified,
     *         false otherwise.
@@ -66,6 +67,7 @@ class SourceSignal[V](v: Option[V]) extends Signal[V](v) {
   /** Changes the value of the signal by applying the given function to the current value.
     * If the signal is empty, it will stay empty.
     *
+    * @see [[Signal.update]] for the underlying implementation
     * @param f The function used to modify the signal's value.
     * @param ec The execution context used for dispatching. The default implementation ensures that if `ec` is the same as
     *           the execution context used to register the subscriber, the subscriber will be called immediately. Otherwise,
@@ -78,6 +80,7 @@ class SourceSignal[V](v: Option[V]) extends Signal[V](v) {
   /** Changes the value of the signal by applying the given function to the current value.
     * If the signal is empty, it will be set to the given default value instead.
     *
+    * @see [[Signal.update]] for the underlying implementation
     * @param f The function used to modify the signal's value.
     * @param default The default value used instead of `f` if the signal is empty.
     * @return true if the signal's value is actually changed to something different, and so the subscribers will be notified,

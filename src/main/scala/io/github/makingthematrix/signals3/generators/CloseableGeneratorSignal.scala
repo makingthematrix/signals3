@@ -13,10 +13,9 @@ import GeneratorSignal.VPausable
   * @note If you use the constant [[scala.concurrent.duration.FiniteDuration]] as the interval (not the function), the generator will anyway try
   *       to adjust for inevitable delays caused by calling its own code.
   *       We can assume that the initialization will cause the first call to be executed with some delay, so the second
-  *       call will be executed a bit earlier than `interval` to accomodate that. The next calls should be executed
+  *       call will be executed a bit earlier than `interval` to accommodate that. The next calls should be executed
   *       as planned, unless external causes will make another delay, after which the `repeat` method will again
   *       try to adjust by shortening the delay for the consecutive call.
-  * .
   * @param init     The initial value of the generator signal.
   * @param update   A function that takes the current value of the signal and creates a new value every time it's called.
   *                 If the new value is different from the old one, it will be published in the signal. If the function

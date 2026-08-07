@@ -53,7 +53,6 @@ object GeneratorSignal {
   /**
     * Creates a signal which updates its value every `interval` by calling the `update` function which takes the current
     * and returns a new one.
-    * .
     * @param init     The initial value of the generator signal.
     * @param update   A function that takes the current value of the signal and creates a new (or the same) value every
     *                 time it's called. If the new value is different from the old one, it will be published in
