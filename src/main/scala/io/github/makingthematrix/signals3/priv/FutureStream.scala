@@ -9,7 +9,7 @@ import scala.util.{Success, Failure}
   * TODO: FutureStream handles exceptions differently than other streams. I need to decide what to do with it re FallbackStrategy.
   *
   * @param source The stream from which events are taken.
-  * @param f      A function which takes an event from the source stream and returns a [[Future]] with its result.
+  * @param f      A function which takes an event from the source stream and returns a [[scala.concurrent.Future]] with its result.
   * @tparam E The type of the events emitted by the stream constructed from the sources.
   * @tparam V The type of the result of the future returned by the function.
   */

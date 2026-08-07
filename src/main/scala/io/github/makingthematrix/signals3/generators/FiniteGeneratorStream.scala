@@ -9,7 +9,7 @@ import scala.util.chaining.scalaUtilChainingOps
 
 /**
   * A [[Finite]] stream capable of generating new events in the given intervals of time, by iterating over a collection
-  * of events. The interval can be given either as [[FiniteDuration]] or as a function that will return [[FiniteDuration]]
+  * of events. The interval can be given either as [[scala.concurrent.duration.FiniteDuration]] or as a function that will return [[scala.concurrent.duration.FiniteDuration]]
   * every time it's called.
   *
   * @note If you use the constant `FiniteDuration` as the interval (not the function), the generator will anyway try
@@ -18,8 +18,8 @@ import scala.util.chaining.scalaUtilChainingOps
   *       call will be executed a bit earlier than `interval` to accomodate that. The next calls should be executed
   *       as planned, unless external causes will make another delay, after which the `repeat` method will again
   *       try to adjust by shortening the delay for the consecutive call.
-  * @param interval Time to the next event generation (to the first event as well). Might be either a [[FiniteDuration]]
-  *                 or a function that returns [[FiniteDuration]]. In the second case, the function will be
+  * @param interval Time to the next event generation (to the first event as well). Might be either a [[scala.concurrent.duration.FiniteDuration]]
+  *                 or a function that returns [[scala.concurrent.duration.FiniteDuration]]. In the second case, the function will be
   *                 called on initialization, and then after each generated event.
   * @param events   A collection of events to generate. When the generator reaches the end of the collection, it will
   *                 be closed.

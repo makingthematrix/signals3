@@ -28,7 +28,7 @@ object EventContext {
   }
 }
 
-/** When you subscribe to an [[EventSource]] in return you receive a [[Subscription]]. You can use that subscription
+/** When you subscribe to an event source in return you receive a subscription. You can use that subscription
   * to unsubscribe from the event source or to temporarily pause receiving events. But managing a big number of
   * subscriptions to different event sources can be tricky. [[EventContext]] comes to the rescue.
   *
@@ -40,8 +40,6 @@ object EventContext {
   *
   * Usage of methods in the trait are explained as they are implemented in the default implementation.
   * All operations on an [[EventContext]] are synchronized.
-  *
-  * @see [[EventSource]]
   */
 sealed trait EventContext {
   /** An[[EventContext]] has to be started before it can register subscriptions.
@@ -60,7 +58,7 @@ sealed trait EventContext {
     */
   def destroy(): Unit
 
-  /** Registers a new [[Subscription]] within the [[EventContext]] if the event context is not destroyed.
+  /** Registers a new subscription within the [[EventContext]] if the event context is not destroyed.
     * (But it does not have to be started). If the event context is started, the new subscription will be
     * automatically subscribed. If not, it will be subscribed on the consecutive call to `start()`.
     *
@@ -70,7 +68,7 @@ sealed trait EventContext {
     */
   def register(subscription: Subscription): Boolean
 
-  /** Unregisters an already registered [[Subscription]]. The subscription is not unsubscribed or destroyed.
+  /** Unregisters an already registered subscription. The subscription is not unsubscribed or destroyed.
     * Does nothing if the [[EventContext]] does not contain the given subscription.
     *
     * @param subscription The subscription to be unregistered

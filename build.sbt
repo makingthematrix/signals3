@@ -19,10 +19,7 @@ val standardOptions = Seq(
 
 val scala3Options = Seq(
   "-explain",
-  "-Wsafe-init",
-  "-Ycheck-all-patmat",
-  "-Wunused:imports",
-  "-no-indent", "-rewrite"
+  "-Wunused:imports"
 )
 
 scmInfo := Some(

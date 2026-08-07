@@ -663,7 +663,6 @@ object CloseableFuture {
 
   /** Turns one or more of closeable futures into "uncloseable" - entities of the `Uncloseable` subsclass of `CloseableFuture`.
     *
-    * @see [[Uncloseable]] for details
     * @param futures One or more closeable futures you want to make sure won't get closed
     * @tparam T The type of the result of the original closeable futures
     * @return A collection of copies of closeable futures which are **un**closeable

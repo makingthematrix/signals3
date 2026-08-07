@@ -11,9 +11,9 @@ import scala.util.chaining.scalaUtilChainingOps
 
 /**
   * A signal capable of generating new values in the given intervals of time. The interval can be given either as
- * [[FiniteDuration]] or as a function that will return [[FiniteDuration]] every time it's called.
+ * [[scala.concurrent.duration.FiniteDuration]] or as a function that will return [[scala.concurrent.duration.FiniteDuration]] every time it's called.
   *
- * @note If you use the constant [[FiniteDuration]] as the interval (not the function), the generator will anyway try
+ * @note If you use the constant [[scala.concurrent.duration.FiniteDuration]] as the interval (not the function), the generator will anyway try
  *       to adjust for inevitable delays caused by calling its own code.
  *       We can assume that the initialization will cause the first call to be executed with some delay, so the second
  *       call will be executed a bit earlier than `interval` to accomodate that. The next calls should be executed

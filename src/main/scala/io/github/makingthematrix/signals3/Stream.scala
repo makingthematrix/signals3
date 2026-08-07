@@ -48,7 +48,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     * @see [[EventSource]]
     * @param ec An `ExecutionContext` in which the body function will be executed.
     * @param body A function which consumes the event
-    * @param eventContext An [[EventContext]] which will register the [[Subscription]] for further management (optional)
+    * @param eventContext An [[EventContext]] which will register the subscription for further management (optional)
     */
   override protected[signals3] def onPriv(ec: ExecutionContext)(body: E => Unit)
                                          (using eventContext: EventContext = EventContext.Global): Subscription =
@@ -59,7 +59,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     *
     * @see [[EventSource]]
     * @param body A function which consumes the event
-    * @param eventContext An [[EventContext]] which will register the [[Subscription]] for further management (optional)
+    * @param eventContext An [[EventContext]] which will register the subscription for further management (optional)
     */
   override protected [signals3] def onCurrentPriv(body: E => Unit)(using eventContext: EventContext = EventContext.Global): Subscription =
     new StreamSubscription[E](this, body, None)(using WeakReference(eventContext)).tap(_.enable())
@@ -68,7 +68,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
 
   /**
     * Creates a new stream which, if a further transformation fails with an exception, will emit a recovery event instead.
-    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     * @param f A function transforming an exception into a recovery event
     * @return A new stream of the same event type and the recovery guard
     */
@@ -76,7 +76,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
 
   /**
     * Creates a new stream which, if a further transformation fails with an exception, behaves as if no event was emited.
-    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     * @return A new stream of the same event type and the recovery guard
     */
   def ignoreExceptions: Stream[E] = recoverPriv(_ => None)
@@ -84,7 +84,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
   /**
     * Creates a new stream which, if a further transformation fails with an exception, behaves as if no event was emited,
     * but also allows for a side-effect, e.g. logging that the exception was caught.
-    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     *
     * @param f A function that is triggered when the exception is caught
     * @return A new stream of the same event type and the recovery guard
@@ -93,7 +93,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
 
   /**
     * A utility method that works like [[Stream#recover]] where every exception is replaced with an event of default value.
-    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     *
     * @param value The value emited if an exception is caught
     * @return A new stream of the same event type and the recovery guard
@@ -105,7 +105,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
   /**
     * Creates a new stream which, if a further transformation fails with an exception that is handled by a provided partial function,
     * will emit a recovery event instead. **Note**: This recovery guard must be placed **before** the risky transformation, not after,
-    * as e.g. in the case of [[Try#recoverWith]].
+    * as e.g. in the case of [[scala.util.Try.recoverWith]].
     * @param pf A partial function transforming an exception into a recovery event
     * @return A new stream of the same event type and the recovery guard
     */
@@ -114,7 +114,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
   /**
     * Creates a new stream which, if a further transformation fails with an exception that is handled by a provided partial function,
     * will ignore the exception and allow for a side-effect to take place. **Note**: This recovery guard must be placed **before**
-    * the risky transformation, not after, as e.g. in the case of [[Try#recoverWith]].
+    * the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recoverWith]].
     * @param pf A partial function transforming an exception into a side-effect
     * @return A new stream of the same event type and the recovery guard
     */
@@ -197,7 +197,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
   inline final def join(stream: Stream[E]): Stream[E] = JoinStream[E](this, stream)
 
   /**
-    * Creates a new stream that emits all the events of the original stream + one event emited by the provided [[Future]].
+    * Creates a new stream that emits all the events of the original stream + one event emited by the provided [[scala.concurrent.Future]].
     * @param future A future which will result with a new event
     * @return A new stream, emitting events from both the original stream and the future.
     */
@@ -211,7 +211,6 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     *
     * @param sourceStream The source stream in which events emitted by this stream will be published.
     * @param ec An [[EventContext]] which can be used to manage the subscription (optional).
-    * @return A new [[Subscription]] to this stream.
     */
   inline final def pipeTo(sourceStream: SourceStream[E])(using ec: EventContext = EventContext.Global): Unit =
     onCurrentPriv(sourceStream ! _)
@@ -309,8 +308,8 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     * @param eventContext Internally, the method creates a subscription to the stream, and an [[EventContext]] can be provided
     *                     to manage it. In practice it's rarely needed. The subscription will be destroyed when the returning
     *                     future is finished or cancelled.
-    * @param executionContext The [[ExecutionContext]] in which the new closeable future will run.
-    * @return A closeable future which will finish with the next event emitted by the stream.
+    * @param executionContext The [[scala.concurrent.ExecutionContext]] in which the new closeable future will run.
+    * @return A [[CloseableFuture]] which will finish with the next event emitted by the stream.
     */
   final def next(using eventContext: EventContext = EventContext.Global, executionContext: ExecutionContext): CloseableFuture[E] = {
     val p = Promise[E]()
@@ -416,7 +415,7 @@ object Stream {
   inline def apply[E](signal: Signal[E]): Stream[E] = signal.onChanged
 
   /** Creates a stream from a future. The stream will emit one event if the future finishes with success, zero otherwise.
-    * @param future The [[Future]] treated as the source of the only event that can be emitted by the event source.
+    * @param future The [[scala.concurrent.Future]] treated as the source of the only event that can be emitted by the event source.
     * @tparam E The type of the event.
     * @return A new stream.
     */
@@ -424,7 +423,7 @@ object Stream {
 
   /** Creates a stream from a promise. The stream will emit one event if the promise finishes with success, zero otherwise.
    *
-   * @param promise          The [[Promise]] treated as the source of the only event that can be emitted by the event source.
+   * @param promise          The [[scala.concurrent.Promise]] treated as the source of the only event that can be emitted by the event source.
    * @tparam E The type of the event.
    * @return A new stream.
    */
