@@ -4,7 +4,7 @@ import Signal.EmptyTakeSignal
 import Finite.FiniteSignal
 import Closeable.CloseableSignal
 import Indexed.IndexedSignal
-import io.github.makingthematrix.signals3.priv.{CollectSignal, CombineSignal, ConstSignal, DoneSignal, DropSignal, DropWhileSignal, EventSource, FilterSignal, FlatMapSignal, FoldLeftSignal, GroupBySignal, GroupedSignal, MapSignal, PartialUpdateSignal, ProxySignal, RecoverSignal, RecoverWithSignal, ScanSignal, SequenceSignal, SignalSubscriber, SignalSubscription, StreamSignal, Subscription, TakeWhileSignal, ThrottledSignal}
+import io.github.makingthematrix.signals3.priv.{CollectSignal, CombineSignal, DoneSignal, DropSignal, DropWhileSignal, EventSource, FilterSignal, FlatMapSignal, FoldLeftSignal, GroupBySignal, GroupedSignal, MapSignal, PartialUpdateSignal, ProxySignal, RecoverSignal, RecoverWithSignal, ScanSignal, SequenceSignal, SignalSubscriber, SignalSubscription, StreamSignal, Subscription, TakeWhileSignal}
 import io.github.makingthematrix.signals3.priv.ZipSignal.*
 
 import scala.annotation.static
@@ -174,7 +174,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     override protected[signals3] def onUnwire(): Unit = self.unsubscribe(this)
   }
 
-  /** a stream where each event is a new value of the signal.
+  /** A stream where each event is a new value of the signal.
     * Every time the value of the signal changes - actually changes to another value - the new value will be published in this stream.
     * The events in the stream are guaranteed to differ. It's not possible to get two equal events one after another.
     */
@@ -184,7 +184,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
 
   /**
     * Creates a new signal which, if a further transformation fails with an exception, will set to a recovery value instead.
-    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     *
     * @param f A function transforming an exception into a recovery value
     * @return A new signal of the same value type and the recovery guard
@@ -193,7 +193,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
 
   /**
     * Creates a new signal which, if a further transformation fails with an exception, behaves as if nothing happened.
-    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     *
     * @return A new signal of the same value type and the recovery guard
     */
@@ -202,7 +202,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
   /**
     * Creates a new signal which, if a further transformation fails with an exception, does not update its value,
     * but also allows for a side-effect, e.g. logging that the exception was caught.
-    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     *
     * @param f A function that is triggered when the exception is caught
     * @return A new signal of the same event type and the recovery guard
@@ -211,7 +211,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
 
   /**
     * A utility method that works like [[Signal#recover]] where every exception is replaced with a default value.
-    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     *
     * @param value The default value that's set if an exception is caught
     * @return A new signal of the same value type and the recovery guard
@@ -223,7 +223,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
   /**
     * Creates a new signal which, if a further transformation fails with an exception that is handled by a provided partial function,
     * will use a recovery value instead. **Note**: This recovery guard must be placed **before** the risky transformation, not after,
-    * as e.g. in the case of [[Try#recoverWith]].
+    * as e.g. in the case of [[scala.util.Try.recoverWith]].
     *
     * @param pf A partial function transforming an exception into a recovery value
     * @return A new signal of the same value type and the recovery guard
@@ -233,7 +233,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
   /**
     * Creates a new signal which, if a further transformation fails with an exception that is handled by a provided partial function,
     * will ignore the exception and allow for a side-effect to take place. **Note**: This recovery guard must be placed **before**
-    * the risky transformation, not after, as e.g. in the case of [[Try#recoverWith]].
+    * the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recoverWith]].
     *
     * @param pf A partial function transforming an exception into a side-effect
     * @return A new signal of the same value type and the recovery guard
@@ -406,7 +406,6 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     *
     * @param sourceSignal he signal in which changes to the value of this signal will be published.
     * @param ec An [[EventContext]] which can be used to manage the subscription (optional).
-    * @return A new [[Subscription]] to this signal.
     */
   inline final def pipeTo(sourceSignal: SourceSignal[V])(using ec: EventContext = EventContext.Global): Unit =
     onCurrent(sourceSignal ! _)
@@ -482,8 +481,8 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @param ec An `ExecutionContext` in which the body function will be executed.
     * @param body A function which is called initially, when registered in the signal,
     *             and then every time the value of the signal changes.
-    * @param eventContext An [[EventContext]] which will register the [[Subscription]] for further management (optional)
-    * @return A [[Subscription]] representing the created connection between the signal and the body function
+    * @param eventContext An [[EventContext]] which will register the subscription for further management (optional)
+    * @return A subscription representing the created connection between the signal and the body function
     */
   override protected[signals3] def onPriv(ec: ExecutionContext)(body: V => Unit)(using eventContext: EventContext = EventContext.Global): Subscription =
     new SignalSubscription[V](this, body, Some(ec))(using WeakReference(eventContext)).tap(_.enable())
@@ -494,8 +493,8 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     * @see [[EventSource]]
     * @param body A function which is called initially, when registered in the signal,
     *             and then every time the value of the signal changes.
-    * @param eventContext An [[EventContext]] which will register the [[Subscription]] for further management (optional)
-    * @return A [[Subscription]] representing the created connection between the signal and the body function
+    * @param eventContext An [[EventContext]] which will register the subscription for further management (optional)
+    * @return A subscription representing the created connection between the signal and the body function
     */
   override protected[signals3] def onCurrentPriv(body: V => Unit)(using eventContext: EventContext = EventContext.Global): Subscription =
     new SignalSubscription[V](this, body, None)(using WeakReference(eventContext)).tap(_.enable())

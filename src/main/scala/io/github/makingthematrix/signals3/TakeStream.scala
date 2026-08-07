@@ -43,7 +43,7 @@ final class TakeStream[E](source: Stream[E], take: Int) extends IndexedStream[E]
 
 object TakeStream {
   /**
-   * Creates a new `TakeStream` of length 1 from the given [[Future]].
+   * Creates a new `TakeStream` of length 1 from the given [[scala.concurrent.Future]].
    * @param future When the future completes, its result will be published in the stream.
    * @tparam E The type of the stream's result.
    * @return A new `TakeStream` of length 1.
@@ -51,7 +51,7 @@ object TakeStream {
   inline def apply[E](future: Future[E])(using ExecutionContext): TakeStream[E] = apply(CloseableFuture.from(future))
 
   /**
-   * Creates a new `TakeStream` of length 1 from the given [[Promise]].
+   * Creates a new `TakeStream` of length 1 from the given [[scala.concurrent.Promise]].
    * If the promise fails, the stream will be closed immediately.
    *
    * @param promise When the promise completes, its result will be published in the stream.

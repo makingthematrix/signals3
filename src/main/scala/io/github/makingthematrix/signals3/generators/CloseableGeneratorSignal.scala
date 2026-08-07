@@ -8,9 +8,9 @@ import GeneratorSignal.VPausable
 
 /**
   * A signal capable of generating new values in the given intervals of time. The interval can be given either as
-  * [[FiniteDuration]] or as a function that will return [[FiniteDuration]] every time it's called.
+  * [[scala.concurrent.duration.FiniteDuration]] or as a function that will return [[scala.concurrent.duration.FiniteDuration]] every time it's called.
   *
-  * @note If you use the constant [[FiniteDuration]] as the interval (not the function), the generator will anyway try
+  * @note If you use the constant [[scala.concurrent.duration.FiniteDuration]] as the interval (not the function), the generator will anyway try
   *       to adjust for inevitable delays caused by calling its own code.
   *       We can assume that the initialization will cause the first call to be executed with some delay, so the second
   *       call will be executed a bit earlier than `interval` to accomodate that. The next calls should be executed
@@ -22,8 +22,8 @@ import GeneratorSignal.VPausable
   *                 If the new value is different from the old one, it will be published in the signal. If the function
   *                 throws an exception, the value won't change, but the generator will call the `update` function
   *                 again, after `interval`. The exception will be ignored.
-  * @param interval Time to the next `update` call. Might be either a [[FiniteDuration]] or a function that returns
-  *                 [[FiniteDuration]], based on the current value of the signal. In the second case, the function will
+  * @param interval Time to the next `update` call. Might be either a [[scala.concurrent.duration.FiniteDuration]] or a function that returns
+  *                 [[scala.concurrent.duration.FiniteDuration]], based on the current value of the signal. In the second case, the function will
   *                 be called on initialization, and then after each `update` call.
   * @param paused   A function called before each `update` to check if the generator is paused. If it returns `true`,
   *                 the `update` function will not be called.

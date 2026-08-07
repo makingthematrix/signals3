@@ -1,4 +1,4 @@
-package io.github.makingthematrix.signals3.priv
+package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.priv.EventSource.{NoAutowiring, Subscriber}
 import io.github.makingthematrix.signals3.{CanBeClosed, Signal}
@@ -11,7 +11,7 @@ import scala.concurrent.ExecutionContext
   * after that, so there's no need to keep the subscription.
  * ConstSignal implements [[CanBeClosed]] but it's treated as if it was always closed.
   */
-final private[signals3] class ConstSignal[V] (private val v: Option[V])
+final class ConstSignal[V] (private val v: Option[V])
   extends Signal[V](v) with NoAutowiring with CanBeClosed {
   override inline def subscribe(subscriber: Subscriber): Unit = {}
   override inline def unsubscribe(subscriber: Subscriber): Unit = {}

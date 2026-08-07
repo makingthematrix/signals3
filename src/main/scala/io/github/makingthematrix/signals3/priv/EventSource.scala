@@ -27,36 +27,36 @@ private[signals3] abstract class EventSource[E, S <: Subscriber] {
     */
   protected def onUnwire(): Unit
 
-  /** Creates a [[Subscription]] to a function which will consume events in the given `ExecutionContext`.
+  /** Creates a subscription to a function which will consume events in the given `ExecutionContext`.
     * In simpler terms: A subscriber is a function which will receive events from the event source. For every event,
     * the function will be executed in the given execution context - not necessarily the same as the one used for
     * emitting the event. This allows for easy communication between parts of the program working in different
     * execution contexts, e.g. the user interface and the database.
     *
-    * The [[Subscription]] will be automatically enabled ([[Subscription.enable]]).
+    * The subscription will be automatically enabled ([[Subscription.enable]]).
     *
     * @param ec An `ExecutionContext` in which the given function will be executed.
     * @param body A function which consumes the event
-    * @param eventContext An [[EventContext]] which will register the [[Subscription]] for further management (optional)
+    * @param eventContext An [[EventContext]] which will register the subscription for further management (optional)
     */
   inline final def on(ec: ExecutionContext)(body: E => Unit)(using eventContext: EventContext = EventContext.Global): Unit = onPriv(ec)(body)
   
   protected[signals3] def onPriv(ec: ExecutionContext)(body: E => Unit)(using eventContext: EventContext): Subscription
 
-  /** Creates a [[Subscription]] to a function which will consume events in the same `ExecutionContext` as
+  /** Creates a subscription to a function which will consume events in the same `ExecutionContext` as
     * the one in which the events are being emitted.
     *
     * @see [[EventSource.on]]
     *
-    * The [[Subscription]] will be automatically enabled ([[Subscription.enable]]).
+    * The subscription will be automatically enabled ([[Subscription.enable]]).
     * @param body A function which consumes the event
-    * @param eventContext an [[EventContext]] which will register the [[Subscription]] for further management (optional)
+    * @param eventContext an [[EventContext]] which will register the subscription for further management (optional)
     */
   inline final def onCurrent(body: E => Unit)(using eventContext: EventContext = EventContext.Global): Unit = onCurrentPriv(body)
   
   protected def onCurrentPriv(body: E => Unit)(using eventContext: EventContext = EventContext.Global): Subscription
 
-  /** An alias for the `on` method with the implicit [[ExecutionContext]]. */
+  /** An alias for the `on` method with the implicit [[scala.concurrent.ExecutionContext]]. */
   inline final def foreach(body: E => Unit)
                           (using executionContext: ExecutionContext,
                            eventContext: EventContext = EventContext.Global): Unit =

@@ -1,4 +1,4 @@
-package io.github.makingthematrix.signals3.priv
+package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.CloseableFuture.delayed
 import io.github.makingthematrix.signals3.priv.ProxySignal
@@ -22,7 +22,7 @@ import scala.concurrent.duration.FiniteDuration
   * @param delay The time interval used for publishing. No more than one change of the value per `delay` will be published.
   * @tparam V The value type of the signal.
   */
-final class ThrottledSignal[V](val source: Signal[V], val delay: FiniteDuration) extends ProxySignal[V](source) {
+final class ThrottledSignal[V](source: Signal[V], val delay: FiniteDuration) extends ProxySignal[V](source) {
   @volatile private var throttle = Option.empty[CloseableFuture[Unit]]
   @volatile private var ignoredEvent = false
 

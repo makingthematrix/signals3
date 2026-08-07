@@ -3,7 +3,7 @@ package io.github.makingthematrix.signals3.priv
 import io.github.makingthematrix.signals3.EventContext
 import scala.ref.WeakReference
 
-/** When you add a new subscriber to your [[Stream]] or [[Signal]], in return you get a [[Subscription]].
+/** When you add a new subscriber to your [[Stream]] or [[Signal]], in return you get a subscription.
   * A subscription can then be used to inform the source about changes in the condition of the connection:
   * should it be enabled or disabled, should the subscriber be subscribed or (temporarily) unsubscribed,
   * or should the subscription be permanently destroyed.
@@ -62,7 +62,7 @@ private[signals3] trait Subscription {
   def unsubscribe(): Unit
 }
 
-/** Provides the default implementation of the [[Subscription]] trait.
+/** Provides the default implementation of the `Subscription` trait.
   * Exposes two new abstract methods: `onSubscribe` and `onUnsubscribe`. A typical way to implement them is
   * to have a reference to the source of events which implements the [[EventSource]] trait and call `subscribe(this)`
   * on that source (where `this` is the subscription).

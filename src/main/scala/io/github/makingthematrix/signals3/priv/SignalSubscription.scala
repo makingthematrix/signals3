@@ -10,7 +10,7 @@ final private[signals3] class SignalSubscription[V](source: Signal[V],
                                                     f: V => Unit,
                                                     executionContext: Option[ExecutionContext] = None
                                                  )(using context: WeakReference[EventContext])
-  extends BaseSubscription(context) with SignalSubscriber{
+  extends BaseSubscription(context) with SignalSubscriber {
 
   override def changed(currentContext: Option[ExecutionContext]): Unit = synchronized {
     source.value.foreach { event =>

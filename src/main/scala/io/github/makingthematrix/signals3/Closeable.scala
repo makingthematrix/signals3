@@ -7,12 +7,10 @@ import io.github.makingthematrix.signals3.priv.ZipSignal.*
 
 /**
   * A stream or a signal can be closeable, meaning that it can be closed and after that it will not publish new events
-  * anymore. Every [[GeneratorStream]] and [[GeneratorSignal]] is [[Closeable]] which allows for stopping them when
+  * anymore. Every [[generators.GeneratorStream]] and [[generators.GeneratorSignal]] is [[Closeable]] which allows for stopping them when
   * they're no longer needed, but you can make any new stream or signal inherit [[Closeable]] and implement the required
   * logic. 
   * [[Closeable]] extends [[java.lang.AutoCloseable]] so in theory it can be used in Java `try-with-resources`.
-  *
-  * @see [[ProxyStream]] and [[ProxySignal]] for examples.
   */
 trait Closeable extends java.lang.AutoCloseable with CanBeClosed {
   override def closeAndCheck(): Boolean = super.closeAndCheck()
@@ -287,7 +285,7 @@ object Closeable {
 
   /**
     * Creates a new closeable stream which, if a further transformation fails with an exception, will emit a recovery event instead.
-    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     *
     * @param rec A function transforming an exception into a recovery event
     * @return A new closeable stream of the same event type and the recovery guard
@@ -297,7 +295,7 @@ object Closeable {
 
   /**
     * Creates a new closeable stream which, if a further transformation fails with an exception, behaves as if no event was emited.
-    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     *
     * @return A new closeable stream of the same event type and the recovery guard
     */
@@ -306,7 +304,7 @@ object Closeable {
   /**
     * Creates a new closeable stream which, if a further transformation fails with an exception, behaves as if no event was emited,
     * but also allows for a side-effect, e.g. logging that the exception was caught.
-    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     *
     * @param rec A function that is triggered when the exception is caught
     * @return A new closeable stream of the same event type and the recovery guard
@@ -315,8 +313,8 @@ object Closeable {
     recover(source, t => {rec(t); None})
 
   /**
-    * A utility method that works like [[Transformers#recover]] where every exception is replaced with an event of default value.
-    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    * A utility method that works like [[Closeable.recover]] where every exception is replaced with an event of default value.
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     *
     * @param value The value emited if an exception is caught
     * @return A new closeable stream of the same event type and the recovery guard
@@ -325,7 +323,7 @@ object Closeable {
 
   /**
     * Creates a new closeable signal which, if a further transformation fails with an exception, will set to a recovery value instead.
-    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     *
     * @param rec A function transforming an exception into a recovery value
     * @return A new closeable signal of the same value type and the recovery guard
@@ -335,7 +333,7 @@ object Closeable {
 
   /**
     * Creates a new closeable signal which, if a further transformation fails with an exception, behaves as if nothing happened.
-    * Note: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    * Note: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     *
     * @return A new closeable signal of the same value type and the recovery guard
     */
@@ -344,7 +342,7 @@ object Closeable {
   /**
     * Creates a new closeable signal which, if a further transformation fails with an exception, does not update its value,
     * but also allows for a side-effect, e.g. logging that the exception was caught.
-    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[Try#recover]].
+    * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     *
     * @param rec A function that is triggered when the exception is caught
     * @return A new closeable signal of the same event type and the recovery guard
@@ -355,7 +353,7 @@ object Closeable {
   /**
     * Creates a new closeable stream which, if a further transformation fails with an exception that is handled by a provided partial function,
     * will emit a recovery event instead. **Note**: This recovery guard must be placed **before** the risky transformation, not after,
-    * as e.g. in the case of [[Try#recoverWith]].
+    * as e.g. in the case of [[scala.util.Try.recoverWith]].
     *
     * @param rec A partial function transforming an exception into a recovery event
     * @return A new closeable stream of the same event type and the recovery guard
@@ -366,7 +364,7 @@ object Closeable {
   /**
     * Creates a new closeable stream which, if a further transformation fails with an exception that is handled by a provided partial function,
     * will ignore the exception and allow for a side-effect to take place. **Note**: This recovery guard must be placed **before**
-    * the risky transformation, not after, as e.g. in the case of [[Try#recoverWith]].
+    * the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recoverWith]].
     *
     * @param rec A partial function transforming an exception into a side-effect
     * @return A new closeable stream of the same event type and the recovery guard
@@ -377,7 +375,7 @@ object Closeable {
   /**
     * Creates a new closeable signal which, if a further transformation fails with an exception that is handled by a provided partial function,
     * will use a recovery value instead. **Note**: This recovery guard must be placed **before** the risky transformation, not after,
-    * as e.g. in the case of [[Try#recoverWith]].
+    * as e.g. in the case of [[scala.util.Try.recoverWith]].
     *
     * @param rec A partial function transforming an exception into a recovery value
     * @return A new closeable signal of the same value type and the recovery guard
@@ -388,7 +386,7 @@ object Closeable {
   /**
     * Creates a new closeable signal which, if a further transformation fails with an exception that is handled by a provided partial function,
     * will ignore the exception and allow for a side-effect to take place. **Note**: This recovery guard must be placed **before**
-    * the risky transformation, not after, as e.g. in the case of [[Try#recoverWith]].
+    * the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recoverWith]].
     *
     * @param rec A partial function transforming an exception into a side-effect
     * @return A new closeable signal of the same value type and the recovery guard
