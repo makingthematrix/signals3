@@ -13,6 +13,16 @@ import scala.util.{Failure, Success}
   * then the loader function will be called but the subscriber function of the refreshing signal will not be notified as
   * the result of the loader is the same and so the value of the signal doesn't change.
   *
+  * Example usage:
+  * ```scala
+  * val refreshTrigger = SourceStream[Unit]()
+  * val dataLoader = CloseableFuture { fetchDataFromServer() }
+  * val refreshingData = RefreshingSignal(dataLoader, refreshTrigger)
+  * refreshingData.foreach { data => updateUI(data) }
+  * // Later, when data should be refreshed:
+  * refreshTrigger.publish(())
+  * ```
+  *
   * @see [[AggregatingSignal]]
   * @see [[CloseableFuture]]
   * @param loader A closeable future computing the value of the signal. It's passed by name, so if it is created in

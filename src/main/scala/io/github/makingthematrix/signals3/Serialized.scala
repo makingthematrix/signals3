@@ -3,7 +3,7 @@ package io.github.makingthematrix.signals3
 import scala.concurrent.Future
 import scala.collection.immutable.Map
 
-/** A utility object for serializing futures.
+/** A utility object for serializing futures to prevent race conditions.
   *
   * The need for this functionality comes from the fact that we can't assume an event will be processed before the next one comes,
   * but sometimes it is also crucial to process the next event only after the first one is done. In such case, the user can use

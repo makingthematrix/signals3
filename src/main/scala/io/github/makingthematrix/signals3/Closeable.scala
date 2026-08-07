@@ -38,6 +38,7 @@ object Closeable {
     * Creates a new `CloseableStream[V]` by mapping events of the type `E` emitted by the original generator or
     * another closeable stream.
     *
+    * @see [[Stream.map]] for the non-closeable version
     * @param stream The original closeable stream.
     * @param f      The function mapping each event of type `E` into exactly one event of type `V`.
     * @tparam E The type of the original event.
@@ -51,6 +52,7 @@ object Closeable {
     * Creates a new `CloseableSignal[Z]` by mapping the value of the type V of the original generator or
     * another closeable signal.
     *
+    * @see [[Signal.map]] for the non-closeable version
     * @param signal The original closeable signal.
     * @param f      The function mapping the original value of type `V` into a new value of the type `Z`.
     * @tparam V The type of the original value.
@@ -80,6 +82,7 @@ object Closeable {
   /**
     * Creates a new `CloseableStream[E]` by filtering events emitted by the original one.
     *
+    * @see [[Stream.filter]] for the non-closeable version
     * @param stream    The original closeable stream.
     * @param predicate A filtering function which for each event emitted by the original stream returns true or false.
     *                  Only events for which `predicate(event)` returns true will be emitted in the resulting stream.
@@ -95,6 +98,7 @@ object Closeable {
     * satisfies the filter, and changes to empty otherwise. Also, if the initial value of the original signal does not satisfy the filter,
     * the new signal will start empty.
     *
+    * @see [[Signal.filter]] for the non-closeable version
     * @param signal    The original closeable signal.
     * @param predicate A filtering function which for any value of the original signal returns true or false.
     * @tparam V The type of the value.
@@ -108,6 +112,7 @@ object Closeable {
     * of type `E` to an event of type `V`. If the partial function doesn't work for the emitted event, nothing will be
     * emitted in the new stream. Basically, it's filter + map.
     *
+    * @see [[Stream.collect]] for the non-closeable version
     * @param stream The original closeable stream.
     * @param pf     A partial function which for an original event of type `E` may produce an event of type `V`.
     * @tparam E The type of the original event.

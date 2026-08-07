@@ -52,6 +52,7 @@ Test / parallelExecution := true
 fork := true
 Test / fork := true
 
+
 // new setting for the Central Portal
 ThisBuild / publishTo := {
   val centralSnapshots = "https://central.sonatype.com/repository/maven-snapshots/"
@@ -62,6 +63,14 @@ ThisBuild / publishTo := {
 ThisBuild / pomIncludeRepository := { _ => false }
 ThisBuild / publishMavenStyle := true
 ThisBuild / exportJars := true
+ThisBuild / isSnapshot := false
+
+credentials += Credentials(Path.userHome / ".sbt" / "sonatype_central_credentials")
+
+ThisBuild / sbtPluginPublishLegacyMavenStyle := false
+// sbt publishSigned
+// sbt sonaUpload
+// sbt sonaRelease
 
 Compile / packageBin / packageOptions +=
   Package.ManifestAttributes("Automatic-Module-Name" -> "signals3")

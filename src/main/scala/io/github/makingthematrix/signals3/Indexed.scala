@@ -2,7 +2,9 @@ package io.github.makingthematrix.signals3
 
 import java.util.concurrent.atomic.AtomicInteger
 
-/** A trait that keeps track of the number of events published so far. */
+/** A trait that keeps track of the number of events published so far.
+  * Useful for debugging, analytics, or implementing take/drop limits.
+  */
 trait Indexed {
   private val _counter: AtomicInteger = new AtomicInteger(0)
 
