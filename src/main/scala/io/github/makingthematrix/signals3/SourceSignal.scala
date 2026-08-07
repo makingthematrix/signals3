@@ -32,9 +32,7 @@ class SourceSignal[V](v: Option[V]) extends Signal[V](v) {
 
   /** Changes the value of the signal.
     *
-    * The original `publish` method of the [[Signal]] class is `protected` to ensure that intermediate signals - those created
-    * by methods like `map`, `flatMap`, `filter`, etc. - will not be used to directly change their values. The source signal
-    * exposes this method for public use.
+    * This method works like `publish(value, ec)` but uses the default execution context of the subscriber.
     *
     * @see [[Signal]]
     *
@@ -50,7 +48,7 @@ class SourceSignal[V](v: Option[V]) extends Signal[V](v) {
     *
     * The difference between `!!` and `!` (and also between the two `publish` methods) is that even if the source's
     * execution context is the same as the subscriber's execution context, if we send an event using `!`, it will be
-    * wrapped in a future and executed asychronously. If we use `!!` then for subscribers working in the same
+    * wrapped in a future and executed asynchronously. If we use `!!` then for subscribers working in the same
     * execution context the call will be synchronous. This may be desirable in some cases, but please use with caution.
     */
   @targetName("twobang")

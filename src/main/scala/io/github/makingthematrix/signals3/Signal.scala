@@ -26,7 +26,7 @@ import scala.util.chaining.scalaUtilChainingOps
   *
   * Note that for clarity we talk about *events* in the event streams, but about *values* in signals.
   *
-  * An signal of the type `V` dispatches values to all functions of the type `(V) => Unit` which were registered in
+  * A signal of the type `V` dispatches values to all functions of the type `(V) => Unit` which were registered in
   * the signal as its subscribers. It provides a handful of methods which enable the user to create new signals by means of composing
   * the old ones, filtering them, etc., in a way similar to how the user can operate on standard collections, as well as to interact with
   * Scala futures, closeable futures, and event streams. Please note that by default a signal is not able to receive events from the outside -
@@ -623,8 +623,8 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
   final def drop(n: Int): Signal[V] = if (n <= 0) this else DropSignal[V](this, n)
 
   /**
-    * Ignores new values while they fulfill the condition `p`. The first event that fails is emited and the all consecutive
-    * events as well, also those  that would fulfill the condition.
+    * Ignores new values while they fulfill the condition `p`. The first event that fails is emitted and all consecutive
+    * events as well, also those that would fulfill the condition.
     *
     * @param p The condition function
     * @return A new signal that drops events while `p` is fulfilled

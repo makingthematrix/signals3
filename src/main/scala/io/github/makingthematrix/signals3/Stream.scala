@@ -75,14 +75,14 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
   def recover(f: Throwable => E): Stream[E] = recoverPriv(t => Some(f(t)))
 
   /**
-    * Creates a new stream which, if a further transformation fails with an exception, behaves as if no event was emited.
+    * Creates a new stream which, if a further transformation fails with an exception, behaves as if no event was emitted.
     * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     * @return A new stream of the same event type and the recovery guard
     */
   def ignoreExceptions: Stream[E] = recoverPriv(_ => None)
 
   /**
-    * Creates a new stream which, if a further transformation fails with an exception, behaves as if no event was emited,
+    * Creates a new stream which, if a further transformation fails with an exception, behaves as if no event was emitted,
     * but also allows for a side-effect, e.g. logging that the exception was caught.
     * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     *
@@ -95,7 +95,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
     * A utility method that works like [[Stream#recover]] where every exception is replaced with an event of default value.
     * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     *
-    * @param value The value emited if an exception is caught
+    * @param value The value emitted if an exception is caught
     * @return A new stream of the same event type and the recovery guard
     */
   def withDefault(value: E): Stream[E] = recover(_ => value)
@@ -197,7 +197,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
   inline final def join(stream: Stream[E]): Stream[E] = JoinStream[E](this, stream)
 
   /**
-    * Creates a new stream that emits all the events of the original stream + one event emited by the provided [[scala.concurrent.Future]].
+    * Creates a new stream that emits all the events of the original stream + one event emitted by the provided [[scala.concurrent.Future]].
     * @param future A future which will result with a new event
     * @return A new stream, emitting events from both the original stream and the future.
     */
@@ -229,15 +229,15 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
   }
 
   /**
-    * Drops a given number of new emited events from the original stream before starting to emit the consecutive ones.
+    * Drops a given number of new emitted events from the original stream before starting to emit the consecutive ones.
     * @param n The number of events to drop
     * @return A new stream that drops n events and then starts to emit all consecutive events
     */
   final def drop(n: Int): Stream[E] = if (n <= 0) this else DropStream[E](this, n)
 
   /**
-    * Drops events while they fulfill the condition `p`. The first event that fails is emited and the all consecutive
-    * events as well, also those  that would fulfill the condition.
+    * Drops events while they fulfill the condition `p`. The first event that fails is emitted and all consecutive
+    * events as well, also those that would fulfill the condition.
     * @param p The condition function
     * @return A new stream that drops events while `p` is fulfilled
     */
@@ -259,16 +259,16 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
   inline final def takeWhile(p: E => Boolean): FiniteStream[E] = TakeWhileStream[E](this, p)
 
   /**
-    * Splits the stream into a finite stream that emits the given number of event and closes, and another stream that picks up
-    * emiting the events after the first stops.
+    * Splits the stream into a finite stream that emits the given number of events and closes, and another stream that picks up
+    * emitting the events after the first stops.
     * @param n The number of events to split the stream at
     * @return A tuple of streams of the same event type
     */
   inline final def splitAt(n: Int): (FiniteStream[E], Stream[E]) = (take(n), drop(n))
 
   /**
-    * Splits the stream into a finite stream that emits events until thee new event fails to fulfill the given condition, 
-    * and another stream that picks up emiting the events after the first stops.
+    * Splits the stream into a finite stream that emits events until the new event fails to fulfill the given condition,
+    * and another stream that picks up emitting the events after the first stops.
     *
     * @param p The condition function
     * @return A tuple of streams of the same event type
@@ -374,7 +374,7 @@ object Stream {
   }
 
   /**
-    * Splits the stream into a future which completes when the first event is emited, and a stream that emits
+    * Splits the stream into a future which completes when the first event is emitted, and a stream that emits
     * all the rest of events from the original stream.
     */
   object `::` {

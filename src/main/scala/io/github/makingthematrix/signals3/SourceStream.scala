@@ -17,11 +17,11 @@ import scala.concurrent.ExecutionContext
 class SourceStream[E] extends Stream[E] {
   /** Publishes the event to all subscribers.
     *
-    * @see [[Stream.publish]]
+    * The original `publish` method of the [[Stream]] class is `protected` to ensure that intermediate event streams - those created
+    * by methods like `map`, `flatMap`, `filter`, etc. - will not be used to directly publish events to them. The source stream
+    * exposes this method for public use.
     *
-    *      The original `publish` method of the [[Stream]] class is `protected` to ensure that intermediate event streams - those created
-    *      by methods like `map`, `flatMap`, `filter`, etc. - will not be used to directly publish events to them. The source stream
-    *      exposes this method for public use.
+    * @see [[Stream.publish]]
     * @param event The event to be published.
     */
   override def publish(event: E): Unit = dispatch(event, None)
@@ -30,7 +30,7 @@ class SourceStream[E] extends Stream[E] {
   @targetName("bang")
   inline def !(event: E): Unit = publish(event)
 
-  /** Publishes the event to all subscriber, using the given execution context.
+  /** Publishes the event to all subscribers, using the given execution context.
     *
     * @see [[Stream.publish]]
     * @param event The event to be published.
@@ -44,7 +44,7 @@ class SourceStream[E] extends Stream[E] {
     *
     * The difference between `!!` and `!` (and also between the two `publish` methods) is that even if the source's
     * execution context is the same as the subscriber's execution context, if we send an event using `!`, it will be
-    * wrapped in a future and executed asychronously. If we use `!!` then for subscribers working in the same
+    * wrapped in a future and executed asynchronously. If we use `!!` then for subscribers working in the same
     * execution context the call will be synchronous. This may be desirable in some cases, but please use with caution.
     */
   @targetName("twobang")
