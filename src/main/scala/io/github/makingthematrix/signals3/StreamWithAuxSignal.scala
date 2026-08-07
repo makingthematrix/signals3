@@ -11,11 +11,11 @@ import scala.concurrent.ExecutionContext
   * val aux = Signal[Int]()
   * val source = Stream[Unit]()
   *
-  * val newStream = EventStreamWithAuxSignal(source, aux)
+  * val newStream = StreamWithAuxSignal(source, aux)
   * newStream.foreach { case (_, Option(n)) => /* ... */ }
   * ```
-  * Here, `newStream` extends `Stream[Unit, Option[Int]]`.
-  * The subscriber function registered in `newStream`` will be called every time a new unit event is published in `source`
+  * Here, `newStream` extends `Stream[(Unit, Option[Int])]`.
+  * The subscriber function registered in `newStream` will be called every time a new unit event is published in `source`
   * and it will receive a tuple of the event and the current value of `aux`: `Some[Int]` if something was already published
   * in the signal, or `None` if it is not initialized yet.
   *

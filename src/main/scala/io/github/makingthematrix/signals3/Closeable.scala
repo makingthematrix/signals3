@@ -78,7 +78,7 @@ object Closeable {
     new FutureStream[E, V](stream, f) with Closeability(stream)
 
   /**
-    * Creates a new `CloaseableStream[E]` by filtering events emitted by the original one.
+    * Creates a new `CloseableStream[E]` by filtering events emitted by the original one.
     *
     * @param stream    The original closeable stream.
     * @param predicate A filtering function which for each event emitted by the original stream returns true or false.
@@ -294,7 +294,7 @@ object Closeable {
     new RecoverStream[E](source, rec) with Closeability(source)
 
   /**
-    * Creates a new closeable stream which, if a further transformation fails with an exception, behaves as if no event was emited.
+    * Creates a new closeable stream which, if a further transformation fails with an exception, behaves as if no event was emitted.
     * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     *
     * @return A new closeable stream of the same event type and the recovery guard
@@ -302,7 +302,7 @@ object Closeable {
   inline def ignoreExceptions[E](source: CloseableStream[E]): CloseableStream[E] = recover(source, _ => None)
 
   /**
-    * Creates a new closeable stream which, if a further transformation fails with an exception, behaves as if no event was emited,
+    * Creates a new closeable stream which, if a further transformation fails with an exception, behaves as if no event was emitted,
     * but also allows for a side-effect, e.g. logging that the exception was caught.
     * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     *
@@ -316,7 +316,7 @@ object Closeable {
     * A utility method that works like [[Closeable.recover]] where every exception is replaced with an event of default value.
     * **Note**: This recovery guard must be placed **before** the risky transformation, not after, as e.g. in the case of [[scala.util.Try.recover]].
     *
-    * @param value The value emited if an exception is caught
+    * @param value The value emitted if an exception is caught
     * @return A new closeable stream of the same event type and the recovery guard
     */
   inline def withDefault[E](source: CloseableStream[E], value: E): CloseableStream[E] = recover(source, _ => Some(value))
@@ -463,7 +463,7 @@ object Closeable {
     new GroupBySignal[V](source, p) with Closeability(source)
 
   /**
-    * Drops a given number of new emited events from the original closeable stream before starting to emit the consecutive ones.
+    * Drops a given number of new emitted events from the original closeable stream before starting to emit the consecutive ones.
     *
     * @param n The number of events to drop
     * @return A new closeable stream that drops n events and then starts to emit all consecutive events
@@ -483,8 +483,8 @@ object Closeable {
     else new DropSignal[V](source, n) with Closeability(source)
 
   /**
-    * Drops events while they fulfill the condition `p`. The first event that fails is emited and the all consecutive
-    * events as well, also those  that would fulfill the condition.
+    * Drops events while they fulfill the condition `p`. The first event that fails is emitted and all consecutive
+    * events as well, also those that would fulfill the condition.
     *
     * @param p The condition function
     * @return A new closeable stream that drops events while `p` is fulfilled
@@ -493,8 +493,8 @@ object Closeable {
     new DropWhileStream[E](source, p) with Closeability(source)
 
   /**
-    * Ignores new values while they fulfill the condition `p`. The first event that fails is emited and the all consecutive
-    * events as well, also those  that would fulfill the condition.
+    * Ignores new values while they fulfill the condition `p`. The first event that fails is emitted and all consecutive
+    * events as well, also those that would fulfill the condition.
     *
     * @param p The condition function
     * @return A new closeable signal that drops events while `p` is fulfilled
