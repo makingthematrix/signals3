@@ -48,8 +48,8 @@ object Closeable {
     new MapStream[E, V](stream, f) with Closeability(stream)
 
   /**
-    * Creates a new `CloseableSignal[Z]` bby mapping the value of the type V of the original generator or
-    * another closeable stream.
+    * Creates a new `CloseableSignal[Z]` by mapping the value of the type V of the original generator or
+    * another closeable signal.
     *
     * @param signal The original closeable signal.
     * @param f      The function mapping the original value of type `V` into a new value of the type `Z`.
