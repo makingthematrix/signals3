@@ -85,6 +85,7 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext)
     */
   override def closeAndCheck(): Boolean = fail(Closed)
 
+  /** @return true if the future is completed */
   override def isClosed: Boolean = future.isCompleted
 
   /** Same as `Future.onComplete`.

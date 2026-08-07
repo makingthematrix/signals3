@@ -25,6 +25,8 @@ trait Finite[T] extends CanBeClosed {
    * we get to know it only after the stream/signal is closed. To be able to reliably push events into `init`, we would need
    * to know it beforehand.
    * See [[TakeStream]] and [[TakeSignal]] for examples of classes that implement `init`.
+   *
+   * @return A future that will be completed with the last event before closing
    */
   final lazy val last: Future[T] = Promise[T]().tap { p => lastPromise = Some(p) }.future
 }

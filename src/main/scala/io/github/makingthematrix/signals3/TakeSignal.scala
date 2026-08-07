@@ -39,8 +39,9 @@ final class TakeSignal[V](source: Signal[V], take: Int)
     }
   }
 
-  /**
-   * A signal of all value changes of this signal except the last one. See [[Finite.last]].
+  /** A signal of all value changes of this signal except the last one. 
+    * See [[Finite.last]] for the last value.
+    * @return A signal containing all values except the last one
    */
   lazy val init: TakeSignal[V] = source.take(take - 1)
 }

@@ -12,10 +12,12 @@ trait Indexed {
   /** Increments the counter by one. */
   inline protected def inc(): Unit = _counter.incrementAndGet()
 
-  /** Increments the counter by one and returns the new value. */
+  /** Increments the counter by one and returns the new value. 
+    * @return The counter value after incrementing */
   inline protected def incAndGet(): Int = _counter.incrementAndGet()
 
-  /** Increments the counter by one and returns the previous value. */
+  /** Increments the counter by one and returns the previous value. 
+    * @return The counter value before incrementing */
   inline protected def getAndInc(): Int = _counter.getAndIncrement()
 }
 

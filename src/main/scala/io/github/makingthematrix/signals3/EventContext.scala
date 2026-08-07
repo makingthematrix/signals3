@@ -75,10 +75,12 @@ sealed trait EventContext {
     */
   def unregister(subscription: Subscription): Unit
 
-  /** Returns true if the event context is started and not destroyed. */
+  /** Returns true if the event context is started and not destroyed. 
+    * @return true if the event context is started and not destroyed */
   def isContextStarted: Boolean
 
-  /** Returns true if the event context is destroyed. */
+  /** Returns true if the event context is destroyed. 
+    * @return true if the event context is destroyed */
   def isContextDestroyed: Boolean
 }
 
