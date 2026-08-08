@@ -47,6 +47,16 @@ lazy val root = (project in file("."))
     scalacOptions ++= standardOptions ++ scala3Options
   )
 
+lazy val myproject = root  // your existing library
+
+lazy val docs = root      // new documentation project
+  .in(file("myproject-docs")) // important: it must not be docs/
+  .settings(
+    mdocVariables := Map("VERSION" -> version.value)
+  )
+  .dependsOn(myproject)
+  .enablePlugins(MdocPlugin)
+
 testFrameworks += new TestFramework("munit.Framework")
 Test / parallelExecution := true
 fork := true
