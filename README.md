@@ -56,6 +56,8 @@ val strSignal = Signal[String]() // initially empty SourceSignal[String]
 
 and subscribe it in another place:
 ```scala
+import io.github.makingthematrix.signals3.Threading.defaultContext
+
 intSignal.foreach { number => println(s"number: $number") }
 strSignal.foreach { str => println(s"str: $str") }
 ```
