@@ -1,14 +1,13 @@
-# Signals3
+# signals3
 
 ![Scala CI](https://github.com/makingthematrix/signals3/workflows/Scala%20CI/badge.svg)
 [![signals3 Scala version support](https://index.scala-lang.org/makingthematrix/signals3/signals3/latest-by-scala-version.svg?platform=jvm)](https://index.scala-lang.org/makingthematrix/signals3/signals3)
 
 [Signals3 API documentation](https://makingthematrix.github.io/signals3)
 
-This is a lightweight event streaming library for Scala. It's based on [Wire Signals](https://github.com/wireapp/wire-signals). 
+This is a lightweight event streaming library for Scala. It's based on Wire Signals. 
 Wire Signals was used extensively in the Wire Android client app - the biggest Scala project for Android, as far as I know - in everything from 
-[fetching and decoding data from another device](https://github.com/wireapp/wire-android-sync-engine/blob/develop/zmessaging/src/main/scala/com/waz/service/push/PushService.scala) 
-to [updating the list of messages displayed in a conversation](https://github.com/wireapp/wire-android/blob/develop/app/src/main/scala/com/waz/zclient/messages/MessagesController.scala).
+fetching and decoding data from another device to updating the list of messages displayed in a conversation.
 In new apps, it can be of use for the same tasks, as well as - if you write an Android app in Scala by chance, or maybe a desktop app in JavaFX/ScalaFX - Signals3 may help you to communicate between the UI and the background thread. Details below. 
 
 ## Main features
