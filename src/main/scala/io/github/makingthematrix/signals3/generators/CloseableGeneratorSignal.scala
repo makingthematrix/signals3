@@ -4,7 +4,6 @@ import io.github.makingthematrix.signals3.Closeable
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
-import GeneratorSignal.VPausable
 
 /**
   * A signal capable of generating new values in the given intervals of time. The interval can be given either as
@@ -31,13 +30,12 @@ import GeneratorSignal.VPausable
   */
 class CloseableGeneratorSignal[V] protected[signals3] (init: V,
                                                        update: V => V,
-                                                       interval: FiniteDuration | (V => FiniteDuration),
-                                                       override val paused: V => Boolean)
+                                                       interval: FiniteDuration | (V => FiniteDuration))
                                                       (using ec: ExecutionContext)
-  extends GeneratorSignal[V](init, interval) with Closeable with VPausable[V] {
+  extends GeneratorSignal[V](init, interval) with Closeable {
   override protected def onBeat(): Unit = {
     super.onBeat()
-    if (!currentValue.exists(paused) && !isClosed) currentValue.foreach(v => publish(update(v), ec))
+    if (!isPaused && !isClosed) currentValue.foreach(v => publish(update(v), ec))
   }
 
   /**

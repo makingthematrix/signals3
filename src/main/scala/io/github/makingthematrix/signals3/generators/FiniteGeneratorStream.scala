@@ -1,8 +1,6 @@
 package io.github.makingthematrix.signals3.generators
 
-import io.github.makingthematrix.signals3.generators.GeneratorStream.EPausable
 import io.github.makingthematrix.signals3.{Finite, Indexed, TakeStream}
-
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 import scala.util.chaining.scalaUtilChainingOps
@@ -28,16 +26,15 @@ import scala.util.chaining.scalaUtilChainingOps
   * @tparam E       The type of the generated event.
   */
 class FiniteGeneratorStream[E] protected[signals3] (interval: FiniteDuration | (() => FiniteDuration),
-                                                    val events: Iterable[E],
-                                                    override val paused : () => Boolean)
+                                                    val events: Iterable[E])
                                                    (using ExecutionContext)
-  extends GeneratorStream[E](interval) with Finite[E] with Indexed with EPausable {
+  extends GeneratorStream[E](interval) with Finite[E] with Indexed {
   private val it = events.iterator
   override def isClosed: Boolean = super.isClosed || it.isEmpty
 
   override protected def onBeat(): Unit = {
     super.onBeat()
-    if (!isClosed && !paused()) {
+    if (!isClosed && !isPaused) {
       val event = it.next()
       inc()
       publish(event)
@@ -69,7 +66,7 @@ object FiniteGeneratorStream {
     */
   def apply[E](events: Iterable[E], interval: FiniteDuration | (() => FiniteDuration))
               (using ExecutionContext): FiniteGeneratorStream[E] =
-    new FiniteGeneratorStream[E](interval, events, () => false).tap(_.initialize())
+    new FiniteGeneratorStream[E](interval, events).tap(_.initialize())
 
   /**
     * Creates a [[Finite]] stream which generates events by calling a function that returns an option of an event.
@@ -88,6 +85,6 @@ object FiniteGeneratorStream {
       override def hasNext: Boolean = _next.isDefined
       override def next(): E = _next.get.tap { _ => _next = generate() }
     })
-    new FiniteGeneratorStream[E](interval, it, () => false).tap(_.initialize())
+    new FiniteGeneratorStream[E](interval, it).tap(_.initialize())
   }
 }

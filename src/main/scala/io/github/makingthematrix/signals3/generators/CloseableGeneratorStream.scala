@@ -1,7 +1,6 @@
 package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.Closeable
-import io.github.makingthematrix.signals3.generators.GeneratorStream.EPausable
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
@@ -23,19 +22,16 @@ import scala.concurrent.duration.FiniteDuration
   * @param generate A function that creates a new event `E` every time it's called. The event will be resealed in
   *                 the stream. If the function throws an exception, no event will be generated, but the generator
   *                 will call the `generate` function again, after `interval`. The exception will be ignored.
-  * @param paused   A function called on each event to check if the generator is paused. If it returns `true`,
-  *                 the `generate` function will not be called.
   * @tparam E       The type of the generated event.
   */
 class CloseableGeneratorStream[E] protected[signals3] (interval: FiniteDuration | (() => FiniteDuration),
-                                                       generate: () => E,
-                                                       override val paused: () => Boolean)
+                                                       generate: () => E)
                                                       (using ExecutionContext)
-  extends GeneratorStream[E](interval) with Closeable with EPausable {
+  extends GeneratorStream[E](interval) with Closeable {
 
   override protected def onBeat(): Unit = {
     super.onBeat()
-    if (!paused()) publish(generate())
+    if (!isPaused && !isClosed) publish(generate())
   }
 
   /**

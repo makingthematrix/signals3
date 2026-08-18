@@ -46,10 +46,6 @@ abstract class GeneratorStream[E] protected[signals3] (interval: FiniteDuration 
 }
 
 object GeneratorStream {
-  private[signals3] trait EPausable {
-    val paused: () => Boolean
-  }
-
   /**
     * Creates a [[Closeable]] stream which generates a new event every `interval` by calling the `generate` function
     * which returns an event and publishing it.
@@ -59,16 +55,13 @@ object GeneratorStream {
     *                 the generator will call the `generate` function again, after `interval`. The exception
     *                 will be ignored.
     * @param interval Time to the next event generation (to the first event as well). 
-    * @param paused   A function called on each event to check if the generator is paused. If it returns `true`,
-    *                 the `generate` function will not be called. Optional. By default the generator is never paused.
     * @tparam E       The type of the generated event.
     * @return         A new generator stream.
     */
   def apply[E](generate: () => E,
-               interval: FiniteDuration,
-               paused  : () => Boolean = () => false)
+               interval: FiniteDuration)
               (using ExecutionContext): CloseableGeneratorStream[E] =
-    new CloseableGeneratorStream[E](interval, generate, paused).tap(_.initialize())
+    new CloseableGeneratorStream[E](interval, generate).tap(_.initialize())
 
   /**
     * Creates a stream which generates a new event every `interval` by calling the `generate` function which
@@ -85,7 +78,7 @@ object GeneratorStream {
     */
   def generate[E](interval: FiniteDuration | (() => FiniteDuration))(body: => E)
                  (using ExecutionContext): CloseableGeneratorStream[E] =
-    new CloseableGeneratorStream[E](interval, () => body, () => false).tap(_.initialize())
+    new CloseableGeneratorStream[E](interval, () => body).tap(_.initialize())
 
   /**
     * Creates a [[Closeable]] stream which publishes the same event every `interval`.
@@ -98,7 +91,7 @@ object GeneratorStream {
     */
   def repeat[E](event: E, interval: FiniteDuration | (() => FiniteDuration))
                (using ExecutionContext): CloseableGeneratorStream[E] =
-    new CloseableGeneratorStream[E](interval, () => event, () => false).tap(_.initialize())
+    new CloseableGeneratorStream[E](interval, () => event).tap(_.initialize())
 
   /**
     * A utility method that creates a [[Closeable]] stream which publishes `Unit` every given `interval`.

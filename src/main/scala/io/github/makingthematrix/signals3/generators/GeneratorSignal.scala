@@ -46,10 +46,6 @@ abstract class GeneratorSignal[V] protected[signals3] (init: V, interval: Finite
 }
 
 object GeneratorSignal {
-  private[signals3] trait VPausable[V]{
-    val paused: V => Boolean
-  }
-  
   /**
     * Creates a signal which updates its value every `interval` by calling the `update` function which takes the current
     * and returns a new one.
@@ -59,17 +55,14 @@ object GeneratorSignal {
     *                 the signal. If the function throws an exception, the value won't change, but the generator will
     *                 call the `update` function again, after `interval`. The exception will be ignored.
     * @param interval Time to the next update.
-    * @param paused   A function called on each event to check if the generator is paused. If it returns `true`,
-    *                 the `generate` function will not be called. Optional. By default the generator is never paused.
     * @tparam V       The type of the signal's value.
     * @return         A new generator signal.
     */
   def apply[V](init    : V,
                update  : V => V,
-               interval: FiniteDuration,
-               paused  : V => Boolean = (_: V) => false)
+               interval: FiniteDuration)
               (using ExecutionContext): CloseableGeneratorSignal[V] =
-    new CloseableGeneratorSignal[V](init, update, interval, paused).tap(_.initialize())
+    new CloseableGeneratorSignal[V](init, update, interval).tap(_.initialize())
 
   /**
     * A utility method for easier creation of a generator signal. The user provides the initial value of the signal,
@@ -87,8 +80,7 @@ object GeneratorSignal {
     */
   def generate[V](init: V, interval: FiniteDuration | (V => FiniteDuration))(update: V => V)
                  (using ExecutionContext): CloseableGeneratorSignal[V] =
-    new CloseableGeneratorSignal[V](init, update, interval, (_: V) => false).tap(_.initialize())
-
+    new CloseableGeneratorSignal[V](init, update, interval).tap(_.initialize())
 
   /**
     * A utility method which works in a way that can be imagined as an inversion of `.fold` methods in Scala collections
@@ -122,7 +114,7 @@ object GeneratorSignal {
   def unfold[V, Z](init: V, interval: FiniteDuration)(update: V => (V, Z))
                   (using ExecutionContext): CloseableSignal[Z] =
     Closeable.map[(V, Z), Z](
-      new CloseableGeneratorSignal[(V, Z)](update(init), { (v, _) => update(v) }, interval, _ => false).tap(_.initialize())
+      new CloseableGeneratorSignal[(V, Z)](update(init), { (v, _) => update(v) }, interval).tap(_.initialize())
     )(_._2)
 
   /**
@@ -155,8 +147,7 @@ object GeneratorSignal {
       new CloseableGeneratorSignal[(V, Z)](
         update(init),
         { case (v, _) => update(v) },
-        { case (v, _) => interval(v) },
-        _ => false
+        { case (v, _) => interval(v) }
       ).tap(_.initialize())
     )(_._2)
 

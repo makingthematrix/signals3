@@ -6,7 +6,6 @@ import io.github.makingthematrix.signals3.{Finite, Indexed}
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 import scala.util.chaining.scalaUtilChainingOps
-import GeneratorSignal.VPausable
 
 /**
   * A [[Finite]] signal capable of generating new values in the given intervals of time, by iterating over a collection
@@ -30,10 +29,9 @@ import GeneratorSignal.VPausable
   * @tparam V       The type of the signal's value.
   */
 class FiniteGeneratorSignal[V] protected[signals3] (interval: FiniteDuration | (V => FiniteDuration),
-                                                    val values: Iterable[V],
-                                                    override val paused: V => Boolean)
+                                                    val values: Iterable[V])
                                                    (using ec: ExecutionContext)
-  extends GeneratorSignal[V](values.head, interval) with Finite[V] with Indexed with VPausable[V] {
+  extends GeneratorSignal[V](values.head, interval) with Finite[V] with Indexed {
   inc() // the first value in values becomes the initial value, so we already increase the counter to 1
   private val it = values.tail.iterator
 
@@ -41,7 +39,7 @@ class FiniteGeneratorSignal[V] protected[signals3] (interval: FiniteDuration | (
 
   override protected def onBeat(): Unit = {
     super.onBeat()
-    if (!currentValue.exists(paused) && !isClosed) {
+    if (!isPaused && !isClosed) {
       val v = it.next()
       inc()
       publish(v, ec)
@@ -73,7 +71,7 @@ object FiniteGeneratorSignal {
     */
   def apply[V](values: Iterable[V], interval: FiniteDuration | (V => FiniteDuration))
               (using ExecutionContext): FiniteGeneratorSignal[V] =
-    new FiniteGeneratorSignal[V](interval, values, (_: V) => false).tap(_.initialize())
+    new FiniteGeneratorSignal[V](interval, values).tap(_.initialize())
 
   /**
     * Creates a [[Finite]] signal which goes through values obtained by calling a function that returns an option of
@@ -93,6 +91,6 @@ object FiniteGeneratorSignal {
       override def hasNext: Boolean = value.isDefined
       override def next(): V = value.get.tap { _ => value = generate() }
     })
-    new FiniteGeneratorSignal[V](interval, it, (_: V) => false).tap(_.initialize())
+    new FiniteGeneratorSignal[V](interval, it).tap(_.initialize())
   }
 }

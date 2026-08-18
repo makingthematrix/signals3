@@ -1,7 +1,6 @@
 package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.Indexed
-import io.github.makingthematrix.signals3.generators.GeneratorStream.EPausable
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
@@ -28,14 +27,13 @@ import scala.util.chaining.scalaUtilChainingOps
   * @tparam E       The type of the generated event.
   */
 class LazyListGeneratorStream[E] protected[signals3] (interval: FiniteDuration | (() => FiniteDuration),
-                                                      val events: LazyList[E],
-                                                      override val paused : () => Boolean)
+                                                      val events: LazyList[E])
                                                      (using ExecutionContext)
-  extends GeneratorStream[E](interval) with Indexed with EPausable {
+  extends GeneratorStream[E](interval) with Indexed {
 
   override protected def onBeat(): Unit = {
     super.onBeat()
-    if (!paused()) {
+    if (!isPaused) {
       val event = events(getAndInc())
       publish(event)
     }
@@ -54,5 +52,5 @@ object LazyListGeneratorStream {
     */
   def apply[E](events: LazyList[E], interval: FiniteDuration | (() => FiniteDuration))
               (using ExecutionContext): LazyListGeneratorStream[E] =
-    new LazyListGeneratorStream[E](interval, events, () => false).tap(_.initialize())
+    new LazyListGeneratorStream[E](interval, events).tap(_.initialize())
 }

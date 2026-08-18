@@ -1,51 +1,52 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.CloseableFuture
-import io.github.makingthematrix.signals3.actors.Actor.{F, NoResponse, PF}
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, DispatchQueue, Pausable, Stream}
+import io.github.makingthematrix.signals3.actors.Actor.{Behavior, F, NoResponse, PF}
 import io.github.makingthematrix.signals3.generators.GeneratorStream
 
 import java.util.UUID
-import scala.concurrent.{ExecutionContext, Promise}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.util.{Failure, Success, Try}
 import scala.util.chaining.*
-import io.github.makingthematrix.signals3.Stream
 
 class Actor[Msg, Rsp](heartbeat: FiniteDuration, onMsg: F[Msg, Rsp] = Actor.ignoreMsg)
-                     (using ec: ExecutionContext) {
+                     (using ec: ExecutionContext)
+	extends Closeable with Pausable {
 	private lazy val beat = GeneratorStream.heartbeat(heartbeat)
-	private var msgs = List.empty[(Msg, Option[Promise[Rsp]])]
-	private var processes = List.empty[(id: String, onMsg: PF[Msg, Rsp])]
+	private var msgs      = List.empty[(Msg, Option[Promise[Rsp]])]
+	private var behaviors = List.empty[Behavior[Msg, Rsp]]
 
 	private val in = Stream[(Msg, Option[Promise[Rsp]])]()
 	in.foreach { msg =>
 		msgs = msg:: msgs
 	}
 
-	def addProcess(id: String, onMsg: PF[Msg, Rsp]): Unit = {
-		processes = processes.appended(id -> onMsg)
+	inline def addBehavior(id: String, onMsg: PF[Msg, Rsp]): Unit = {
+		behaviors = behaviors.appended(id -> onMsg)
 	}
 
-	def addProcess(t: (String, PF[Msg, Rsp])): Unit = {
-		processes = processes.appended(t)
+	inline def addBehavior(behavior: Behavior[Msg, Rsp]): Unit = {
+		behaviors = behaviors.appended(behavior)
 	}
 
-	def addProcess(pf: PF[Msg, Rsp]): String =
-		UUID.randomUUID().toString.tap { name => addProcess(name -> pf) }
+	inline def addBehavior(pf: PF[Msg, Rsp]): String =
+		UUID.randomUUID().toString.tap { name => addBehavior(name -> pf) }
 
-	inline def +(pf: PF[Msg, Rsp]): String = addProcess(pf)
+	inline def +(pf: PF[Msg, Rsp]): String = addBehavior(pf)
 
-	def removeProcess(id: String): Unit = {
-		processes = processes.filterNot(_.id == id)
+	inline def removeBehavior(id: String): Unit = {
+		behaviors = behaviors.filterNot(_.id == id)
 	}
 
-	def removeProcess(pf: PF[Msg, Rsp]): Unit = {
-		processes = processes.filterNot(_.onMsg == pf)
+	inline def removeBehavior(pf: PF[Msg, Rsp]): Unit = {
+		behaviors = behaviors.filterNot(_.onMsg == pf)
 	}
 
-	inline def -(pf: PF[Msg, Rsp]): Unit = removeProcess(pf)
+	inline def -(pf: PF[Msg, Rsp]): Unit = removeBehavior(pf)
 
-	def getProcess(id: String): Option[PF[Msg, Rsp]] = processes.collectFirst { case (name, pf) if name == id => pf }
+	inline def getBehavior(id: String): Option[PF[Msg, Rsp]] =
+		behaviors.collectFirst { case (name, pf) if name == id => pf }
 
 	def ?(msg: Msg): CloseableFuture[Rsp] = {
 		val p = Promise[Rsp]()
@@ -53,18 +54,18 @@ class Actor[Msg, Rsp](heartbeat: FiniteDuration, onMsg: F[Msg, Rsp] = Actor.igno
 		CloseableFuture.from(p)
 	}
 
-	def !(msg: Msg): Unit = {
+	inline def !(msg: Msg): Unit = {
 		in ! (msg, None)
 	}
 
-	private def process(msg: Msg): Try[Option[Rsp]] =
-		processes.map(_.onMsg).find(_.isDefinedAt(msg)) match {
-			case Some(f: PF[Msg, Rsp])         => Try(f(msg))
-			case _ if onMsg == Actor.ignoreMsg => Success[Option[Rsp]](None)
-			case _                             => Try(onMsg(msg))
-		}
+	private def processMessages(): Unit = if (!isPaused && !isClosed && msgs.nonEmpty) {
+		def process(msg: Msg): Try[Option[Rsp]] =
+			behaviors.map(_.onMsg).find(_.isDefinedAt(msg)) match {
+				case Some(f: PF[Msg, Rsp]) => Try(f(msg))
+				case _ if onMsg == Actor.ignoreMsg => Success[Option[Rsp]](None)
+				case _ => Try(onMsg(msg))
+			}
 
-	private def init(): Unit = beat.foreach { _ =>
 		msgs.foreach {
 			case (msg, Some(p)) =>
 				process(msg) match {
@@ -74,42 +75,60 @@ class Actor[Msg, Rsp](heartbeat: FiniteDuration, onMsg: F[Msg, Rsp] = Actor.igno
 				}
 			case (msg, _) => process(msg)
 		}
+		msgs = Nil
 	}
+
+	private def initialize(): Unit = beat.foreach { _ => processMessages() }
+
+	override def closeAndCheck(): Boolean =
+		if (beat.closeAndCheck()) {
+			if (msgs.nonEmpty) Future { processMessages() }
+			super.closeAndCheck()
+		} else false
 }
 
 object Actor {
+	// todo: Pausable, v
+	// todo: pausing and closing through special messages,
+	// todo: spawning sub-actors that are closed with the parent
+	// todo: The onBeat function enabling the actor to generate messages, not only respond to others
+	// todo: private var state: State for keeping and modifying internal state
+	// todo: ActorBuilder
 	type F[Msg, Rsp] = Msg => Option[Rsp]
 	type PF[Msg, Rsp] = PartialFunction[Msg, Option[Rsp]]
-	def ignoreMsg[Msg, Rsp](msg: Msg): Option[Rsp] = None
+	type Behavior[Msg, Rsp] = (id: String, onMsg: PF[Msg, Rsp])
+
+	inline def NoResponse[Rsp]: Failure[Rsp] = noResponse.asInstanceOf[Failure[Rsp]]
+
+	private def ignoreMsg[Msg, Rsp](msg: Msg): Option[Rsp] = None
 	private val noResponse: Failure[Nothing] = Failure[Nothing](new IllegalStateException("No response"))
-	def NoResponse[Rsp]: Failure[Rsp] = noResponse.asInstanceOf[Failure[Rsp]]
 
 	val DefaultHeartbeat: FiniteDuration = 100.millis
 
-	def apply[Msg, Rsp](hearbeat: FiniteDuration, onMsg: F[Msg, Rsp])(using ec: ExecutionContext): Actor[Msg, Rsp] =
-		new Actor(hearbeat, onMsg).tap(_.init())
+	inline def apply[Msg, Rsp](hearbeat: FiniteDuration, onMsg: F[Msg, Rsp])(using ec: ExecutionContext): Actor[Msg, Rsp] =
+		new Actor(hearbeat, onMsg).tap(_.initialize())
 
-	def from[Msg](heatbeat: FiniteDuration, onMsg: F[Msg, Msg])(using ec:ExecutionContext): Actor[Msg, Msg] =
-		apply[Msg, Msg](heatbeat, onMsg)
+	inline def serial[Msg, Rsp](heartbeat: FiniteDuration, onMsg: F[Msg, Rsp]): Actor[Msg, Rsp] =
+		apply(heartbeat, onMsg)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
 
-	def apply[Msg, Rsp](onMsg: F[Msg, Rsp])(using ec: ExecutionContext): Actor[Msg, Rsp] =
+	inline def apply[Msg, Rsp](onMsg: F[Msg, Rsp])(using ec: ExecutionContext): Actor[Msg, Rsp] =
 		apply(DefaultHeartbeat, onMsg)
 
-	def from[Msg](onMsg: F[Msg, Msg])(using ec: ExecutionContext): Actor[Msg, Msg] =
-		apply(DefaultHeartbeat, onMsg)
+	inline def serial[Msg, Rsp](onMsg: F[Msg, Rsp]): Actor[Msg, Rsp] =
+		serial(DefaultHeartbeat, onMsg)
 
 	def apply[Msg, Rsp](heartbeat: FiniteDuration, pfs: List[PF[Msg, Rsp]])(using ec: ExecutionContext): Actor[Msg, Rsp] =
 		new Actor[Msg, Rsp](heartbeat).tap { actor =>
-			pfs.foreach(actor.addProcess)
-			actor.init()
+			pfs.foreach(actor.addBehavior)
+			actor.initialize()
 		}
 
-	def from[Msg](heartbeat: FiniteDuration, pfs: List[PF[Msg, Msg]])(using ec: ExecutionContext): Actor[Msg, Msg] =
-		apply[Msg, Msg](heartbeat, pfs)
+	inline def serial[Msg, Rsp](heartbeat: FiniteDuration, pfs: List[PF[Msg, Rsp]]): Actor[Msg, Rsp] =
+		apply(heartbeat, pfs)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
 
-	def apply[Msg, Rsp](pfs: List[PF[Msg, Rsp]])(using ec: ExecutionContext): Actor[Msg, Rsp] =
+	inline def apply[Msg, Rsp](pfs: List[PF[Msg, Rsp]])(using ec: ExecutionContext): Actor[Msg, Rsp] =
 		apply(DefaultHeartbeat, pfs)
 
-	def from[Msg](pfs: List[PF[Msg, Msg]])(using ec: ExecutionContext): Actor[Msg, Msg] =
-			apply[Msg, Msg](DefaultHeartbeat, pfs)
+	inline def serial[Msg, Rsp](pfs: List[PF[Msg, Rsp]]): Actor[Msg, Rsp] =
+		serial(DefaultHeartbeat, pfs)
 }

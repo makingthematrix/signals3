@@ -36,8 +36,8 @@ import scala.util.chaining.scalaUtilChainingOps
   * @param value The option of the last value published in the signal or `None` if the signal was not initialized yet.
   * @tparam V The type of the value held in the signal.
   */
-class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extends EventSource[V, SignalSubscriber] {
-  self =>
+class Signal[V] (@volatile private[signals3] var value: Option[V] = None)
+  extends EventSource[V, SignalSubscriber] with Pausable { self =>
   private object updateMonitor
 
   /** Updates the current value of the signal by applying a given function to it.
@@ -71,7 +71,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None) extend
     *         false if the new value is the same as the old one.
     */
   private[signals3] def setValue(v: Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
-    if (value != v) {
+    if (!isPaused && value != v) {
       value = v
       notifySubscribers(currentContext)
       true

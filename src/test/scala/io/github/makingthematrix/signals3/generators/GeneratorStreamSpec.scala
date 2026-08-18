@@ -124,16 +124,18 @@ class GeneratorStreamSpec extends munit.FunSuite {
     counter = 0
 
     var pausedOn = 0L
+    
+    val stream2 = GeneratorStream(() => (), HeartBeatMs)
 
-    def paused(): Boolean =
+    stream2.foreach { _ =>
       if (counter == 2 && pausedOn == 0L) {
         pausedOn = System.currentTimeMillis
-        true
+        stream2.pause()
       }
-      else
-        System.currentTimeMillis - pausedOn < 150L
+      else if (System.currentTimeMillis - pausedOn < 150L) stream2.pause()
+      else stream2.unpause()
+    }
 
-    val stream2 = GeneratorStream(() => (), HeartBeatMs, paused)
     stream2.foreach { _ =>
       counter += 1
       isSuccess ! (counter == 4)

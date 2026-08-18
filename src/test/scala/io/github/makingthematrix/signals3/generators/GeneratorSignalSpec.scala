@@ -110,17 +110,17 @@ class GeneratorSignalSpec extends munit.FunSuite {
     isSuccess ! false
     waitFor(isSuccess, false)
 
+    val signal2 = GeneratorSignal(0, (n: Int) => n + 1, HeartBeatMs)
+
     var pausedOn = 0L
 
-    def paused(counter: Int): Boolean =
-      if (counter == 2 && pausedOn == 0L) {
+    signal2.foreach {
+      case 2 if pausedOn == 0L =>
         pausedOn = System.currentTimeMillis
-        true
-      } else {
-        System.currentTimeMillis - pausedOn < 150L
-      }
-
-    val signal2 = GeneratorSignal(0, (n: Int) => n + 1, HeartBeatMs, paused)
+        signal2.pause()
+      case _ =>
+        if (System.currentTimeMillis - pausedOn < 150L) signal2.pause() else signal2.unpause()
+    }
 
     signal2.foreach { counter =>
       isSuccess ! (counter == 4)

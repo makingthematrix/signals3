@@ -5,7 +5,6 @@ import io.github.makingthematrix.signals3.Indexed
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 import scala.util.chaining.scalaUtilChainingOps
-import GeneratorSignal.VPausable
 
 /**
   * A signal capable of generating new values in the given intervals of time, by iterating over a lazy list of values.
@@ -23,21 +22,18 @@ import GeneratorSignal.VPausable
   *                 be called on initialization, and then after each `update` call.
   * @param values A [[LazyList]] of value the generator goes through Technically, a lazy last is infinite so the
   *               generator will always have the next value to publish.
-  * @param paused   A function called before each `update` to check if the generator is paused. If it returns `true`,
-  *                 the `update` function will not be called.
   * @param ec       The execution context in which the generator works.
   * @tparam V       The type of the signal's value.
   */
 class LazyListGeneratorSignal[V] protected[signals3] (interval: FiniteDuration | (V => FiniteDuration),
-                                                      val values: LazyList[V],
-                                                      override val paused: V => Boolean)
+                                                      val values: LazyList[V])
                                                      (using ec: ExecutionContext)
-  extends GeneratorSignal[V](values.head, interval) with Indexed with VPausable[V] {
+  extends GeneratorSignal[V](values.head, interval) with Indexed {
   inc() // the first value in values becomes the initial value, so we already increase the counter to 1
 
   override protected def onBeat(): Unit = {
     super.onBeat()
-    if (!currentValue.exists(paused)) {
+    if (!isPaused) {
       val v =  values(getAndInc())
       publish(v, ec)
     }
@@ -56,5 +52,5 @@ object LazyListGeneratorSignal {
     */
   def apply[V](values: LazyList[V], interval: FiniteDuration | (V => FiniteDuration))
               (using ExecutionContext): LazyListGeneratorSignal[V] =
-    new LazyListGeneratorSignal[V](interval, values, (_: V) => false).tap(_.initialize())
+    new LazyListGeneratorSignal[V](interval, values).tap(_.initialize())
 }
