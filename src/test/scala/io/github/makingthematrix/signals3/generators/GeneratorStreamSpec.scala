@@ -124,7 +124,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
     counter = 0
 
     var pausedOn = 0L
-    
+
     val stream2 = GeneratorStream(() => (), HeartBeatMs)
 
     stream2.foreach { _ =>
