@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, DispatchQueue, Pausable, Stream}
-import io.github.makingthematrix.signals3.actors.Actor.{Behavior, F, NoResponse, PF}
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, DispatchQueue, FlagSignal, Pausable, Stream}
+import io.github.makingthematrix.signals3.actors.Actor.{Behavior, F, Msg, NoResponse, PF}
 import io.github.makingthematrix.signals3.generators.GeneratorStream
 
 import java.util.UUID
@@ -54,18 +54,24 @@ class Actor[Msg, Rsp](heartbeat: FiniteDuration, onMsg: F[Msg, Rsp] = Actor.igno
 		CloseableFuture.from(p)
 	}
 
+	def !(msg: Actor.Msg): Unit = msg match {
+		case Msg.Pause   => pause()
+		case Msg.Unpause => unpause()
+		case Msg.Close   => close()
+	}
+
 	inline def !(msg: Msg): Unit = {
 		in ! (msg, None)
 	}
 
-	private def processMessages(): Unit = if (!isPaused && !isClosed && msgs.nonEmpty) {
-		def process(msg: Msg): Try[Option[Rsp]] =
-			behaviors.map(_.onMsg).find(_.isDefinedAt(msg)) match {
-				case Some(f: PF[Msg, Rsp]) => Try(f(msg))
-				case _ if onMsg == Actor.ignoreMsg => Success[Option[Rsp]](None)
-				case _ => Try(onMsg(msg))
-			}
+	private def process(msg: Msg): Try[Option[Rsp]] =
+		behaviors.map(_.onMsg).find(_.isDefinedAt(msg)) match {
+			case Some(f: PF[Msg, Rsp]) => Try(f(msg))
+			case _ if onMsg == Actor.ignoreMsg => Success[Option[Rsp]](None)
+			case _ => Try(onMsg(msg))
+		}
 
+	private def processMessages(): Unit = if (!isPaused && !isClosed && msgs.nonEmpty) {
 		msgs.foreach {
 			case (msg, Some(p)) =>
 				process(msg) match {
@@ -78,25 +84,32 @@ class Actor[Msg, Rsp](heartbeat: FiniteDuration, onMsg: F[Msg, Rsp] = Actor.igno
 		msgs = Nil
 	}
 
-	private def initialize(): Unit = beat.foreach { _ => processMessages() }
+	private def initialize(): Unit = beat.foreach(_ => processMessages())
 
 	override def closeAndCheck(): Boolean =
 		if (beat.closeAndCheck()) {
-			if (msgs.nonEmpty) Future { processMessages() }
-			super.closeAndCheck()
+			val f = if (msgs.nonEmpty) Future { processMessages() } else Future.successful(())
+			f.onComplete(_ => super.closeAndCheck())
+			true
 		} else false
 }
 
 object Actor {
 	// todo: Pausable, v
-	// todo: pausing and closing through special messages,
+	// todo: pausing and closing through special messages, v
+	// todo: private var state: State for keeping and modifying internal state
+	// todo: behaviors must have access to this actor to be able to mutate the state
+	// todo: heartbeat should be a strategy: Linear(ms), Agitated(min, coeff, max), Reactive
 	// todo: spawning sub-actors that are closed with the parent
 	// todo: The onBeat function enabling the actor to generate messages, not only respond to others
-	// todo: private var state: State for keeping and modifying internal state
 	// todo: ActorBuilder
 	type F[Msg, Rsp] = Msg => Option[Rsp]
 	type PF[Msg, Rsp] = PartialFunction[Msg, Option[Rsp]]
 	type Behavior[Msg, Rsp] = (id: String, onMsg: PF[Msg, Rsp])
+
+	enum Msg {
+		case Pause, Unpause, Close
+	}
 
 	inline def NoResponse[Rsp]: Failure[Rsp] = noResponse.asInstanceOf[Failure[Rsp]]
 
