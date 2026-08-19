@@ -22,7 +22,7 @@ class Actor[Msg, Rsp, State](heartbeat: FiniteDuration,
 
 	private val in = Stream[(Msg, Option[Promise[Rsp]])]()
 	in.foreach { msg =>
-		msgs = msg:: msgs
+		msgs ::= msg
 	}
 
 	inline def addBehavior(id: String, behavior: PF[Msg, Rsp, State]): Unit = {
@@ -102,7 +102,7 @@ object Actor {
 	// todo: Pausable, v
 	// todo: pausing and closing through special messages, v
 	// todo: private var state: State for keeping and modifying internal state, v
-	// todo: behaviors must have access to this actor to be able to mutate the state
+	// todo: behaviors must have access to this actor to be able to mutate the state v
 	// todo: heartbeat should be a strategy: Linear(ms), Agitated(min, coeff, max), Reactive
 	// todo: spawning sub-actors that are closed with the parent
 	// todo: The onBeat function enabling the actor to generate messages, not only respond to others
@@ -120,7 +120,7 @@ object Actor {
 	enum Msg {
 		case Pause, Unpause, Close
 	}
-	
+
 	inline def apply[Msg, Rsp, State](hearbeat: FiniteDuration, state: State, defBehavior: F[Msg, Rsp, State])
 	                                 (using ec: ExecutionContext): Actor[Msg, Rsp, State] =
 		new Actor(hearbeat, state, defBehavior).tap(_.initialize())
