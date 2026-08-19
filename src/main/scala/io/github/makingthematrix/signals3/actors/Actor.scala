@@ -1,51 +1,55 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, DispatchQueue, FlagSignal, Pausable, Stream}
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, DispatchQueue, Pausable, Stream}
 import io.github.makingthematrix.signals3.actors.Actor.{Behavior, F, Msg, NoResponse, PF}
 import io.github.makingthematrix.signals3.generators.GeneratorStream
 
 import java.util.UUID
+import scala.annotation.static
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.util.{Failure, Success, Try}
 import scala.util.chaining.*
 
-class Actor[Msg, Rsp](heartbeat: FiniteDuration, onMsg: F[Msg, Rsp] = Actor.ignoreMsg)
-                     (using ec: ExecutionContext)
+class Actor[Msg, Rsp, State](heartbeat: FiniteDuration,
+                             private var state: State,
+                             defBehavior: F[Msg, Rsp, State] = Actor.ignoreMsg)
+                            (using ec: ExecutionContext)
 	extends Closeable with Pausable {
 	private lazy val beat = GeneratorStream.heartbeat(heartbeat)
 	private var msgs      = List.empty[(Msg, Option[Promise[Rsp]])]
-	private var behaviors = List.empty[Behavior[Msg, Rsp]]
+	private var behaviors = List.empty[Behavior[Msg, Rsp, State]]
 
 	private val in = Stream[(Msg, Option[Promise[Rsp]])]()
 	in.foreach { msg =>
 		msgs = msg:: msgs
 	}
 
-	inline def addBehavior(id: String, onMsg: PF[Msg, Rsp]): Unit = {
-		behaviors = behaviors.appended(id -> onMsg)
+	inline def addBehavior(id: String, behavior: PF[Msg, Rsp, State]): Unit = {
+		behaviors = behaviors.appended(id -> behavior)
 	}
 
-	inline def addBehavior(behavior: Behavior[Msg, Rsp]): Unit = {
+	inline def addBehavior(behavior: Behavior[Msg, Rsp, State]): Unit = {
 		behaviors = behaviors.appended(behavior)
 	}
 
-	inline def addBehavior(pf: PF[Msg, Rsp]): String =
+	inline def addBehavior(pf: PF[Msg, Rsp, State]): String =
 		UUID.randomUUID().toString.tap { name => addBehavior(name -> pf) }
 
-	inline def +(pf: PF[Msg, Rsp]): String = addBehavior(pf)
+	inline def +(pf: PF[Msg, Rsp, State]): String = addBehavior(pf)
 
 	inline def removeBehavior(id: String): Unit = {
 		behaviors = behaviors.filterNot(_.id == id)
 	}
 
-	inline def removeBehavior(pf: PF[Msg, Rsp]): Unit = {
-		behaviors = behaviors.filterNot(_.onMsg == pf)
+	inline def removeBehavior(pf: PF[Msg, Rsp, State]): Unit = {
+		behaviors = behaviors.filterNot(_.behavior == pf)
 	}
 
-	inline def -(pf: PF[Msg, Rsp]): Unit = removeBehavior(pf)
+	inline def -(pf: PF[Msg, Rsp, State]): Unit = removeBehavior(pf)
+	inline def -(id: String): Unit = removeBehavior(id)
 
-	inline def getBehavior(id: String): Option[PF[Msg, Rsp]] =
+	inline def getBehavior(id: String): Option[PF[Msg, Rsp, State]] =
 		behaviors.collectFirst { case (name, pf) if name == id => pf }
 
 	def ?(msg: Msg): CloseableFuture[Rsp] = {
@@ -65,10 +69,10 @@ class Actor[Msg, Rsp](heartbeat: FiniteDuration, onMsg: F[Msg, Rsp] = Actor.igno
 	}
 
 	private def process(msg: Msg): Try[Option[Rsp]] =
-		behaviors.map(_.onMsg).find(_.isDefinedAt(msg)) match {
-			case Some(f: PF[Msg, Rsp]) => Try(f(msg))
-			case _ if onMsg == Actor.ignoreMsg => Success[Option[Rsp]](None)
-			case _ => Try(onMsg(msg))
+		behaviors.map(_.behavior).find(_.isDefinedAt(msg, this)) match {
+			case Some(f: PF[Msg, Rsp, State]) => Try(f(msg, this))
+			case _ if defBehavior == Actor.ignoreMsg => Success[Option[Rsp]](None)
+			case _ => Try(defBehavior(msg, this))
 		}
 
 	private def processMessages(): Unit = if (!isPaused && !isClosed && msgs.nonEmpty) {
@@ -97,51 +101,52 @@ class Actor[Msg, Rsp](heartbeat: FiniteDuration, onMsg: F[Msg, Rsp] = Actor.igno
 object Actor {
 	// todo: Pausable, v
 	// todo: pausing and closing through special messages, v
-	// todo: private var state: State for keeping and modifying internal state
+	// todo: private var state: State for keeping and modifying internal state, v
 	// todo: behaviors must have access to this actor to be able to mutate the state
 	// todo: heartbeat should be a strategy: Linear(ms), Agitated(min, coeff, max), Reactive
 	// todo: spawning sub-actors that are closed with the parent
 	// todo: The onBeat function enabling the actor to generate messages, not only respond to others
 	// todo: ActorBuilder
-	type F[Msg, Rsp] = Msg => Option[Rsp]
-	type PF[Msg, Rsp] = PartialFunction[Msg, Option[Rsp]]
-	type Behavior[Msg, Rsp] = (id: String, onMsg: PF[Msg, Rsp])
+
+	@static private val noResponse: Failure[Nothing] = Failure[Nothing](new IllegalStateException("No response"))
+	inline def NoResponse[Rsp]: Failure[Rsp] = noResponse.asInstanceOf[Failure[Rsp]]
+	private def ignoreMsg[Msg, Rsp, State](msg: Msg, actor: Actor[Msg, Rsp, State]): Option[Rsp] = None
+	val DefaultHeartbeat: FiniteDuration = 100.millis
+
+	type F[Msg, Rsp, State] = (Msg, Actor[Msg, Rsp, State]) => Option[Rsp]
+	type PF[Msg, Rsp, State] = PartialFunction[(Msg, Actor[Msg, Rsp, State]), Option[Rsp]]
+	type Behavior[Msg, Rsp, State] = (id: String, behavior: PF[Msg, Rsp, State])
 
 	enum Msg {
 		case Pause, Unpause, Close
 	}
+	
+	inline def apply[Msg, Rsp, State](hearbeat: FiniteDuration, state: State, defBehavior: F[Msg, Rsp, State])
+	                                 (using ec: ExecutionContext): Actor[Msg, Rsp, State] =
+		new Actor(hearbeat, state, defBehavior).tap(_.initialize())
 
-	inline def NoResponse[Rsp]: Failure[Rsp] = noResponse.asInstanceOf[Failure[Rsp]]
+	inline def serial[Msg, Rsp, State](heartbeat: FiniteDuration, state: State, defBehavior: F[Msg, Rsp, State]): Actor[Msg, Rsp, State] =
+		apply(heartbeat, state, defBehavior)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
 
-	private def ignoreMsg[Msg, Rsp](msg: Msg): Option[Rsp] = None
-	private val noResponse: Failure[Nothing] = Failure[Nothing](new IllegalStateException("No response"))
+	inline def apply[Msg, Rsp, State](state: State, defBehavior: F[Msg, Rsp, State])(using ec: ExecutionContext): Actor[Msg, Rsp, State] =
+		apply(DefaultHeartbeat, state, defBehavior)
 
-	val DefaultHeartbeat: FiniteDuration = 100.millis
+	inline def serial[Msg, Rsp, State](state: State, defBehavior: F[Msg, Rsp, State]): Actor[Msg, Rsp, State] =
+		serial(DefaultHeartbeat, state, defBehavior)
 
-	inline def apply[Msg, Rsp](hearbeat: FiniteDuration, onMsg: F[Msg, Rsp])(using ec: ExecutionContext): Actor[Msg, Rsp] =
-		new Actor(hearbeat, onMsg).tap(_.initialize())
-
-	inline def serial[Msg, Rsp](heartbeat: FiniteDuration, onMsg: F[Msg, Rsp]): Actor[Msg, Rsp] =
-		apply(heartbeat, onMsg)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
-
-	inline def apply[Msg, Rsp](onMsg: F[Msg, Rsp])(using ec: ExecutionContext): Actor[Msg, Rsp] =
-		apply(DefaultHeartbeat, onMsg)
-
-	inline def serial[Msg, Rsp](onMsg: F[Msg, Rsp]): Actor[Msg, Rsp] =
-		serial(DefaultHeartbeat, onMsg)
-
-	def apply[Msg, Rsp](heartbeat: FiniteDuration, pfs: List[PF[Msg, Rsp]])(using ec: ExecutionContext): Actor[Msg, Rsp] =
-		new Actor[Msg, Rsp](heartbeat).tap { actor =>
+	def apply[Msg, Rsp, State](heartbeat: FiniteDuration, state: State, pfs: List[PF[Msg, Rsp, State]])
+	                          (using ec: ExecutionContext): Actor[Msg, Rsp, State] =
+		new Actor[Msg, Rsp, State](heartbeat, state, ignoreMsg).tap { actor =>
 			pfs.foreach(actor.addBehavior)
 			actor.initialize()
 		}
 
-	inline def serial[Msg, Rsp](heartbeat: FiniteDuration, pfs: List[PF[Msg, Rsp]]): Actor[Msg, Rsp] =
-		apply(heartbeat, pfs)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
+	inline def serial[Msg, Rsp, State](heartbeat: FiniteDuration, state: State, pfs: List[PF[Msg, Rsp, State]]): Actor[Msg, Rsp, State] =
+		apply(heartbeat, state, pfs)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
 
-	inline def apply[Msg, Rsp](pfs: List[PF[Msg, Rsp]])(using ec: ExecutionContext): Actor[Msg, Rsp] =
-		apply(DefaultHeartbeat, pfs)
+	inline def apply[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]])(using ec: ExecutionContext): Actor[Msg, Rsp, State] =
+		apply(DefaultHeartbeat, state, pfs)
 
-	inline def serial[Msg, Rsp](pfs: List[PF[Msg, Rsp]]): Actor[Msg, Rsp] =
-		serial(DefaultHeartbeat, pfs)
+	inline def serial[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]]): Actor[Msg, Rsp, State] =
+		serial(DefaultHeartbeat, state, pfs)
 }
