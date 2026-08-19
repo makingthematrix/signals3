@@ -1,28 +1,48 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, DispatchQueue, Pausable, Stream}
-import io.github.makingthematrix.signals3.actors.Actor.{Behavior, F, Msg, NoResponse, PF}
+import io.github.makingthematrix.signals3.actors.Actor.{Behavior, F, HeartBeatStrategy, Msg, NoResponse, PF}
 import io.github.makingthematrix.signals3.generators.GeneratorStream
 
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import scala.annotation.static
 import scala.concurrent.{ExecutionContext, Future, Promise}
-import scala.concurrent.duration.{DurationInt, FiniteDuration}
+import scala.concurrent.duration.{DurationLong, FiniteDuration}
 import scala.util.{Failure, Success, Try}
 import scala.util.chaining.*
-
-class Actor[Msg, Rsp, State](heartbeat: FiniteDuration,
-                             private var state: State,
-                             defBehavior: F[Msg, Rsp, State] = Actor.ignoreMsg)
+class Actor[Msg, Rsp, State](private var state: State,
+                             private var defBehavior: F[Msg, Rsp, State] = Actor.ignoreMsg,
+                             private val heartbeat: HeartBeatStrategy = HeartBeatStrategy.Linear(100L))
                             (using ec: ExecutionContext)
 	extends Closeable with Pausable {
-	private lazy val beat = GeneratorStream.heartbeat(heartbeat)
+	import HeartBeatStrategy.*
 	private var msgs      = List.empty[(Msg, Option[Promise[Rsp]])]
 	private var behaviors = List.empty[Behavior[Msg, Rsp, State]]
+	private lazy val beat = GeneratorStream.heartbeat(() => interval())
+
+	private var currentAgitation: Long = 0L
+
+	private def interval(): FiniteDuration = heartbeat match {
+		case Linear(ms) => ms.millis
+		case Reactive(maxMs, _) => maxMs.millis
+		case Agitated(minMs, _, _) if msgs.isEmpty && currentAgitation <= minMs => minMs.millis
+		case Agitated(_, _, maxMs) if msgs.isEmpty && currentAgitation >= maxMs => maxMs.millis
+		case Agitated(minMs, coeff, maxMs) if msgs.isEmpty =>
+			currentAgitation = (currentAgitation * (1.0 * coeff)).toLong
+			currentAgitation.millis
+		case Agitated(minMs, _, _) =>
+			currentAgitation = minMs
+			currentAgitation.millis
+	}
 
 	private val in = Stream[(Msg, Option[Promise[Rsp]])]()
 	in.foreach { msg =>
 		msgs ::= msg
+		heartbeat match {
+			case Reactive(_, maxMsgs) if msgs.size >= maxMsgs => Future { processMessages() }
+			case _ =>
+		}
 	}
 
 	inline def addBehavior(id: String, behavior: PF[Msg, Rsp, State]): Unit = {
@@ -75,7 +95,9 @@ class Actor[Msg, Rsp, State](heartbeat: FiniteDuration,
 			case _ => Try(defBehavior(msg, this))
 		}
 
-	private def processMessages(): Unit = if (!isPaused && !isClosed && msgs.nonEmpty) {
+	private val isProcessing = AtomicBoolean(false)
+
+	private def processMessages(): Unit = if (!isPaused && !isClosed && msgs.nonEmpty && !isProcessing.getAndSet(true)) {
 		msgs.foreach {
 			case (msg, Some(p)) =>
 				process(msg) match {
@@ -86,6 +108,7 @@ class Actor[Msg, Rsp, State](heartbeat: FiniteDuration,
 			case (msg, _) => process(msg)
 		}
 		msgs = Nil
+		isProcessing.set(false)
 	}
 
 	private def initialize(): Unit = beat.foreach(_ => processMessages())
@@ -111,7 +134,6 @@ object Actor {
 	@static private val noResponse: Failure[Nothing] = Failure[Nothing](new IllegalStateException("No response"))
 	inline def NoResponse[Rsp]: Failure[Rsp] = noResponse.asInstanceOf[Failure[Rsp]]
 	private def ignoreMsg[Msg, Rsp, State](msg: Msg, actor: Actor[Msg, Rsp, State]): Option[Rsp] = None
-	val DefaultHeartbeat: FiniteDuration = 100.millis
 
 	type F[Msg, Rsp, State] = (Msg, Actor[Msg, Rsp, State]) => Option[Rsp]
 	type PF[Msg, Rsp, State] = PartialFunction[(Msg, Actor[Msg, Rsp, State]), Option[Rsp]]
@@ -121,32 +143,40 @@ object Actor {
 		case Pause, Unpause, Close
 	}
 
-	inline def apply[Msg, Rsp, State](hearbeat: FiniteDuration, state: State, defBehavior: F[Msg, Rsp, State])
-	                                 (using ec: ExecutionContext): Actor[Msg, Rsp, State] =
-		new Actor(hearbeat, state, defBehavior).tap(_.initialize())
+	enum HeartBeatStrategy {
+		case Linear(ms: Long)
+		case Agitated(minMs: Long, coeff: Double, maxMs: Long)
+		case Reactive(maxMs: Long, maxMsgs: Int)
+	}
 
-	inline def serial[Msg, Rsp, State](heartbeat: FiniteDuration, state: State, defBehavior: F[Msg, Rsp, State]): Actor[Msg, Rsp, State] =
-		apply(heartbeat, state, defBehavior)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
+	val defBeat: HeartBeatStrategy = HeartBeatStrategy.Linear(100L)
 
-	inline def apply[Msg, Rsp, State](state: State, defBehavior: F[Msg, Rsp, State])(using ec: ExecutionContext): Actor[Msg, Rsp, State] =
-		apply(DefaultHeartbeat, state, defBehavior)
+	inline def apply[Msg, Rsp, State](state: State, defBehavior: F[Msg, Rsp, State], beat: HeartBeatStrategy)
+	                                 (using ExecutionContext): Actor[Msg, Rsp, State] =
+		new Actor(state, defBehavior, beat).tap(_.initialize())
+
+	inline def serial[Msg, Rsp, State](state: State, defBehavior: F[Msg, Rsp, State], beat: HeartBeatStrategy): Actor[Msg, Rsp, State] =
+		apply(state, defBehavior, beat)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
+
+	inline def apply[Msg, Rsp, State](state: State, defBehavior: F[Msg, Rsp, State])(using ExecutionContext): Actor[Msg, Rsp, State] =
+		apply(state, defBehavior, defBeat)
 
 	inline def serial[Msg, Rsp, State](state: State, defBehavior: F[Msg, Rsp, State]): Actor[Msg, Rsp, State] =
-		serial(DefaultHeartbeat, state, defBehavior)
+		serial(state, defBehavior, defBeat)
 
-	def apply[Msg, Rsp, State](heartbeat: FiniteDuration, state: State, pfs: List[PF[Msg, Rsp, State]])
-	                          (using ec: ExecutionContext): Actor[Msg, Rsp, State] =
-		new Actor[Msg, Rsp, State](heartbeat, state, ignoreMsg).tap { actor =>
+	def apply[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy)
+	                          (using ExecutionContext): Actor[Msg, Rsp, State] =
+		new Actor[Msg, Rsp, State](state, ignoreMsg, beat).tap { actor =>
 			pfs.foreach(actor.addBehavior)
 			actor.initialize()
 		}
 
-	inline def serial[Msg, Rsp, State](heartbeat: FiniteDuration, state: State, pfs: List[PF[Msg, Rsp, State]]): Actor[Msg, Rsp, State] =
-		apply(heartbeat, state, pfs)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
+	inline def serial[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy): Actor[Msg, Rsp, State] =
+		apply(state, pfs, beat)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
 
 	inline def apply[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]])(using ec: ExecutionContext): Actor[Msg, Rsp, State] =
-		apply(DefaultHeartbeat, state, pfs)
+		apply(state, pfs, defBeat)
 
 	inline def serial[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]]): Actor[Msg, Rsp, State] =
-		serial(DefaultHeartbeat, state, pfs)
+		serial(state, pfs, defBeat)
 }
