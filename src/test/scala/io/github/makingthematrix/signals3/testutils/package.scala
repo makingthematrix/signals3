@@ -34,11 +34,12 @@ package object testutils {
 
   val DefaultTimeout: FiniteDuration = 1.seconds
 
-  def result[A](future: Future[A])(using duration: FiniteDuration = DefaultTimeout): A = Await.result(future, duration)
+  def result[A](future: Future[A])(using d: FiniteDuration = DefaultTimeout): A = Await.result(future, d)
+  inline def resultCF[A](future: CloseableFuture[A])(using d: FiniteDuration = DefaultTimeout): A = result(future.future)
 
-  inline def await[A](future: Future[A])(using duration: FiniteDuration = DefaultTimeout): Unit = tryResult(future)
+  inline def await[A](future: Future[A])(using d: FiniteDuration = DefaultTimeout): Unit = tryResult(future)
 
-  def tryResult[A](future: Future[A])(using duration: FiniteDuration = DefaultTimeout): Try[A] =
+  def tryResult[A](future: Future[A])(using d: FiniteDuration = DefaultTimeout): Try[A] =
     try
       Try(result(future))
     catch {
@@ -65,8 +66,8 @@ package object testutils {
 
   def waitForResult[V](signal: Signal[V], expected: V)(using ExecutionContext): Boolean = waitForResult(signal, expected, DefaultTimeout)
   
-  def waitFor[E](stream: Stream[E], expected: E)(using ec: ExecutionContext, duration: FiniteDuration): Boolean =
-    waitForResult(stream, expected, duration)(using ec)
+  def waitFor[E](stream: Stream[E], expected: E)(using ec: ExecutionContext, d: FiniteDuration): Boolean =
+    waitForResult(stream, expected, d)(using ec)
     
   def waitForResult[E](stream: Stream[E], expected: E, timeout: FiniteDuration)(using ec: ExecutionContext): Boolean = {
     val offset = System.currentTimeMillis()

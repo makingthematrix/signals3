@@ -359,6 +359,34 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext)
 
       override def onSubscribe(): Unit = {}
     }.tap(eventContext.register)
+
+  /** A shorthand for a `foreach` which only purpose is to publish events emitted by this closeable future in 
+    * a given [[SourceStream]]. The subscriber function will be called in the execution context of the original publisher.
+    *
+    * @see [[SourceStream]]
+    * @param stream The source stream in which events emitted by this stream will be published.
+    */
+  inline final def pipeTo[Z >: T](stream: SourceStream[Z]): Unit = foreach(stream ! _)
+
+  /** An alias for `pipeTo`.
+    *
+    * @param stream The source stream in which events emitted by this stream will be published.
+    */
+  inline final def |[Z >: T](stream: SourceStream[Z]): Unit = pipeTo(stream)
+  
+  /** A shorthand for a `foreach` which only purpose is to publish events emitted by this closeable future in 
+    * a given [[SourceSignal]]. The subscriber function will be called in the execution context of the original publisher.
+    *
+    * @see [[SourceSignal]]
+    * @param signal The source stream in which events emitted by this stream will be published.
+    */
+  inline final def pipeTo[Z >: T](signal: SourceSignal[Z]): Unit = foreach(signal ! _)
+
+  /** An alias for `pipeTo`.
+    *
+    * @param signal The source stream in which events emitted by this stream will be published.
+    */
+  inline final def |[Z >: T](signal: SourceSignal[Z]): Unit = pipeTo(signal)
 }
 
 /** `CloseableFuture` is an object that for all practical uses works like a future but enables the user to close the operation.

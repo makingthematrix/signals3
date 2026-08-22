@@ -34,7 +34,7 @@ import scala.util.chaining.*
 	* @tparam Rsp The type of the response
 	* @tparam State The type of the internal state
 	*/
-final class Actor[Msg, Rsp, State](private var state: State,
+final class Actor[Msg, Rsp, State](var state: State,
                                    private var defBehavior: F[Msg, Rsp, State] = Actor.ignoreMsg,
                                    private val heartbeat: HeartBeatStrategy = HeartBeatStrategy.Linear(100L))
                                   (using ec: ExecutionContext)

@@ -1,9 +1,7 @@
 package io.github.makingthematrix.signals3
 
-import scala.concurrent.ExecutionContext
-import scala.concurrent.duration.*
-import testutils.*
-import Closeable.{CloseableSignal, CloseableStream}
+import io.github.makingthematrix.signals3.Closeable.CloseableStream
+import io.github.makingthematrix.signals3.testutils.*
 
 class PausableSpec extends munit.FunSuite {
   import EventContext.Implicits.global
