@@ -299,10 +299,18 @@ object Actor {
 	// todo: private var state: State for keeping and modifying internal state, v
 	// todo: behaviors must have access to this actor to be able to mutate the state v
 	// todo: heartbeat should be a strategy: Linear(ms), Agitated(min, coeff, max), Reactive v
-	// todo: Scaladoc
+	// todo: Scaladoc v
 	// todo: unit tests
+	// todo: managing behaviors through messages
 	// todo: spawning sub-actors that are closed with the parent
 	// todo: ActorBuilder
+	// todo: afterInit function that the actor can use, for example, to send out messages that it's alive
+	// todo: similarly, there should be an `onClose` function (but that's already implemented)
+	// todo: divide the Actor class into an immutable trait used outside and a mutable class that extends it - the behaviors use the latter
+	// todo: confirmation system messages
+	// todo: HealthCheck system message, sent from the parent to the child; if the child doesn't respond in time, the message is repeated, and the the child is closed
+
+
 
 	@static private val noResponse: Failure[Nothing] = Failure[Nothing](new IllegalStateException("No response"))
 

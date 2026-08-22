@@ -502,7 +502,8 @@ class PausableSpec extends munit.FunSuite {
     src.onPause { secondCalled = true }
     
     src.pause()
-    assert(!firstCalled)
+
+    assert(firstCalled)
     assert(secondCalled)
   }
 
@@ -515,7 +516,8 @@ class PausableSpec extends munit.FunSuite {
     sig.onPause { secondCalled = true }
     
     sig.pause()
-    assert(!firstCalled)
+
+    assert(firstCalled)
     assert(secondCalled)
   }
 
