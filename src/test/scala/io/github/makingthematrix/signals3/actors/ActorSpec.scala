@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, SystemMsg}
+import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy
 import io.github.makingthematrix.signals3.testutils.*
 import io.github.makingthematrix.signals3.{CloseableFuture, EventContext, Signal, Threading}
 import munit.FunSuite
@@ -69,6 +69,7 @@ class ActorSpec extends FunSuite {
 
   test("System messages handling") {
     val actor = Actor(0, (msg, actor) => Some(s"Received: $msg"))
+    import actor.SystemMsg
     actor ! SystemMsg.Pause
     waitFor(actor.isPausedSignal, true)
     actor ! SystemMsg.Unpause
@@ -179,6 +180,7 @@ class ActorSpec extends FunSuite {
       Thread.sleep(50)
       Some(s"Processed: $msg")
     })
+    import actor.SystemMsg
     
     val futures = (1 to 5).map(actor ? _)
     actor ! SystemMsg.Close
@@ -194,6 +196,7 @@ class ActorSpec extends FunSuite {
       received ! true
       None
     })
+    import actor.SystemMsg
     
     actor ! SystemMsg.Pause
     waitFor(actor.isPausedSignal, true)
@@ -308,5 +311,227 @@ class ActorSpec extends FunSuite {
     assertEquals(resultCF(actor ? 42), "Special: 42")
     assertEquals(resultCF(actor ? 1), "Default: 1")
     close(actor)
+  }
+
+  // ==================== System Message Behavior Management ====================
+
+  test("AddBehavior system message") {
+    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Default: $msg"))
+    import actor.SystemMsg
+    
+    val behavior: Actor.PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
+    actor ! SystemMsg.AddBehavior("testId", behavior)
+    
+    Thread.sleep(200) // Wait for system message processing
+    assertEquals(resultCF(actor ? 42), "Special: 42")
+    close(actor)
+  }
+
+  test("RemoveBehavior system message") {
+    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Default: $msg"))
+    import actor.SystemMsg
+    
+    val behavior: Actor.PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
+    actor.addBehavior("testId", behavior)
+    
+    assertEquals(resultCF(actor ? 42), "Special: 42")
+    
+    actor ! SystemMsg.RemoveBehavior("testId")
+    Thread.sleep(200) // Wait for system message processing
+    
+    assertEquals(resultCF(actor ? 42), "Default: 42")
+    close(actor)
+  }
+
+  test("AddBehavior and RemoveBehavior via system messages") {
+    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Default: $msg"))
+    import actor.SystemMsg
+    
+    val behavior: Actor.PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
+    
+    actor ! SystemMsg.AddBehavior("testId", behavior)
+    Thread.sleep(200)
+    assertEquals(resultCF(actor ? 42), "Special: 42")
+    
+    actor ! SystemMsg.RemoveBehavior("testId")
+    Thread.sleep(200)
+    assertEquals(resultCF(actor ? 42), "Default: 42")
+    
+    close(actor)
+  }
+
+  // ==================== System Message with Response ====================
+
+  test("Pause system message with response via ?") {
+    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Received: $msg"))
+    import actor.SystemMsg
+    
+    val pauseFuture = actor ? SystemMsg.Pause
+    resultCF(pauseFuture)
+    waitFor(actor.isPausedSignal, true)
+    close(actor)
+  }
+
+  test("Unpause system message with response via ?") {
+    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Received: $msg"))
+    import actor.SystemMsg
+    
+    actor ! SystemMsg.Pause
+    waitFor(actor.isPausedSignal, true)
+    
+    val unpauseFuture = actor ? SystemMsg.Unpause
+    resultCF(unpauseFuture)
+    waitFor(actor.isPausedSignal, false)
+    close(actor)
+  }
+
+  test("Close system message with response via ?") {
+    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Received: $msg"))
+    import actor.SystemMsg
+    
+    val closeFuture = actor ? SystemMsg.Close
+    resultCF(closeFuture)
+    waitFor(actor.isClosedSignal, true)
+  }
+
+  test("AddBehavior system message with response via ?") {
+    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Default: $msg"))
+    import actor.SystemMsg
+    
+    val behavior: Actor.PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
+    val addFuture = actor ? SystemMsg.AddBehavior("testId", behavior)
+    resultCF(addFuture)
+    
+    Thread.sleep(100)
+    assertEquals(resultCF(actor ? 42), "Special: 42")
+    close(actor)
+  }
+
+  test("RemoveBehavior system message with response via ?") {
+    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Default: $msg"))
+    import actor.SystemMsg
+    
+    val behavior: Actor.PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
+    actor.addBehavior("testId", behavior)
+    assertEquals(resultCF(actor ? 42), "Special: 42")
+    
+    val removeFuture = actor ? SystemMsg.RemoveBehavior("testId")
+    resultCF(removeFuture)
+    
+    Thread.sleep(100)
+    assertEquals(resultCF(actor ? 42), "Default: 42")
+    close(actor)
+  }
+
+  test("System messages via ? return Unit response") {
+    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Default: $msg"))
+    import actor.SystemMsg
+    
+    val pauseFuture: CloseableFuture[Unit] = actor ? SystemMsg.Pause
+    val result: Unit = resultCF(pauseFuture)
+    assertEquals(result, ())
+    
+    waitFor(actor.isPausedSignal, true)
+    close(actor)
+  }
+
+  // ==================== Close Response Guarantees ====================
+
+  test("Close via ? completes only after actor is closed") {
+    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Received: $msg"))
+    import actor.SystemMsg
+    import scala.util.Try
+    
+    val closeFuture = actor ? SystemMsg.Close
+    
+    // The future should NOT be completed yet
+    val poll1 = Try(resultCF(closeFuture)(using 100.millis))
+    assert(poll1.isFailure) // Should timeout because actor is not closed yet
+    
+    // Wait for the close to actually complete
+    resultCF(closeFuture)(using 2.seconds)
+    
+    // Now the actor should be closed
+    waitFor(actor.isClosedSignal, true)
+  }
+
+  test("Close via ? response is Unit") {
+    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Received: $msg"))
+    import actor.SystemMsg
+    
+    val closeFuture: CloseableFuture[Unit] = actor ? SystemMsg.Close
+    val result: Unit = resultCF(closeFuture)(using 2.seconds)
+    
+    assertEquals(result, ())
+    waitFor(actor.isClosedSignal, true)
+  }
+
+  test("Close via ? with pending messages waits for processing") {
+    val actor = Actor[Int, String, Int](0, (msg, actor) => {
+      Thread.sleep(50) // Simulate slow processing
+      Some(s"Processed: $msg")
+    })
+    import actor.SystemMsg
+    
+    // Send some messages that take time to process
+    actor ! 1
+    actor ! 2
+    actor ! 3
+    
+    // Close the actor - this should wait for messages to be processed
+    val closeFuture = actor ? SystemMsg.Close
+    
+    // The future should complete only after messages are processed and actor is closed
+    resultCF(closeFuture)(using 2.seconds)
+    
+    waitFor(actor.isClosedSignal, true)
+  }
+
+  test("Close via ! does not wait for response") {
+    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Received: $msg"))
+    import actor.SystemMsg
+    
+    // Close via fire-and-forget
+    actor ! SystemMsg.Close
+    
+    // Wait for the actor to be closed
+    waitFor(actor.isClosedSignal, true)
+    
+    // No future to await - this is the expected behavior
+  }
+
+  test("Multiple Close via ? all complete") {
+    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Received: $msg"))
+    import actor.SystemMsg
+    
+    val closeFuture1 = actor ? SystemMsg.Close
+    val closeFuture2 = actor ? SystemMsg.Close
+    
+    // Both futures should complete (though actor can only close once)
+    resultCF(closeFuture1)(using 2.seconds)
+    resultCF(closeFuture2)(using 2.seconds)
+    
+    waitFor(actor.isClosedSignal, true)
+  }
+
+  test("Close via ? when actor has pending messages") {
+    val received = Signal(false)
+    val actor = Actor[Int, Unit, Boolean](false, (msg, actor) => {
+      received ! true
+      None
+    })
+    import actor.SystemMsg
+    
+    // Send a message that will take time
+    actor ! 1
+    
+    // Close the actor - should wait for message to be processed
+    val closeFuture = actor ? SystemMsg.Close
+    
+    resultCF(closeFuture)(using 2.seconds)
+    waitFor(actor.isClosedSignal, true)
+    
+    // The message should have been processed before close completed
+    waitFor(received, true)
   }
 }
