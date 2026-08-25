@@ -26,37 +26,246 @@ import scala.util.chaining.*
 	*
 	* This implementation is designed to be lightweight and easy to use, with a focus on simplicity and performance, so
 	* that it might make sense in both those use cases: as a big gateway between components, or as a small, independent entity.
-	*
-	* @param state Internal data of the actor which can be mutated in response to messages
-	* @param defBehavior The default behavior of the actor when it receives a message
-	* @param heartbeat A strategy to decide when to process incoming messages
-	* @param ec The execution context in which the actor's behavior is executed
+  *
 	* @tparam Msg The type of the incoming message
 	* @tparam Rsp The type of the response
 	* @tparam State The type of the internal state
 	*/
-final class Actor[Msg, Rsp, State](var state: State,
-                                   private var defBehavior: F[Msg, Rsp, State] = Actor.ignoreMsg,
-                                   private val heartbeat: HeartBeatStrategy = HeartBeatStrategy.Linear(100L))
-                                  (using ec: ExecutionContext)
-	extends Closeable with Pausable {
-	import HeartBeatStrategy.*
 
+trait Actor[Msg, Rsp, State] extends Closeable with Pausable {
 	/**
 		* Represents system-level messages that can be used to control or affect the behavior
 		* of an actor. These messages are typically utilized for lifecycle management or operational changes within a system.
 		*
 		* The `SystemMsg` enum contains the following members:
-		*
-		* - `Pause`: Indicates that the actor should temporarily suspend operations.
-		* - `Unpause`: Indicates that the actor should resume operations after being paused.
-		* - `Close`: Indicates that the actor should terminate its operations.
+		* - `Pause`: the actor should temporarily suspend operations.
+		* - `Unpause`: the actor should resume operations after being paused.
+		* - `Close`: the actor should terminate its operations.
+		* - `AddBehavior(id, pf)` - adds a new behavior to the actor
+		* - `RemoveBehavior(id)` - removes a behavior from the actor
 		*/
 	enum SystemMsg {
 		case Pause, Unpause, Close
 		case AddBehavior(id: String, pf: PF[Msg, Rsp, State])
 		case RemoveBehavior(id: String)
 	}
+
+	/** The input stream for handling incoming messages of type `Msg`.
+		*
+		* You can send messages directly to the actor, using "!" (bang) and "?" (ask) operators.
+		* But if the messages are the result of event streams operations (e.g. they are coming from the http endpoints)
+		* it might be more convinient to pipe them automatically to the exposed "in" stream.
+		*
+		* @see [[Stream.pipeTo]]
+		*/
+	def in: SourceStream[Msg]
+
+	/**
+		* Retrieves a behavior from the actor's list of behaviors based on its unique identifier.
+		*
+		* @param id The unique identifier of the behavior to retrieve.
+		* @return An `Option` containing the partial function defining the behavior, if found; otherwise, `None`.
+		*/
+	def getBehavior(id: String): Option[PF[Msg, Rsp, State]]
+
+	/**
+		* Sends a system message to the actor, expecting a response in the form of a `CloseableFuture`.
+		*
+		* This is a direct way to send a system message to the actor a request a response. The message will be processed
+		* asynchronously, depending on the heartbeat strategy. When it is processed, the sender will be notified of the it
+		* because the associated `CloseableFuture` will finish with success.
+		*
+		* @param msg the message to send to the actor.
+		* @return a `CloseableFuture` of the type `Unit`.
+		*/
+	@targetName("ask") def ?(msg: SystemMsg): CloseableFuture[Unit]
+
+	/**
+		* Sends a message to the actor, expecting a response in the form of a `CloseableFuture`.
+		*
+		* This is a direct way to send a message to the actor a request a response. The message will be processed asynchronously,
+		* depending on the heartbeat strategy. When it is processed, the result will be sent back to the sender as the result
+		* of the associated `CloseableFuture`. The sender may await that result, or simply check if the processing is successful.
+		* They may also close the future if the result is not longer needed, or ignore it - but in that case it's better to use
+		* the "!" operator instead.
+		*
+		* @param msg the message to send to the actor.
+		* @return a `CloseableFuture` containing the response from the actor.
+		*/
+	@targetName("ask") def ?(msg: Msg): CloseableFuture[Rsp]
+
+	/**
+		* Sends a system message to the actor.
+		*
+		* System messages are defined in [[ActorImpl.SystemMsg]]. They are processed asynchronously, just like regular messages
+		* but they are not affected by the actor being paused (since  a system message might be used to unpause or close
+		* a paused actor). No response will be returned to the sender.
+		*
+		* @param msg the message to send to the actor.
+		*/
+	@targetName("bang") def !(msg: SystemMsg): Unit
+
+	/**
+		* Sends a message to the actor without expecting a response.
+		*
+		* This method is used to asynchronously send a message to the actor.
+		* The message will be processed according to the actor's behavior,
+		* but no response will be returned to the sender. This is useful
+		* for fire-and-forget scenarios where the sender does not need to
+		* track the result of the message processing.
+		*
+		* @param msg The message to be sent to the actor.
+		*/
+	@targetName("bang") def !(msg: Msg): Unit
+
+	/**
+		* Retrieves the current state of the actor
+		* @return the current state
+		*/
+	def state: State
+
+	/**
+		* Retrieves the current default behavior of the actor
+		* @return the current default behavior
+		*/
+	def defBehavior: F[Msg, Rsp, State]
+
+	/**
+		* Retrieves the current heartbeat strategy of the actor
+		* @return the current heartbeat strategy
+		*/
+	def heartbeat: HeartBeatStrategy
+}
+
+/**
+	* A trait representing a mutable actor, which is an extension of the `Actor` trait. This actor
+	* allows dynamic modification of its internal state and behavior at runtime. It introduces methods
+	* to update the actor's default behavior, heartbeat strategy, and state, as well as to add or remove
+	* behaviors dynamically.
+	* 
+	* Mainly used by the `Behavior` functions.
+	*
+	* @tparam Msg The type of the incoming message
+	* @tparam Rsp The type of the response
+	* @tparam State The type of the internal state
+	*/
+trait MutableActor[Msg, Rsp, State] extends Actor[Msg, Rsp, State] {
+	/**
+		* Enables the behavior method to alter the actor's state
+		* @param newState the new state of the actor
+		*/
+	def state_=(newState: State): Unit
+
+	/**
+		* Enables the behavior method to alter the default behavior
+		* @param newDefBehavior the new default behavior
+		*/
+	def defBehavior_=(newDefBehavior: F[Msg, Rsp, State]): Unit
+
+	/**
+		* Enables the behavior method to alter the heartbeat strategy
+		* @param newHeartbeat the new heartbeat strategy
+		*/
+	def heartbeat_=(newHeartbeat: HeartBeatStrategy): Unit
+
+	/**
+		* Adds a new behavior to the actor. The behavior is appended to the list of existing behaviors,
+		* meaning it will be executed only if all preceding behaviors fail to handle the message.
+		*
+		* @param id A unique identifier for the behavior being added.
+		* @param pf The behavior function represented as a partial function that takes a message
+		*           and an actor, and optionally returns a response.
+		*/
+	def addBehavior(id: String, pf: PF[Msg, Rsp, State]): Unit
+
+	/**
+		* Adds a new behavior to the actor. The behavior is appended to the list of existing behaviors,
+		* meaning it will be executed only if all preceding behaviors fail to handle the message.
+		*
+		* @param behavior The behavior to be added, represented as a tuple containing a unique identifier
+		*                 and a partial function that defines the behavior logic.
+		*/
+	def addBehavior(behavior: (id: String, pf: PF[Msg, Rsp, State])): Unit
+
+	/**
+		* Adds a behavior function to the actor and returns a unique identifier for it.
+		* The behavior is appended to the list of existing behaviors, which are evaluated
+		* in order when processing a message. The newly added behavior will only be executed
+		* if all preceding behaviors fail to handle the message.
+		*
+		* @param pf A partial function that represents the behavior logic. It takes a message,
+		*           a response, and the state, and optionally handles the message.
+		*
+		* @return   A unique identifier for the newly added behavior.
+		*/
+	def addBehavior(pf: PF[Msg, Rsp, State]): String =
+		UUID.randomUUID().toString.tap { name => addBehavior(name -> pf) }
+
+	/**
+		* Adds the provided partial function as a behavior to this entity.
+		*
+		* @param pf A partial function that defines how the entity responds to specific messages,
+		*           including mappings from messages to responses and potential state transitions.
+		*
+		* @return   A string indicating the behavior addition result or status.
+		*/
+	@targetName("plus") def +(pf: PF[Msg, Rsp, State]): String = addBehavior(pf)
+
+	/**
+		* Removes a behavior from the actor's list of behaviors based on its unique identifier.
+		* The specified behavior will no longer be part of the message processing sequence.
+		*
+		* @param id The unique identifier of the behavior to be removed.
+		*/
+	def removeBehavior(id: String): Unit
+
+	/**
+		* Removes a specific behavior from the actor's list of behaviors, based on the reference its function,
+		* given that it's the same reference that was used to add it.
+		*
+		* @param pf A reference to a partial function defining the behavior to be removed
+		*/
+	def removeBehavior(pf: PF[Msg, Rsp, State]): Unit
+
+	/**
+		* Removes a specific behavior from the actor's list of behaviors, based on the reference its function,
+		* given that it's the same reference that was used to add it.
+		*
+		* @param pf A reference to a partial function defining the behavior to be removed
+		*/
+	@targetName("minus") def -(pf: PF[Msg, Rsp, State]): Unit = removeBehavior(pf)
+
+	/**
+		* Removes a behavior from the actor's list of behaviors based on its unique identifier.
+		* The specified behavior will no longer be part of the message processing sequence.
+		*
+		* @param id The unique identifier of the behavior to be removed.
+		*/
+	@targetName("minus") def -(id: String): Unit = removeBehavior(id)
+}
+
+/**
+	* Represents an implementation of a mutable actor with a customizable state, behaviors, and heartbeat strategy.
+	*
+	* @tparam Msg   The type of messages processed by this actor.
+	* @tparam Rsp   The type of responses returned by this actor.
+	* @tparam State The type representing the internal state of the actor.
+	*
+	*               This class is designed to manage asynchronous message processing. It maintains:
+	*               - A mutable state of the actor.
+	*               - A queue for incoming messages and system messages.
+	*               - A list of behavior functions to handle messages.
+	*               - A heartbeat strategy to schedule message processing.
+	*
+	*               The actor can be configured with custom behaviors and handles messages using 
+	*               a prioritized strategy based on the order of the behaviors.
+	*/
+final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State,
+                                                       private var _defBehavior: F[Msg, Rsp, State] = Actor.ignoreMsg, 
+                                                       private var _heartbeat: HeartBeatStrategy = HeartBeatStrategy.Linear(100L))
+                                                      (using ExecutionContext)
+	extends MutableActor[Msg, Rsp, State] {
+	import HeartBeatStrategy.*
 
 	// a mutable queue of messages incoming from other actors and other sources; see the ! operator.
 	private val msgs         = mutable.Queue[(Msg, Option[Promise[Rsp]])]()
@@ -75,7 +284,7 @@ final class Actor[Msg, Rsp, State](var state: State,
 	private var nextAgitation: Long = 0L
 
 	// a method used every consecutive beat to calculate the time for the next beat
-	private def interval(): FiniteDuration = heartbeat match {
+	private def interval(): FiniteDuration = _heartbeat match {
 		case Linear(ms) => ms.millis
 		case Reactive(maxMs, _) => maxMs.millis
 		case Agitated(minMs, _, _) if msgs.isEmpty && nextAgitation <= minMs => minMs.millis
@@ -88,20 +297,12 @@ final class Actor[Msg, Rsp, State](var state: State,
 			nextAgitation.millis
 	}
 
-	/** The input stream for handling incoming messages of type `Msg`.
-		*
-		* You can send messages directly to the actor, using "!" (bang) and "?" (ask) operators.
-		* But if the messages are the result of event streams operations (e.g. they are coming from the http endpoints)
-		* it might be more convinient to pipe them automatically to the exposed "in" stream.
-		*
-		* @see [[Stream.pipeTo]]
-		*/
-	val in: SourceStream[Msg] = Stream[Msg]()
+	override val in: SourceStream[Msg] = Stream[Msg]()
 	in.map(msg => (msg, None)).pipeTo(msgStream)
 
 	msgStream.foreach { msg =>
 		msgs.enqueue(msg)
-		heartbeat match {
+		_heartbeat match {
 			case Reactive(_, maxMsgs) if msgs.size >= maxMsgs => Future { processMessages() }
 			case _ =>
 		}
@@ -109,8 +310,8 @@ final class Actor[Msg, Rsp, State](var state: State,
 
 	systemStream.foreach { msg =>
 		systemMsgs.enqueue(msg)
-		heartbeat match {
-			case Reactive(_, maxMsgs) => Future { processMessages() }
+		_heartbeat match {
+			case Reactive(_, _) => Future { processMessages() }
 			case _ =>
 		}
 	}
@@ -139,28 +340,6 @@ final class Actor[Msg, Rsp, State](var state: State,
 	}
 
 	/**
-		* Adds a behavior function to the actor and returns a unique identifier for it.
-		* The behavior is appended to the list of existing behaviors, which are evaluated
-		* in order when processing a message. The newly added behavior will only be executed
-		* if all preceding behaviors fail to handle the message.
-		*
-		* @param pf A partial function that represents the behavior logic. It takes a message,
-		*           a response, and the state, and optionally handles the message.
-		* @return A unique identifier for the newly added behavior.
-		*/
-	def addBehavior(pf: PF[Msg, Rsp, State]): String =
-		UUID.randomUUID().toString.tap { name => addBehavior(name -> pf) }
-
-	/**
-		* Adds the provided partial function as a behavior to this entity.
-		*
-		* @param pf A partial function that defines how the entity responds to specific messages,
-		*           including mappings from messages to responses and potential state transitions.
-		* @return A string indicating the behavior addition result or status.
-		*/
-	@targetName("plus") def +(pf: PF[Msg, Rsp, State]): String = addBehavior(pf)
-
-	/**
 		* Removes a behavior from the actor's list of behaviors based on its unique identifier.
 		* The specified behavior will no longer be part of the message processing sequence.
 		*
@@ -180,90 +359,24 @@ final class Actor[Msg, Rsp, State](var state: State,
 		behaviors = behaviors.filterNot(_.pf == pf)
 	}
 
-	/**
-		* Removes a specific behavior from the actor's list of behaviors, based on the reference its function,
-		* given that it's the same reference that was used to add it.
-		*
-		* @param pf A reference to a partial function defining the behavior to be removed
-		*/
-	@targetName("minus") def -(pf: PF[Msg, Rsp, State]): Unit = removeBehavior(pf)
-
-	/**
-		* Removes a behavior from the actor's list of behaviors based on its unique identifier.
-		* The specified behavior will no longer be part of the message processing sequence.
-		*
-		* @param id The unique identifier of the behavior to be removed.
-		*/
-	@targetName("minus") def -(id: String): Unit = removeBehavior(id)
-
-	/**
-		* Retrieves a behavior from the actor's list of behaviors based on its unique identifier.
-		*
-		* @param id The unique identifier of the behavior to retrieve.
-		* @return An `Option` containing the partial function defining the behavior, if found; otherwise, `None`.
-		*/
-	def getBehavior(id: String): Option[PF[Msg, Rsp, State]] =
+	override def getBehavior(id: String): Option[PF[Msg, Rsp, State]] =
 		behaviors.collectFirst { case (name, pf) if name == id => pf }
 
-	/**
-		* Sends a system message to the actor, expecting a response in the form of a `CloseableFuture`.
-		*
-		* This is a direct way to send a system message to the actor a request a response. The message will be processed
-		* asynchronously, depending on the heartbeat strategy. When it is processed, the sender will be notified of the it
-		* because the associated `CloseableFuture` will finish with success.
-		*
-		* @param msg the message to send to the actor.
-		* @return a `CloseableFuture` of the type `Unit`.
-		*/
-	@targetName("ask") def ?(msg: SystemMsg): CloseableFuture[Unit] = {
+	@targetName("ask") override def ?(msg: SystemMsg): CloseableFuture[Unit] = {
 		val p = Promise[Unit]()
 		systemStream ! (msg, Some(p))
 		CloseableFuture.from(p)
 	}
 
-	/**
-		* Sends a message to the actor, expecting a response in the form of a `CloseableFuture`.
-		*
-		* This is a direct way to send a message to the actor a request a response. The message will be processed asynchronously,
-		* depending on the heartbeat strategy. When it is processed, the result will be sent back to the sender as the result
-		* of the associated `CloseableFuture`. The sender may await that result, or simply check if the processing is successful.
-		* They may also close the future if the result is not longer needed, or ignore it - but in that case it's better to use
-		* the "!" operator instead.
-		*
-		* @param msg the message to send to the actor.
-		* @return a `CloseableFuture` containing the response from the actor.
-		*/
-	@targetName("ask") def ?(msg: Msg): CloseableFuture[Rsp] = {
+	@targetName("ask") override def ?(msg: Msg): CloseableFuture[Rsp] = {
 		val p = Promise[Rsp]()
 		msgStream ! (msg, Some(p))
 		CloseableFuture.from(p)
 	}
 
-	/**
-		* Sends a system message to the actor.
-		*
-		* System messages are defined in [[Actor.SystemMsg]]. They are processed asynchronously, just like regular messages
-		* but they are not affected by the actor being paused (since  a system message might be used to unpause or close
-		* a paused actor). No response will be returned to the sender.
-		*
-		* @todo The sender may instead wait for a confirmation message (a special enum case of a system message)
-		*
-		* @param msg the message to send to the actor.
-		*/
-	@targetName("bang") def !(msg: SystemMsg): Unit = { systemStream ! (msg, None) }
+	@targetName("bang") override def !(msg: SystemMsg): Unit = { systemStream ! (msg, None) }
 
-	/**
-		* Sends a message to the actor without expecting a response.
-		*
-		* This method is used to asynchronously send a message to the actor.
-		* The message will be processed according to the actor's behavior,
-		* but no response will be returned to the sender. This is useful
-		* for fire-and-forget scenarios where the sender does not need to
-		* track the result of the message processing.
-		*
-		* @param msg The message to be sent to the actor.
-		*/
-	@targetName("bang") def !(msg: Msg): Unit = { msgStream ! (msg, None) }
+	@targetName("bang") override def !(msg: Msg): Unit = { msgStream ! (msg, None) }
 
 	private val isProcessing = AtomicBoolean(false)
 
@@ -304,12 +417,12 @@ final class Actor[Msg, Rsp, State](var state: State,
 	private def process(msg: Msg): Try[Option[Rsp]] =
 		behaviors.map(_.pf).find(_.isDefinedAt(msg, this)) match {
 			case Some(f: PF[Msg, Rsp, State])        => Try(f(msg, this))
-			case _ if defBehavior == Actor.ignoreMsg => Success[Option[Rsp]](None)
-			case _                                   => Try(defBehavior(msg, this))
+			case _ if _defBehavior == Actor.ignoreMsg => Success[Option[Rsp]](None)
+			case _                                   => Try(_defBehavior(msg, this))
 		}
 
 	// Initializes the heartbeat of the actor.
-	private def initialize(): Unit = beat.foreach(_ => processMessages())
+	private[actors] def initialize(): Unit = beat.foreach(_ => processMessages())
 
 	/**
 		* Closes the actor and performs necessary checks to ensure all messages are completed before finalizing the closure.
@@ -332,11 +445,23 @@ final class Actor[Msg, Rsp, State](var state: State,
 
 	private def shutdown(): Future[Unit] =
 		for {
-			_             = beat.closeAndCheck()
-			msgsProcessed <- if (msgs.nonEmpty) Future { processMessages() } else Future.successful(())
-			isClosed      <- beat.isClosedSignal.onTrue
-			_             = super.closeAndCheck()
+			_ =  beat.closeAndCheck()
+			_ <- if (msgs.nonEmpty) Future { processMessages() } else Future.successful(())
+			_ <- beat.isClosedSignal.onTrue
+			_ =  super.closeAndCheck()
 		} yield ()
+
+	override def state: State = _state
+
+	override def state_=(newState: State): Unit = { _state = newState }
+
+	override def defBehavior: F[Msg, Rsp, State] = _defBehavior
+
+	override def defBehavior_=(newDefBehavior: F[Msg, Rsp, State]): Unit = { _defBehavior = newDefBehavior }
+
+	override def heartbeat: HeartBeatStrategy = _heartbeat
+
+	override def heartbeat_=(newHeartbeat: HeartBeatStrategy): Unit = { _heartbeat = newHeartbeat }
 }
 
 object Actor {
@@ -347,14 +472,18 @@ object Actor {
 	// todo: heartbeat should be a strategy: Linear(ms), Agitated(min, coeff, max), Reactive v
 	// todo: Scaladoc v
 	// todo: unit tests v
-	// todo: managing behaviors through messages
-	// todo: confirmation system messages
-	// todo: divide the Actor class into an immutable trait used outside and a mutable class that extends it - the behaviors use the latter
+	// todo: managing behaviors through messages v
+	// todo: divide the Actor class into an immutable trait used outside and a mutable class that extends it - the behaviors use the latter v
+	// todo: hange the behaviors list to a map - all behaviors that fit for a given message are executed, not only the oldest one
+	// todo: add the out stream that can be used by behaviors to send messages to
+	// todo: change the name of defBehavior to endBehavior (the ladt behavior); the current one is confusing
 	// todo: afterInit function that the actor can use, for example, to send out messages that it's alive
 	// todo: similarly, there should be an `onClose` function (but that's already implemented)
 	// todo: spawning sub-actors that are closed with the parent
 	// todo: ActorBuilder
+	// todo: confirmation system messages
 	// todo: HealthCheck system message, sent from the parent to the child; if the child doesn't respond in time, the message is repeated, and the the child is closed
+	// todo: consider to allow the children to use different types of messages
 
 	@static private val noResponse: Failure[Nothing] = Failure[Nothing](new IllegalStateException("No response"))
 
@@ -367,14 +496,12 @@ object Actor {
 	inline def NoResponse[Rsp]: Failure[Rsp] = noResponse.asInstanceOf[Failure[Rsp]]
 
 	// the default behavior of any actor is to simply ignore the message
-	private def ignoreMsg[Msg, Rsp, State](msg: Msg, actor: Actor[Msg, Rsp, State]): Option[Rsp] = None
+	def ignoreMsg[Msg, Rsp, State](msg: Msg, actor: MutableActor[Msg, Rsp, State]): Option[Rsp] = None
 
 	// The type of a default behavior: a function that takes a message and an actor and returns an optional response.
-	type F[Msg, Rsp, State] = (Msg, Actor[Msg, Rsp, State]) => Option[Rsp]
+	type F[Msg, Rsp, State] = (Msg, MutableActor[Msg, Rsp, State]) => Option[Rsp]
 	// The type of a custom behavior: a partial function that takes a message and an actor and returns an optional response.
-	type PF[Msg, Rsp, State] = PartialFunction[(Msg, Actor[Msg, Rsp, State]), Option[Rsp]]
-
-
+	type PF[Msg, Rsp, State] = PartialFunction[(Msg, MutableActor[Msg, Rsp, State]), Option[Rsp]]
 
 	/**
 		* Represents a strategy for configuring the heartbeat of an actor.
@@ -409,7 +536,7 @@ object Actor {
 		*/
 	inline def apply[Msg, Rsp, State](state: State, defBehavior: F[Msg, Rsp, State], beat: HeartBeatStrategy)
 	                                 (using ExecutionContext): Actor[Msg, Rsp, State] =
-		new Actor(state, defBehavior, beat).tap(_.initialize())
+		new ActorImpl(state, defBehavior, beat).tap(_.initialize())
 
 	/**
 		* Creates a new actor instance with the specified initial state, default behavior, and heartbeat strategy.
@@ -462,7 +589,7 @@ object Actor {
 		*/
 	def apply[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy)
 	                          (using ExecutionContext): Actor[Msg, Rsp, State] =
-		new Actor[Msg, Rsp, State](state, ignoreMsg, beat).tap { actor =>
+		new ActorImpl[Msg, Rsp, State](state, ignoreMsg, beat).tap { actor =>
 			pfs.foreach(actor.addBehavior)
 			actor.initialize()
 		}

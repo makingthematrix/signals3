@@ -25,12 +25,12 @@ class ActorSpec extends FunSuite {
   }
 
   test("Actor creation with initial state") {
-    val actor = Actor(0, (msg, actor) => Some(s"Received: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Received: $msg"))
     close(actor)
   }
 
   test("Request-response message sending") {
-    val actor = Actor(0, (msg, actor) => Some(s"Default: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Default: $msg"))
     val response = actor ? 42
     assertEquals(resultCF(response), "Default: 42")
     close(actor)
@@ -38,7 +38,7 @@ class ActorSpec extends FunSuite {
 
   test("Fire-and-forget message sending") {
     val received = Signal(false)
-    val actor = Actor[Int, Unit, Boolean](false, (msg, actor) => {
+    val actor = Actor[Int, Unit, Boolean](false, (_, actor) => {
       actor.state = true
       received ! true
       None
@@ -50,7 +50,7 @@ class ActorSpec extends FunSuite {
   }
 
   test("Response handling with NoResponse") {
-    val actor = Actor(0, (msg, actor) => None)
+    val actor = Actor[Int, String, Int](0, (_, _) => None)
     val response = actor ? 42
     intercept[IllegalStateException] {
       resultCF(response)
@@ -59,7 +59,7 @@ class ActorSpec extends FunSuite {
   }
 
   test("Exception handling in behaviors") {
-    val actor = Actor(0, (msg, actor) => throw new RuntimeException("Test exception"))
+    val actor = Actor[Int, String, Int](0, (_, _) => throw new RuntimeException("Test exception"))
     val response = actor ? 42
     intercept[RuntimeException] {
       resultCF(response)
@@ -68,7 +68,7 @@ class ActorSpec extends FunSuite {
   }
 
   test("System messages handling") {
-    val actor = Actor(0, (msg, actor) => Some(s"Received: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Received: $msg"))
     import actor.SystemMsg
     actor ! SystemMsg.Pause
     waitFor(actor.isPausedSignal, true)
@@ -96,9 +96,9 @@ class ActorSpec extends FunSuite {
     val agitatedResponse = Signal("")
     val reactiveResponse = Signal("")
 
-    val linearActor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Linear: $msg"), HeartBeatStrategy.Linear(100))
-    val agitatedActor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Agitated: $msg"), HeartBeatStrategy.Agitated(50, 1.5, 500))
-    val reactiveActor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Reactive: $msg"), HeartBeatStrategy.Reactive(100, 5))
+    val linearActor = Actor[Int, String, Int](0, (msg, _) => Some(s"Linear: $msg"), HeartBeatStrategy.Linear(100))
+    val agitatedActor = Actor[Int, String, Int](0, (msg, _) => Some(s"Agitated: $msg"), HeartBeatStrategy.Agitated(50, 1.5, 500))
+    val reactiveActor = Actor[Int, String, Int](0, (msg, _) => Some(s"Reactive: $msg"), HeartBeatStrategy.Reactive(100, 5))
 
     (linearActor ? 1).pipeTo(linearResponse)
     (agitatedActor ? 2).pipeTo(agitatedResponse)
@@ -116,7 +116,7 @@ class ActorSpec extends FunSuite {
   // ==================== SourceStream Integration ====================
 
   test("SourceStream integration via in stream") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Processed: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Processed: $msg"))
     val received = Signal(false)
     
     actor.in.foreach { msg =>
@@ -131,22 +131,26 @@ class ActorSpec extends FunSuite {
   // ==================== Behavior Modification ====================
 
   test("Concurrent behavior addition and removal") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Default: $msg"))
-    val behavior1: Actor.PF[Int, String, Int] = {
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Default: $msg"))
+    val behavior42: Actor.PF[Int, String, Int] = {
       case (42, _) => Some("Special: 42")
     }
-    val behavior2: Actor.PF[Int, String, Int] = {
+    val behavior99: Actor.PF[Int, String, Int] = {
       case (99, _) => Some("Special: 99")
     }
-    
-    val id1 = actor.addBehavior(behavior1)
-    val id2 = actor.addBehavior(behavior2)
+
+    val cf42: CloseableFuture[Unit] = (actor ? actor.SystemMsg.AddBehavior("special_42", behavior42))
+    val cf99: CloseableFuture[Unit] = (actor ? actor.SystemMsg.AddBehavior("special_99", behavior99))
+    awaitCF(cf42)
+    awaitCF(cf99)
     
     assertEquals(resultCF(actor ? 42), "Special: 42")
     assertEquals(resultCF(actor ? 99), "Special: 99")
-    
-    actor.removeBehavior(id1)
-    actor.removeBehavior(id2)
+
+    val cf42r: CloseableFuture[Unit] = (actor ? actor.SystemMsg.RemoveBehavior("special_42"))
+    val cf99r: CloseableFuture[Unit] = (actor ? actor.SystemMsg.RemoveBehavior("special_99"))
+    awaitCF(cf42r)
+    awaitCF(cf99r)
     
     assertEquals(resultCF(actor ? 42), "Default: 42")
     assertEquals(resultCF(actor ? 99), "Default: 99")
@@ -158,9 +162,10 @@ class ActorSpec extends FunSuite {
     val behavior: Actor.PF[Int, String, Int] = {
       case (42, _) => Some("Special: 42")
     }
-    
-    actor.addBehavior(behavior)
-    
+
+    val cf42: CloseableFuture[Unit] = (actor ? actor.SystemMsg.AddBehavior("special_42", behavior))
+    awaitCF(cf42)
+
     assertEquals(resultCF(actor ? 42), "Special: 42")
     close(actor)
   }
@@ -168,7 +173,7 @@ class ActorSpec extends FunSuite {
   // ==================== Edge Cases ====================
 
   test("Empty message lists") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Received: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Received: $msg"))
     
     val response = actor ? 1
     assertEquals(resultCF(response), "Received: 1")
@@ -176,7 +181,7 @@ class ActorSpec extends FunSuite {
   }
 
   test("Actor closed while messages in-flight") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => {
+    val actor = Actor[Int, String, Int](0, (msg, _) => {
       Thread.sleep(50)
       Some(s"Processed: $msg")
     })
@@ -217,7 +222,7 @@ class ActorSpec extends FunSuite {
   // ==================== Heartbeat Strategy Specifics ====================
 
   test("Agitated heartbeat interval grows when idle") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Processed: $msg"), 
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Processed: $msg"),
       HeartBeatStrategy.Agitated(minMs = 50, coeff = 2.0, maxMs = 1000))
     
     val response1 = actor ? 1
@@ -231,7 +236,7 @@ class ActorSpec extends FunSuite {
   }
 
   test("Reactive heartbeat processes messages") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Processed: $msg"),
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Processed: $msg"),
       HeartBeatStrategy.Reactive(maxMs = 100, maxMsgs = 2))
     
     val response = actor ? 1
@@ -243,10 +248,9 @@ class ActorSpec extends FunSuite {
 
   test("Actor continues processing after behavior exception") {
     var callCount = 0
-    val actor = Actor[Int, String, Int](0, (msg, actor) => {
+    val actor = Actor[Int, String, Int](0, (msg, _) => {
       callCount += 1
-      if (msg == 1) throw new RuntimeException("Test error")
-      else Some(s"Processed: $msg")
+      if (msg == 1) throw new RuntimeException("Test error") else Some(s"Processed: $msg")
     })
     
     intercept[RuntimeException](resultCF(actor ? 1))
@@ -258,7 +262,7 @@ class ActorSpec extends FunSuite {
   }
 
   test("Behavior returns None vs Some(None)") {
-    val actor = Actor[Int, Option[String], Int](0, (msg, actor) => {
+    val actor = Actor[Int, Option[String], Int](0, (msg, _) => {
       if (msg == 1) None
       else if (msg == 2) Some(None)
       else Some(Some("value"))
@@ -278,7 +282,7 @@ class ActorSpec extends FunSuite {
   // ==================== Special Cases ====================
 
   test("Actor with no behaviors uses ignoreMsg") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => None)
+    val actor = Actor[Int, String, Int](0, (_, _) => None)
     
     val response = actor ? 42
     intercept[IllegalStateException](resultCF(response))
@@ -286,7 +290,7 @@ class ActorSpec extends FunSuite {
   }
 
   test("Actor with Unit state") {
-    val actor = Actor[Int, String, Unit]((), (msg, actor) => Some(s"Received: $msg"))
+    val actor = Actor[Int, String, Unit]((), (msg, _) => Some(s"Received: $msg"))
     
     val response = actor ? 42
     assertEquals(resultCF(response), "Received: 42")
@@ -296,7 +300,7 @@ class ActorSpec extends FunSuite {
   // ==================== DispatchQueue Integration ====================
 
   test("Serial dispatch queue actor") {
-    val actor = Actor.serial[Int, String, Int](0, (msg, actor) => Some(s"Serial: $msg"))
+    val actor = Actor.serial[Int, String, Int](0, (msg, _) => Some(s"Serial: $msg"))
     
     val response = actor ? 42
     assertEquals(resultCF(response), "Serial: 42")
@@ -332,12 +336,13 @@ class ActorSpec extends FunSuite {
     import actor.SystemMsg
     
     val behavior: Actor.PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
-    actor.addBehavior("testId", behavior)
+    val cf = (actor ? actor.SystemMsg.AddBehavior("behavior", behavior))
+    awaitCF(cf)
     
     assertEquals(resultCF(actor ? 42), "Special: 42")
     
-    actor ! SystemMsg.RemoveBehavior("testId")
-    Thread.sleep(200) // Wait for system message processing
+    val cfr = actor ? SystemMsg.RemoveBehavior("behavior")
+    awaitCF(cfr)
     
     assertEquals(resultCF(actor ? 42), "Default: 42")
     close(actor)
@@ -363,7 +368,7 @@ class ActorSpec extends FunSuite {
   // ==================== System Message with Response ====================
 
   test("Pause system message with response via ?") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Received: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Received: $msg"))
     import actor.SystemMsg
     
     val pauseFuture = actor ? SystemMsg.Pause
@@ -373,7 +378,7 @@ class ActorSpec extends FunSuite {
   }
 
   test("Unpause system message with response via ?") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Received: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Received: $msg"))
     import actor.SystemMsg
     
     actor ! SystemMsg.Pause
@@ -386,7 +391,7 @@ class ActorSpec extends FunSuite {
   }
 
   test("Close system message with response via ?") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Received: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Received: $msg"))
     import actor.SystemMsg
     
     val closeFuture = actor ? SystemMsg.Close
@@ -395,12 +400,12 @@ class ActorSpec extends FunSuite {
   }
 
   test("AddBehavior system message with response via ?") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Default: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Default: $msg"))
     import actor.SystemMsg
     
     val behavior: Actor.PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
-    val addFuture = actor ? SystemMsg.AddBehavior("testId", behavior)
-    resultCF(addFuture)
+    val cf = actor ? SystemMsg.AddBehavior("testId", behavior)
+    resultCF(cf)
     
     Thread.sleep(100)
     assertEquals(resultCF(actor ? 42), "Special: 42")
@@ -408,11 +413,13 @@ class ActorSpec extends FunSuite {
   }
 
   test("RemoveBehavior system message with response via ?") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Default: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Default: $msg"))
     import actor.SystemMsg
     
     val behavior: Actor.PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
-    actor.addBehavior("testId", behavior)
+    val cf = actor ? SystemMsg.AddBehavior("testId", behavior)
+    resultCF(cf)
+
     assertEquals(resultCF(actor ? 42), "Special: 42")
     
     val removeFuture = actor ? SystemMsg.RemoveBehavior("testId")
@@ -424,12 +431,11 @@ class ActorSpec extends FunSuite {
   }
 
   test("System messages via ? return Unit response") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Default: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Default: $msg"))
     import actor.SystemMsg
     
     val pauseFuture: CloseableFuture[Unit] = actor ? SystemMsg.Pause
-    val result: Unit = resultCF(pauseFuture)
-    assertEquals(result, ())
+    awaitCF(pauseFuture)
     
     waitFor(actor.isPausedSignal, true)
     close(actor)
@@ -438,14 +444,14 @@ class ActorSpec extends FunSuite {
   // ==================== Close Response Guarantees ====================
 
   test("Close via ? completes only after actor is closed") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Received: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Received: $msg"))
     import actor.SystemMsg
     import scala.util.Try
-    
+
     val closeFuture = actor ? SystemMsg.Close
     
     // The future should NOT be completed yet
-    val poll1 = Try(resultCF(closeFuture)(using 100.millis))
+    val poll1 = Try(resultCF(closeFuture)(using 10.millis))
     assert(poll1.isFailure) // Should timeout because actor is not closed yet
     
     // Wait for the close to actually complete
@@ -456,18 +462,17 @@ class ActorSpec extends FunSuite {
   }
 
   test("Close via ? response is Unit") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Received: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Received: $msg"))
     import actor.SystemMsg
     
     val closeFuture: CloseableFuture[Unit] = actor ? SystemMsg.Close
-    val result: Unit = resultCF(closeFuture)(using 2.seconds)
-    
-    assertEquals(result, ())
+    awaitCF(closeFuture)(using 2.seconds)
+
     waitFor(actor.isClosedSignal, true)
   }
 
   test("Close via ? with pending messages waits for processing") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => {
+    val actor = Actor[Int, String, Int](0, (msg, _) => {
       Thread.sleep(50) // Simulate slow processing
       Some(s"Processed: $msg")
     })
@@ -482,13 +487,13 @@ class ActorSpec extends FunSuite {
     val closeFuture = actor ? SystemMsg.Close
     
     // The future should complete only after messages are processed and actor is closed
-    resultCF(closeFuture)(using 2.seconds)
+    awaitCF(closeFuture)(using 2.seconds)
     
     waitFor(actor.isClosedSignal, true)
   }
 
   test("Close via ! does not wait for response") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Received: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Received: $msg"))
     import actor.SystemMsg
     
     // Close via fire-and-forget
@@ -496,12 +501,10 @@ class ActorSpec extends FunSuite {
     
     // Wait for the actor to be closed
     waitFor(actor.isClosedSignal, true)
-    
-    // No future to await - this is the expected behavior
   }
 
   test("Multiple Close via ? all complete") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Received: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Received: $msg"))
     import actor.SystemMsg
     
     val closeFuture1 = actor ? SystemMsg.Close
@@ -516,7 +519,7 @@ class ActorSpec extends FunSuite {
 
   test("Close via ? when actor has pending messages") {
     val received = Signal(false)
-    val actor = Actor[Int, Unit, Boolean](false, (msg, actor) => {
+    val actor = Actor[Int, Unit, Boolean](false, (_, _) => {
       received ! true
       None
     })
@@ -528,7 +531,7 @@ class ActorSpec extends FunSuite {
     // Close the actor - should wait for message to be processed
     val closeFuture = actor ? SystemMsg.Close
     
-    resultCF(closeFuture)(using 2.seconds)
+    awaitCF(closeFuture)(using 2.seconds)
     waitFor(actor.isClosedSignal, true)
     
     // The message should have been processed before close completed

@@ -38,6 +38,7 @@ package object testutils {
   inline def resultCF[A](future: CloseableFuture[A])(using d: FiniteDuration = DefaultTimeout): A = result(future.future)
 
   inline def await[A](future: Future[A])(using d: FiniteDuration = DefaultTimeout): Unit = tryResult(future)
+  inline def awaitCF[A](future: CloseableFuture[A])(using d: FiniteDuration = DefaultTimeout): Unit = tryResult(future.future)
 
   def tryResult[A](future: Future[A])(using d: FiniteDuration = DefaultTimeout): Try[A] =
     try
