@@ -2,7 +2,7 @@ package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy
 import io.github.makingthematrix.signals3.testutils.*
-import io.github.makingthematrix.signals3.{CloseableFuture, EventContext, Signal, Threading}
+import io.github.makingthematrix.signals3.{CloseableFuture, EventContext, Signal, SourceStream, Stream, Threading}
 import munit.FunSuite
 
 import scala.concurrent.duration.*
@@ -536,5 +536,105 @@ class ActorSpec extends FunSuite {
     
     // The message should have been processed before close completed
     waitFor(received, true)
+  }
+
+  // ==================== in/out Stream Tests =====================
+
+  test("in stream receives messages sent to actor") {
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Processed: $msg"))
+    val received = Signal(Seq.empty[Int])
+    
+    // Subscribe to in stream
+    actor.in.foreach { msg =>
+      received.mutate(_ :+ msg)
+    }
+    
+    // Send messages via in stream
+    actor.in ! 1
+    actor.in ! 2
+    actor.in ! 3
+    
+    // Wait for messages
+    waitForResult(received, Seq(1, 2, 3))
+    
+    close(actor)
+  }
+
+  test("out stream receives responses when behavior sends to it") {
+    val actor = Actor[Int, String, Int](0, (msg, mut) => {
+      // Behavior explicitly sends response to out stream
+      mut.out ! s"Response: $msg"
+      None
+    })
+    val responses = Signal(Seq.empty[String])
+    
+    // Subscribe to the out stream to receive responses
+    actor.out.foreach { rsp =>
+      responses.mutate(_ :+ rsp)
+    }
+    
+    // Send messages via in stream
+    actor.in ! 1
+    actor.in ! 2
+    
+    // Wait for responses via out stream
+    waitForResult(responses, Seq("Response: 1", "Response: 2"))
+    
+    close(actor)
+  }
+
+  test("in and out streams work together for bidirectional communication") {
+    // This test demonstrates using in/out streams as an alternative to ! and ? operators
+    val actor = Actor[Int, String, Int](0, (msg, mut) => {
+      // The behavior processes the message and sends response to out stream
+      mut.out ! s"Processed: $msg"
+      None
+    })
+    
+    val receivedResponses = Signal(Seq.empty[String])
+    
+    // Subscribe to out stream to receive responses
+    actor.out.foreach { rsp =>
+      receivedResponses.mutate(_ :+ rsp)
+    }
+    
+    // Send messages via in stream
+    actor.in ! 10
+    actor.in ! 20
+    actor.in ! 30
+    
+    // Wait for all responses to be received via out stream
+    waitForResult(receivedResponses, Seq("Processed: 10", "Processed: 20", "Processed: 30"))
+    
+    close(actor)
+  }
+
+  test("piping messages from external stream to actor in stream") {
+    // This test demonstrates a real-world scenario where external events are piped to the actor
+    val externalStream: SourceStream[Int] = Stream()
+    val actor = Actor[Int, String, Int](0, (msg, mut) => {
+      // Behavior sends responses to out stream
+      mut.out ! s"Handled: $msg"
+      None
+    })
+    val received = Signal(Seq.empty[String])
+    
+    // Subscribe to actor's responses via out stream
+    actor.out.foreach { rsp =>
+      received.mutate(_ :+ rsp)
+    }
+    
+    // Pipe external stream to actor's in stream
+    externalStream.pipeTo(actor.in)
+    
+    // Send messages to external stream, which will be forwarded to actor
+    externalStream ! 1
+    externalStream ! 2
+    externalStream ! 3
+    
+    // Wait for responses via out stream
+    waitForResult(received, Seq("Handled: 1", "Handled: 2", "Handled: 3"))
+    
+    close(actor)
   }
 }

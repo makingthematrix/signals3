@@ -31,7 +31,6 @@ import scala.util.chaining.*
 	* @tparam Rsp The type of the response
 	* @tparam State The type of the internal state
 	*/
-
 trait Actor[Msg, Rsp, State] extends Closeable with Pausable {
 	/**
 		* Represents system-level messages that can be used to control or affect the behavior
@@ -59,6 +58,14 @@ trait Actor[Msg, Rsp, State] extends Closeable with Pausable {
 		* @see [[Stream.pipeTo]]
 		*/
 	def in: SourceStream[Msg]
+
+	/** The **optional** output stream that may be used by the behaviors to push out a new response.
+		*
+		* "Optional" is a keyword here. It's totally up to a behavior if it decides to send a response to `out`.
+		* You may build your actor in such a way that it operates solely on the `in` and `out` streams, you can forget
+		* about them, or you can do anything in-between.
+		*/
+	def out: Stream[Rsp]
 
 	/**
 		* Retrieves a behavior from the actor's list of behaviors based on its unique identifier.
@@ -142,7 +149,7 @@ trait Actor[Msg, Rsp, State] extends Closeable with Pausable {
 	* allows dynamic modification of its internal state and behavior at runtime. It introduces methods
 	* to update the actor's default behavior, heartbeat strategy, and state, as well as to add or remove
 	* behaviors dynamically.
-	* 
+	*
 	* Mainly used by the `Behavior` functions.
 	*
 	* @tparam Msg The type of the incoming message
@@ -242,6 +249,16 @@ trait MutableActor[Msg, Rsp, State] extends Actor[Msg, Rsp, State] {
 		* @param id The unique identifier of the behavior to be removed.
 		*/
 	@targetName("minus") def -(id: String): Unit = removeBehavior(id)
+
+	/** The **optional** output stream that may be used by the behaviors to push out a new response.
+		*
+		* "Optional" is a keyword here. It's totally up to a behavior if it decides to send a response to `out`.
+		* You may build your actor in such a way that it operates solely on the `in` and `out` streams, you can forget
+		* about them, or you can do anything in-between.
+		*
+		* In `MutableActor` the type of `out` changes to `SourceStream[Rsp]` so that the behavior may send a response to it.
+		*/
+	override def out: SourceStream[Rsp]
 }
 
 /**
@@ -257,11 +274,11 @@ trait MutableActor[Msg, Rsp, State] extends Actor[Msg, Rsp, State] {
 	*               - A list of behavior functions to handle messages.
 	*               - A heartbeat strategy to schedule message processing.
 	*
-	*               The actor can be configured with custom behaviors and handles messages using 
+	*               The actor can be configured with custom behaviors and handles messages using
 	*               a prioritized strategy based on the order of the behaviors.
 	*/
 final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State,
-                                                       private var _defBehavior: F[Msg, Rsp, State] = Actor.ignoreMsg, 
+                                                       private var _defBehavior: F[Msg, Rsp, State] = Actor.ignoreMsg,
                                                        private var _heartbeat: HeartBeatStrategy = HeartBeatStrategy.Linear(100L))
                                                       (using ExecutionContext)
 	extends MutableActor[Msg, Rsp, State] {
@@ -299,6 +316,8 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 
 	override val in: SourceStream[Msg] = Stream[Msg]()
 	in.map(msg => (msg, None)).pipeTo(msgStream)
+
+	override val out: SourceStream[Rsp] = Stream[Rsp]()
 
 	msgStream.foreach { msg =>
 		msgs.enqueue(msg)
@@ -474,14 +493,13 @@ object Actor {
 	// todo: unit tests v
 	// todo: managing behaviors through messages v
 	// todo: divide the Actor class into an immutable trait used outside and a mutable class that extends it - the behaviors use the latter v
+	// todo: add the out stream that can be used by behaviors to send messages to v
 	// todo: hange the behaviors list to a map - all behaviors that fit for a given message are executed, not only the oldest one
-	// todo: add the out stream that can be used by behaviors to send messages to
 	// todo: change the name of defBehavior to endBehavior (the ladt behavior); the current one is confusing
 	// todo: afterInit function that the actor can use, for example, to send out messages that it's alive
 	// todo: similarly, there should be an `onClose` function (but that's already implemented)
 	// todo: spawning sub-actors that are closed with the parent
 	// todo: ActorBuilder
-	// todo: confirmation system messages
 	// todo: HealthCheck system message, sent from the parent to the child; if the child doesn't respond in time, the message is repeated, and the the child is closed
 	// todo: consider to allow the children to use different types of messages
 
