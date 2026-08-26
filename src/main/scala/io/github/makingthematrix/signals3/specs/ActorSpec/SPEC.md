@@ -1,172 +1,170 @@
-# ActorSpec Class
+---
+id: signals3-actor-tests
+type: submodule-design
+status: active
+title: Actor Test Suite
+parent: signals3-actor
+---
 
-## Overview
+## Responsibility
 
-The ActorSpec class contains unit tests for the Actor class in the Signals3 project. These tests verify the basic functionality, behavior management, message handling, state management, and lifecycle management of the Actor class.
+The ActorSpec test suite is responsible for verifying the correct behavior of the Actor module, including:
+
+- Actor creation and initialization
+- Message handling (fire-and-forget and request-response)
+- Behavior management (add, remove, execution order)
+- System message processing
+- Lifecycle management (pause, unpause, close)
+- Heartbeat strategy behavior
+- Stream integration (`in`/`out` streams)
+- Concurrency and thread safety
+- Error handling
+
+## Test Framework
+
+- **MUnit**: Primary test framework
+- **Test utilities**: `io.github.makingthematrix.signals3.testutils.*`
+- **Default timeout**: 1 second (configurable per test)
 
 ## Test Categories
 
-The test suite covers several key aspects of actor behavior:
-
-1. **Basic Functionality**: Actor creation, default behavior, message sending, and response handling
-2. **Behavior Management**: Adding, removing, and executing behaviors
-3. **Message Handling**: Fire-and-forget and request-response message processing
-4. **State Management**: State initialization and mutation
-5. **Lifecycle Management**: Pausing, unpausing, and closing actors
-6. **Concurrency**: Thread safety and concurrent message processing
-7. **Error Handling**: Exception handling and response validation
-8. **Heartbeat Strategies**: Different heartbeat strategies and their effects
-9. **Edge Cases**: Testing edge cases and boundary conditions
-
-## Test Cases
-
 ### Basic Functionality
 
-1. **Actor Creation**:
-   - Test actor creation with initial state
-   - Verify initial state
-   - Verify default behavior
+| Test | Description |
+|------|-------------|
+| Actor creation with initial state | Verifies actor initialization |
+| Request-response message sending | Tests `?` operator returns correct response |
+| Fire-and-forget message sending | Tests `!` operator processes messages |
+| Response handling with NoResponse | Verifies `None` behavior returns failure |
+| Exception handling in behaviors | Confirms exceptions propagate correctly |
 
-2. **Message Sending**:
-   - Test fire-and-forget message sending
-   - Test request-response message sending
-   - Verify message processing
-   - Verify response handling
+### System Messages
 
-3. **Response Handling**:
-   - Test successful response handling
-   - Test no response handling
-   - Test exception handling
-
-4. **System Messages**:
-   - Test pause, unpause, and close system messages
-   - Verify actor state changes
+| Test | Description |
+|------|-------------|
+| System messages handling | Tests Pause/Unpause/Close via `!` |
+| Pause system message with response | Tests `? SystemMsg.Pause` returns Unit |
+| Unpause system message with response | Tests `? SystemMsg.Unpause` returns Unit |
+| Close system message with response | Tests `? SystemMsg.Close` completes after shutdown |
+| AddBehavior system message | Tests dynamic behavior addition |
+| RemoveBehavior system message | Tests dynamic behavior removal |
 
 ### Behavior Management
 
-1. **Adding Behaviors**:
-   - Test adding behaviors with IDs
-   - Test adding behaviors without IDs
-   - Verify behavior addition
-
-2. **Removing Behaviors**:
-   - Test removing behaviors by ID
-   - Test removing behaviors by reference
-   - Verify behavior removal
-
-3. **Executing Behaviors**:
-   - Test behavior execution order
-   - Test behavior matching
-   - Test default behavior execution
-
-### Message Handling
-
-1. **Fire-and-Forget Messages**:
-   - Test message sending without response
-   - Verify message processing
-
-2. **Request-Response Messages**:
-   - Test message sending with response
-   - Verify response handling
-   - Verify future completion
-
-3. **System Messages**:
-   - Test pause, unpause, and close system messages
-   - Verify actor state changes
-
-### State Management
-
-1. **State Initialization**:
-   - Test state initialization
-   - Verify initial state
-
-2. **State Mutation**:
-   - Test state mutation in behaviors
-   - Verify state changes
-
-### Lifecycle Management
-
-1. **Pausing and Unpausing**:
-   - Test pausing and unpausing actors
-   - Verify message processing during pause
-
-2. **Closing Actors**:
-   - Test closing actors
-   - Verify actor cleanup
-   - Verify message processing after closing
-
-### Concurrency
-
-1. **Concurrent Message Processing**:
-   - Test concurrent message sending
-   - Verify message ordering and delivery
-
-2. **Thread Safety**:
-   - Test thread-safe state access
-   - Verify concurrent modifications
-
-### Error Handling
-
-1. **Exception Handling**:
-   - Test exception handling in behaviors
-   - Verify exception propagation
-
-2. **No Response Handling**:
-   - Test no response handling
-   - Verify no response propagation
+| Test | Description |
+|------|-------------|
+| Behavior added and used | Verifies added behavior is invoked |
+| Concurrent behavior addition/removal | Tests multiple behaviors added/removed |
+| AddBehavior and RemoveBehavior via system messages | End-to-end behavior lifecycle |
 
 ### Heartbeat Strategies
 
-1. **Linear Heartbeat**:
-   - Test linear heartbeat strategy
-   - Verify message processing intervals
+| Test | Description |
+|------|-------------|
+| Heartbeat strategies | Tests Linear, Agitated, Reactive all process messages |
+| Agitated heartbeat interval grows when idle | Verifies dynamic interval growth |
+| Reactive heartbeat processes messages | Verifies immediate processing on threshold |
 
-2. **Agitated Heartbeat**:
-   - Test agitated heartbeat strategy
-   - Verify dynamic interval adjustment
+### Stream Integration
 
-3. **Reactive Heartbeat**:
-   - Test reactive heartbeat strategy
-   - Verify immediate message processing
+| Test | Description |
+|------|-------------|
+| SourceStream integration via in stream | Tests `actor.in` receives messages |
+| in stream receives messages sent to actor | Verifies `in ! msg` works |
+| out stream receives responses | Tests behaviors can send to `out` |
+| in and out streams work together | Bidirectional communication test |
+| piping messages from external stream | Tests `externalStream.pipeTo(actor.in)` |
 
-### Edge Cases
+### Lifecycle Management
 
-1. **Empty Message Lists**:
-   - Test empty message lists
-   - Verify no message processing
+| Test | Description |
+|------|-------------|
+| System messages with messages in queue | Pause blocks regular messages, unpause resumes |
+| Actor closed while messages in-flight | Graceful shutdown with pending messages |
+| Close via ? completes only after actor is closed | Shutdown confirmation guarantee |
+| Close via ? with pending messages waits for processing | Messages processed before close |
+| Close via ! does not wait for response | Fire-and-forget close |
+| Multiple Close via ? all complete | Idempotent close handling |
 
-2. **Multiple Behaviors**:
-   - Test multiple behaviors for the same message type
-   - Verify behavior execution order
+### Concurrency
 
-3. **No Matching Behaviors**:
-   - Test no matching behaviors
-   - Verify default behavior execution
+| Test | Description |
+|------|-------------|
+| Concurrent message processing | 10 concurrent messages processed correctly |
+| Actor continues processing after behavior exception | Error isolation |
 
-4. **Concurrent Modifications**:
-   - Test concurrent modifications to behaviors
-   - Verify behavior consistency
+### Error Handling
 
-5. **Large Numbers of Messages**:
-   - Test large numbers of messages
-   - Verify performance and scalability
+| Test | Description |
+|------|-------------|
+| Actor with no behaviors uses ignoreMsg | Default `None` behavior |
+| Behavior returns None vs Some(None) | Distinguishes NoResponse from valid None |
+
+### Special Cases
+
+| Test | Description |
+|------|-------------|
+| Empty message lists | No-op processing |
+| Actor with Unit state | Stateless actor support |
+| Serial dispatch queue actor | Tests `Actor.serial` factory |
+| Serial dispatch queue with multiple behaviors | Multi-behavior serial actor |
 
 ## Test Setup
 
-The test suite uses MUnit for testing and includes setup and teardown methods to ensure a clean state for each test:
+```scala
+class ActorSpec extends FunSuite {
+  private val eventContext = EventContext()
+  import Threading.defaultContext
+  given Timeout: FiniteDuration = 1.seconds
 
-- `beforeEach`: Sets up the test environment
-- `afterEach`: Cleans up the test environment
+  override def beforeEach(context: BeforeEach): Unit =
+    eventContext.start()
+
+  override def afterEach(context: AfterEach): Unit =
+    eventContext.stop()
+
+  private def close(actor: Actor[?, ?, ?]): Unit = {
+    actor.close()
+    waitFor(actor.isClosedSignal, true)
+  }
+}
+```
 
 ## Test Utilities
 
-The test suite includes utility methods for:
+| Utility | Description |
+|---------|-------------|
+| `waitFor(signal, value)` | Block until signal reaches expected value |
+| `waitForResult(signal, value)` | Wait for signal to contain result |
+| `resultCF(future)` | Extract result from CloseableFuture |
+| `awaitCF(future)` | Await CloseableFuture completion |
+| `tryResult(future)` | Attempt to get result with timeout |
 
-- Creating test actors
-- Sending test messages
-- Verifying responses
-- Managing test execution contexts
+## Coverage Areas
 
-## Test Execution
+- ✅ Actor creation (all factory methods)
+- ✅ Message sending (`!` and `?`)
+- ✅ System messages (all variants)
+- ✅ Behavior management (add/remove/execute)
+- ✅ Heartbeat strategies (Linear, Agitated, Reactive)
+- ✅ Stream integration (`in`/`out`)
+- ✅ Lifecycle (pause/unpause/close)
+- ✅ Error handling (exceptions, NoResponse)
+- ✅ Concurrency (concurrent messages, atomic processing)
+- ✅ Serial dispatch queue variants
 
-Tests are executed using the `sbt test` command, which runs all tests in the project. Individual tests can be executed using the `sbt testOnly` command followed by the test class name.
+## Running Tests
+
+```bash
+# Run all tests
+sbt test
+
+# Run only ActorSpec
+sbt "testOnly io.github.makingthematrix.signals3.actors.ActorSpec"
+```
+
+## Notes
+
+- Some concurrency tests may be flaky due to timing; rerun once if unrelated tests fail
+- Close tests verify shutdown guarantees (pending message processing)
+- System message response tests confirm `CloseableFuture[Unit]` completion
