@@ -132,10 +132,10 @@ trait Actor[Msg, Rsp, State] extends Closeable with Pausable {
 	def state: State
 
 	/**
-		* Retrieves the current default behavior of the actor
-		* @return the current default behavior
+		* Retrieves the current final behavior of the actor
+		* @return the current final behavior
 		*/
-	def defBehavior: F[Msg, Rsp, State]
+	def finalBehavior: F[Msg, Rsp, State]
 
 	/**
 		* Retrieves the current heartbeat strategy of the actor
@@ -147,7 +147,7 @@ trait Actor[Msg, Rsp, State] extends Closeable with Pausable {
 /**
 	* A trait representing a mutable actor, which is an extension of the `Actor` trait. This actor
 	* allows dynamic modification of its internal state and behavior at runtime. It introduces methods
-	* to update the actor's default behavior, heartbeat strategy, and state, as well as to add or remove
+	* to update the actor's final behavior, heartbeat strategy, and state, as well as to add or remove
 	* behaviors dynamically.
 	*
 	* Mainly used by the `Behavior` functions.
@@ -164,10 +164,10 @@ trait MutableActor[Msg, Rsp, State] extends Actor[Msg, Rsp, State] {
 	def state_=(newState: State): Unit
 
 	/**
-		* Enables the behavior method to alter the default behavior
-		* @param newDefBehavior the new default behavior
+		* Enables the behavior method to alter the final behavior
+		* @param newFinalBehavior the new default behavior
 		*/
-	def defBehavior_=(newDefBehavior: F[Msg, Rsp, State]): Unit
+	def finalBehavior_=(newFinalBehavior: F[Msg, Rsp, State]): Unit
 
 	/**
 		* Enables the behavior method to alter the heartbeat strategy
@@ -267,19 +267,10 @@ trait MutableActor[Msg, Rsp, State] extends Actor[Msg, Rsp, State] {
 	* @tparam Msg   The type of messages processed by this actor.
 	* @tparam Rsp   The type of responses returned by this actor.
 	* @tparam State The type representing the internal state of the actor.
-	*
-	*               This class is designed to manage asynchronous message processing. It maintains:
-	*               - A mutable state of the actor.
-	*               - A queue for incoming messages and system messages.
-	*               - A list of behavior functions to handle messages.
-	*               - A heartbeat strategy to schedule message processing.
-	*
-	*               The actor can be configured with custom behaviors and handles messages using
-	*               a prioritized strategy based on the order of the behaviors.
 	*/
 final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State,
-                                                       private var _defBehavior: F[Msg, Rsp, State] = Actor.ignoreMsg,
-                                                       private var _heartbeat: HeartBeatStrategy = HeartBeatStrategy.Linear(100L))
+                                                       private var _finalBehavior: F[Msg, Rsp, State] = Actor.ignoreMsg,
+                                                       private var _heartbeat: HeartBeatStrategy = Actor.defBeat)
                                                       (using ExecutionContext)
 	extends MutableActor[Msg, Rsp, State] {
 	import HeartBeatStrategy.*
@@ -293,7 +284,7 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	// a stream that serves as a single entry for the systemMsgs list to prevent concurrent modification; see the "! operator.
 	private val systemStream = Stream[(SystemMsg, Option[Promise[Unit]])]()
 	// a variable list of behaviors; a behavior is a partial function that tries to process an incoming message; see the processMessages method.
-	private var behaviors    = List.empty[(id: String, pf: PF[Msg, Rsp, State])]
+	private var behaviors    = Map.empty[String, PF[Msg, Rsp, State]]
 	// the "beating heart" of the actor; depending on the strategy, accumulated messages are processed at each beat or when the message appears (reactive).
 	private lazy val beat    = GeneratorStream.heartbeat(() => interval())
 
@@ -344,7 +335,7 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 		*           and an actor, and optionally returns a response.
 		*/
 	def addBehavior(id: String, pf: PF[Msg, Rsp, State]): Unit = {
-		behaviors = behaviors.appended(id -> pf)
+		behaviors += (id -> pf)
 	}
 
 	/**
@@ -355,7 +346,7 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 		*                 and a partial function that defines the behavior logic.
 		*/
 	def addBehavior(behavior: (id: String, pf: PF[Msg, Rsp, State])): Unit = {
-		behaviors = behaviors.appended(behavior)
+		behaviors += behavior
 	}
 
 	/**
@@ -365,7 +356,7 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 		* @param id The unique identifier of the behavior to be removed.
 		*/
 	def removeBehavior(id: String): Unit = {
-		behaviors = behaviors.filterNot(_.id == id)
+		behaviors -= id
 	}
 
 	/**
@@ -375,11 +366,11 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 		* @param pf A reference to a partial function defining the behavior to be removed
 		*/
 	def removeBehavior(pf: PF[Msg, Rsp, State]): Unit = {
-		behaviors = behaviors.filterNot(_.pf == pf)
+		behaviors = behaviors.filterNot(_._2 == pf)
 	}
 
 	override def getBehavior(id: String): Option[PF[Msg, Rsp, State]] =
-		behaviors.collectFirst { case (name, pf) if name == id => pf }
+		behaviors.get(id)
 
 	@targetName("ask") override def ?(msg: SystemMsg): CloseableFuture[Unit] = {
 		val p = Promise[Unit]()
@@ -421,24 +412,32 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	}
 
 	// Processes regular messages; should NOT be called directly - always from `processMessages`
+	// Note: A message may result in altering the list of behaviors, but the new list will be used only in the next processing
+	// This is actually consistent with sending a system message for altering the list of behaviors, as system messages are
+	// processed before regular ones, so at the beginning of the next processing the lsit will be changed and that new list
+	// will be used for that processing of regular messages.
 	private def processRegularMessages(): Unit =
-		while (!isPaused && !isClosed && msgs.nonEmpty) msgs.dequeue() match {
-			case (msg: Msg, Some(p)) =>
-				process(msg) match {
-					case Success(Some(rsp)) => p.complete(Try(rsp))
-					case Success(None)      => p.complete(NoResponse[Rsp])
-					case Failure(t)         => p.complete(Failure(t))
-				}
-			case (msg: Msg, _) => process(msg)
+		while (!isPaused && !isClosed && msgs.nonEmpty) {
+			val behaviors = this.behaviors.valuesIterator
+			msgs.dequeue() match {
+				case (msg: Msg, Some(p)) =>
+					process(msg, behaviors) match {
+						case Success(Some(rsp)) => p.complete(Try(rsp))
+						case Success(None)      => p.complete(NoResponse[Rsp])
+						case Failure(t)         => p.complete(Failure(t))
+					}
+				case (msg: Msg, _) => process(msg, behaviors)
+			}
 		}
 
 	// Processes a single regular message; should NOT be called directly - always from `processMessages`
-	private def process(msg: Msg): Try[Option[Rsp]] =
-		behaviors.map(_.pf).find(_.isDefinedAt(msg, this)) match {
-			case Some(f: PF[Msg, Rsp, State])        => Try(f(msg, this))
-			case _ if _defBehavior == Actor.ignoreMsg => Success[Option[Rsp]](None)
-			case _                                   => Try(_defBehavior(msg, this))
+	private def process(msg: Msg, behaviors: Iterator[PF[Msg, Rsp, State]]): Try[Option[Rsp]] = {
+		behaviors.foreach {
+			case pf: PF[Msg, Rsp, State] if pf.isDefinedAt(msg, this) => Try(pf(msg, this))
+			case _ =>
 		}
+		if (_finalBehavior != Actor.ignoreMsg) Try(_finalBehavior(msg, this)) else Success[Option[Rsp]](None)
+	}
 
 	// Initializes the heartbeat of the actor.
 	private[actors] def initialize(): Unit = beat.foreach(_ => processMessages())
@@ -474,9 +473,9 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 
 	override def state_=(newState: State): Unit = { _state = newState }
 
-	override def defBehavior: F[Msg, Rsp, State] = _defBehavior
+	override def finalBehavior: F[Msg, Rsp, State] = _finalBehavior
 
-	override def defBehavior_=(newDefBehavior: F[Msg, Rsp, State]): Unit = { _defBehavior = newDefBehavior }
+	override def finalBehavior_=(newFinalBehavior: F[Msg, Rsp, State]): Unit = { _finalBehavior = newFinalBehavior }
 
 	override def heartbeat: HeartBeatStrategy = _heartbeat
 
@@ -494,8 +493,8 @@ object Actor {
 	// todo: managing behaviors through messages v
 	// todo: divide the Actor class into an immutable trait used outside and a mutable class that extends it - the behaviors use the latter v
 	// todo: add the out stream that can be used by behaviors to send messages to v
-	// todo: hange the behaviors list to a map - all behaviors that fit for a given message are executed, not only the oldest one
-	// todo: change the name of defBehavior to endBehavior (the ladt behavior); the current one is confusing
+	// todo: hange the behaviors list to a map - all behaviors that fit for a given message are executed, not only the oldest one v
+	// todo: change the name of finalBehavior to finalBehavior (the last behavior); the current one is confusing v
 	// todo: afterInit function that the actor can use, for example, to send out messages that it's alive
 	// todo: similarly, there should be an `onClose` function (but that's already implemented)
 	// todo: spawning sub-actors that are closed with the parent
@@ -548,25 +547,25 @@ object Actor {
 		* as an implicit parameter.
 		*
 		* @param state       The initial state of the actor.
-		* @param defBehavior The default behavior of the actor, responsible for handling incoming messages.
+		* @param finalBehavior The default behavior of the actor, responsible for handling incoming messages.
 		* @param beat        The heartbeat strategy used to configure the actor's responsiveness.
 		* @return An initialized actor instance.
 		*/
-	inline def apply[Msg, Rsp, State](state: State, defBehavior: F[Msg, Rsp, State], beat: HeartBeatStrategy)
+	inline def apply[Msg, Rsp, State](state: State, finalBehavior: F[Msg, Rsp, State], beat: HeartBeatStrategy)
 	                                 (using ExecutionContext): Actor[Msg, Rsp, State] =
-		new ActorImpl(state, defBehavior, beat).tap(_.initialize())
+		new ActorImpl(state, finalBehavior, beat).tap(_.initialize())
 
 	/**
 		* Creates a new actor instance with the specified initial state, default behavior, and heartbeat strategy.
 		* The actor operates using a new serial dispatch queue to handle incoming messages.
 		*
 		* @param state       The initial state of the actor.
-		* @param defBehavior The default behavior of the actor, responsible for handling incoming messages.
+		* @param finalBehavior The default behavior of the actor, responsible for handling incoming messages.
 		* @param beat        The heartbeat strategy used to configure the actor's responsiveness.
 		* @return An initialized actor instance.
 		*/
-	inline def serial[Msg, Rsp, State](state: State, defBehavior: F[Msg, Rsp, State], beat: HeartBeatStrategy): Actor[Msg, Rsp, State] =
-		apply(state, defBehavior, beat)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
+	inline def serial[Msg, Rsp, State](state: State, finalBehavior: F[Msg, Rsp, State], beat: HeartBeatStrategy): Actor[Msg, Rsp, State] =
+		apply(state, finalBehavior, beat)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
 
 	/**
 		* Creates a new actor instance with the given initial state and a default behavior, while the heartbeat strategy
@@ -575,11 +574,11 @@ object Actor {
 		* as an implicit parameter.
 		*
 		* @param state       The initial state of the actor.
-		* @param defBehavior The default behavior of the actor, responsible for handling incoming messages.
+		* @param finalBehavior The default behavior of the actor, responsible for handling incoming messages.
 		* @return An initialized actor instance.
 		*/
-	inline def apply[Msg, Rsp, State](state: State, defBehavior: F[Msg, Rsp, State])(using ExecutionContext): Actor[Msg, Rsp, State] =
-		apply(state, defBehavior, defBeat)
+	inline def apply[Msg, Rsp, State](state: State, finalBehavior: F[Msg, Rsp, State])(using ExecutionContext): Actor[Msg, Rsp, State] =
+		apply(state, finalBehavior, defBeat)
 
 	/**
 		* Creates a new actor instance with the specified initial state, and a default behavior, while the heartbeat strategy
@@ -587,11 +586,11 @@ object Actor {
 		* The actor operates using a new serial dispatch queue to handle incoming messages.
 		*
 		* @param state       The initial state of the actor.
-		* @param defBehavior The default behavior of the actor, responsible for handling incoming messages.
+		* @param finalBehavior The default behavior of the actor, responsible for handling incoming messages.
 		* @return An initialized actor instance.
 		*/
-	inline def serial[Msg, Rsp, State](state: State, defBehavior: F[Msg, Rsp, State]): Actor[Msg, Rsp, State] =
-		serial(state, defBehavior, defBeat)
+	inline def serial[Msg, Rsp, State](state: State, finalBehavior: F[Msg, Rsp, State]): Actor[Msg, Rsp, State] =
+		serial(state, finalBehavior, defBeat)
 
 	/**
 		* Creates a new actor instance with the provided initial state, a list of partial functions
