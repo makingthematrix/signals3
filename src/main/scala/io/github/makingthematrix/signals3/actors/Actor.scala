@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, DispatchQueue, Pausable, SourceStream, Stream}
-import io.github.makingthematrix.signals3.actors.Actor.{Beh, F, HeartBeatStrategy, NoResponse, PF}
+import io.github.makingthematrix.signals3.actors.Actor.{Beh, F, HeartBeatStrategy, Ignored, NoResponse, PF}
 import io.github.makingthematrix.signals3.generators.GeneratorStream
 
 import java.util.UUID
@@ -417,7 +417,14 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	// This is actually consistent with sending a system message for altering the list of behaviors, as system messages are
 	// processed before regular ones, so at the beginning of the next processing the lsit will be changed and that new list
 	// will be used for that processing of regular messages.
-	private def processRegularMessages(): Unit =
+	private def processRegularMessages(): Unit = {
+		def process(msg: Msg, pfs: List[PF[Msg, Rsp, State]]): Try[Option[Rsp]] =
+			pfs.find(_.isDefinedAt(msg, this)) match {
+				case Some(f: PF[Msg, Rsp, State]) => Try(f(msg, this))
+				case _ if _finalBehavior == Actor.ignoreMsg => Ignored[Rsp]
+				case _ => Try(_finalBehavior(msg, this))
+			}
+
 		while (!isPaused && !isClosed && msgs.nonEmpty) {
 			val pfs = behaviors.map(_.pf)
 			msgs.dequeue() match {
@@ -427,17 +434,10 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 						case Success(None)      => p.complete(NoResponse[Rsp])
 						case Failure(t)         => p.complete(Failure(t))
 					}
-				case (msg: Msg, _) => process(msg,pfs)
+				case (msg: Msg, _) => process(msg, pfs)
 			}
 		}
-
-	// Processes a single regular message; should NOT be called directly - always from `processMessages`
-	private def process(msg: Msg, pfs: List[PF[Msg, Rsp, State]]): Try[Option[Rsp]] =
-		pfs.find(_.isDefinedAt(msg, this)) match {
-			case Some(f: PF[Msg, Rsp, State]) => Try(f(msg, this))
-			case _ if _finalBehavior == Actor.ignoreMsg => Success[Option[Rsp]](None)
-			case _ => Try(_finalBehavior(msg, this))
-		}
+	}
 
 	// Initializes the heartbeat of the actor.
 	private[actors] def initialize(): Unit = beat.foreach(_ => processMessages())
@@ -495,7 +495,7 @@ object Actor {
 	// todo: add the out stream that can be used by behaviors to send messages to v
 	// todo: change the behaviors list to a map - all behaviors that fit for a given message are executed, not only the oldest one v
 	// todo: change the name of finalBehavior to finalBehavior (the last behavior); the current one is confusing v
-	// todo: change the behaviors back to a list xD
+	// todo: change the behaviors back to a list xD v
 
 	// todo: afterInit function that the actor can use, for example, to send out messages that it's alive
 	// todo: similarly, there should be an `onClose` function (but that's already implemented)
@@ -503,8 +503,11 @@ object Actor {
 	// todo: ActorBuilder
 	// todo: HealthCheck system message, sent from the parent to the child; if the child doesn't respond in time, the message is repeated, and the the child is closed
 	// todo: consider to allow the children to use different types of messages
+	// todo: a way to request that a given message is handled by a behavior with the given id
+	// and then: clusters? persistance?
 
 	@static private val noResponse: Failure[Nothing] = Failure[Nothing](new IllegalStateException("No response"))
+	@static private val ignored: Success[Option[Nothing]] = Success[Option[Nothing]](None)
 
 	/**
 		* A special type of a failure indicating that although the message was received via the "?" (ask) operator and it was
@@ -513,6 +516,12 @@ object Actor {
 		* @return A `Failure` instance wrapping an `IllegalStateException`: "no response".
 		*/
 	inline def NoResponse[Rsp]: Failure[Rsp] = noResponse.asInstanceOf[Failure[Rsp]]
+
+	/**
+		* A special type of response, indicating the incoming message was ignored. It's not necessarily an error.
+		* @return A `Success` instance wrapping `None`
+		*/
+	inline def Ignored[Rsp]: Success[Option[Rsp]] = ignored.asInstanceOf[Success[Option[Rsp]]]
 
 	// the default behavior of any actor is to simply ignore the message
 	def ignoreMsg[Msg, Rsp, State](msg: Msg, actor: MutableActor[Msg, Rsp, State]): Option[Rsp] = None
