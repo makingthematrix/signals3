@@ -190,8 +190,9 @@ class ActorSpec extends FunSuite {
     val futures = (1 to 5).map(actor ? _)
     actor ! SystemMsg.Close
     waitFor(actor.isClosedSignal, true)
-    
-    futures.foreach(f => tryResult(f.future)(using 2.seconds))
+
+    val res = CloseableFuture.sequence(futures)
+    tryResult(res.future)(using 2.seconds)
   }
 
   test("System messages with messages in queue") {
