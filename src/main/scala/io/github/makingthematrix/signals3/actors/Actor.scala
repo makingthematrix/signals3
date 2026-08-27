@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, DispatchQueue, Pausable, SourceStream, Stream}
-import io.github.makingthematrix.signals3.actors.Actor.{Beh, F, HeartBeatStrategy, Ignored, NoResponse, PF}
+import io.github.makingthematrix.signals3.actors.Actor.{Beh, F, HeartBeatStrategy, Ignored, NoResponse, PF, ignoreMsg}
 import io.github.makingthematrix.signals3.generators.GeneratorStream
 
 import java.util.UUID
@@ -269,7 +269,7 @@ trait MutableActor[Msg, Rsp, State] extends Actor[Msg, Rsp, State] {
 	* @tparam State The type representing the internal state of the actor.
 	*/
 final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State,
-                                                       private var _finalBehavior: F[Msg, Rsp, State] = Actor.ignoreMsg,
+                                                       private var _finalBehavior: F[Msg, Rsp, State] = ignoreMsg,
                                                        private var _heartbeat: HeartBeatStrategy = Actor.defBeat)
                                                       (using ExecutionContext)
 	extends MutableActor[Msg, Rsp, State] {
@@ -420,9 +420,9 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	private def processRegularMessages(): Unit = {
 		def process(msg: Msg, pfs: List[PF[Msg, Rsp, State]]): Try[Option[Rsp]] =
 			pfs.find(_.isDefinedAt(msg, this)) match {
-				case Some(f: PF[Msg, Rsp, State]) => Try(f(msg, this))
-				case _ if _finalBehavior == Actor.ignoreMsg => Ignored[Rsp]
-				case _ => Try(_finalBehavior(msg, this))
+				case Some(pf)                         => Try(pf(msg, this)) // todo: what if the pf is defined but fails? shouldn't we try another?
+				case _ if _finalBehavior == ignoreMsg => Ignored[Rsp]
+				case _                                => Try(_finalBehavior(msg, this))
 			}
 
 		while (!isPaused && !isClosed && msgs.nonEmpty) {
