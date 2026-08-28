@@ -432,28 +432,22 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	// This is actually consistent with sending a system message for altering the list of behaviors, as system messages are
 	// processed before regular ones, so at the beginning of the next processing the lsit will be changed and that new list
 	// will be used for that processing of regular messages.
-	private def processRegularMessages(): Unit = {
-		def process(msg: Msg, pfs: Iterable[PF[Msg, Rsp, State]]): Try[Option[Rsp]] =
-			pfs.find(_.isDefinedAt(msg, this)) match {
-				case Some(pf)                         => Try(pf(msg, this)) // todo: what if the pf is defined but fails? shouldn't we try another?
+	private def processRegularMessages(): Unit = if (!isPaused && !isClosed && msgs.nonEmpty) {
+		val behs = behaviors.toArray
+		val pfs  = behs.map(_.pf)
+		while (!isPaused && !isClosed && msgs.nonEmpty) {
+			val (msg, pOpt, bId) = msgs.dequeue()
+			val pfOpt = if (bId.nonEmpty) behs.collectFirst { case (`bId`, pf) => pf } else pfs.find(_.isDefinedAt(msg, this))
+			val res = pfOpt match	{
+				case Some(pf)                         => Try(pf(msg, this))
 				case _ if _finalBehavior == ignoreMsg => Ignored[Rsp]
 				case _                                => Try(_finalBehavior(msg, this))
 			}
-
-		if (!isPaused && !isClosed && msgs.nonEmpty) {
-			val behs = behaviors.toArray
-			val pfs = behs.map(_.pf)
-			while (!isPaused && !isClosed && msgs.nonEmpty) {
-				val (pOpt, res) = msgs.dequeue() match {
-					case (msg, pOpt, behId) if behId.nonEmpty => (pOpt, process(msg, behs.collectFirst { case (`behId`, pf) => pf }))
-					case (msg, pOpt, _)                       => (pOpt, process(msg, pfs))
-				}
-				pOpt.foreach(p => res match {
-					case Success(Some(rsp)) => p.complete(Try(rsp))
-					case Success(None)      => p.complete(NoResponse[Rsp])
-					case Failure(t)         => p.complete(Failure(t))
-				})
-			}
+			pOpt.foreach(p => res match {
+				case Success(Some(rsp)) => p.complete(Try(rsp))
+				case Success(None)      => p.complete(NoResponse[Rsp])
+				case Failure(t)         => p.complete(Failure(t))
+			})
 		}
 	}
 
@@ -515,9 +509,9 @@ object Actor {
 	// todo: change the name of finalBehavior to finalBehavior (the last behavior); the current one is confusing v
 	// todo: change the behaviors back to a list xD v
 	// todo: a way to request that a given message is handled by a behavior with the given id v
+	// todo: similarly, there should be an `onClose` function (but that's already implemented) v
 
-	// todo: afterInit function that the actor can use, for example, to send out messages that it's alive
-	// todo: similarly, there should be an `onClose` function (but that's already implemented)
+	// todo: onInit function that the actor can use, for example, to send out messages that it's alive
 	// todo: spawning sub-actors that are closed with the parent
 	// todo: ActorBuilder
 	// todo: HealthCheck system message, sent from the parent to the child; if the child doesn't respond in time, the message is repeated, and the the child is closed
