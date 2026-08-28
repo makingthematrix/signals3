@@ -85,7 +85,8 @@ trait Actor[Msg, Rsp, State] extends Closeable with Pausable {
 		* @param msg the message to send to the actor.
 		* @return a `CloseableFuture` of the type `Unit`.
 		*/
-	@targetName("ask") def ?(msg: SystemMsg): CloseableFuture[Unit]
+	def ask(msg: SystemMsg): CloseableFuture[Unit]
+	inline def ?(msg: SystemMsg): CloseableFuture[Unit] = ask(msg)
 
 	/**
 		* Sends a message to the actor, expecting a response in the form of a `CloseableFuture`.
@@ -96,10 +97,15 @@ trait Actor[Msg, Rsp, State] extends Closeable with Pausable {
 		* They may also close the future if the result is not longer needed, or ignore it - but in that case it's better to use
 		* the "!" operator instead.
 		*
+		* @param behId An optional parameter for forcing the identified behavior to process the message. Leave out for regular processing.
 		* @param msg the message to send to the actor.
 		* @return a `CloseableFuture` containing the response from the actor.
 		*/
-	@targetName("ask") def ?(msg: Msg): CloseableFuture[Rsp]
+	def ask(behId: String, msg: Msg): CloseableFuture[Rsp]
+	inline def ask(t: (String, Msg)): CloseableFuture[Rsp] = ask(t._1, t._2)
+	inline def ?(t: (String, Msg)): CloseableFuture[Rsp] = ask(t)
+	inline def ask(msg: Msg): CloseableFuture[Rsp] = ask("", msg)
+	inline def ?(msg: Msg): CloseableFuture[Rsp] = ask(msg)
 
 	/**
 		* Sends a system message to the actor.
@@ -110,7 +116,8 @@ trait Actor[Msg, Rsp, State] extends Closeable with Pausable {
 		*
 		* @param msg the message to send to the actor.
 		*/
-	@targetName("bang") def !(msg: SystemMsg): Unit
+	def bang(msg: SystemMsg): Unit
+	inline def !(msg: SystemMsg): Unit = bang(msg)
 
 	/**
 		* Sends a message to the actor without expecting a response.
@@ -121,9 +128,14 @@ trait Actor[Msg, Rsp, State] extends Closeable with Pausable {
 		* for fire-and-forget scenarios where the sender does not need to
 		* track the result of the message processing.
 		*
+		* @param behId An optional parameter for forcing the identified behavior to process the message. Leave out for regular processing.
 		* @param msg The message to be sent to the actor.
 		*/
-	@targetName("bang") def !(msg: Msg): Unit
+	def bang(behId: String, msg: Msg): Unit
+	inline def bang(t: (String, Msg)): Unit = bang(t._1, t._2)
+	inline def !(t: (String, Msg)): Unit = bang(t)
+	inline def bang(msg: Msg): Unit = bang("", msg)
+	inline def !(msg: Msg): Unit = bang(msg)
 
 	/**
 		* Retrieves the current state of the actor
@@ -275,14 +287,17 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	extends MutableActor[Msg, Rsp, State] {
 	import HeartBeatStrategy.*
 
+	private type MsgEntry = (msg: Msg, rsp: Option[Promise[Rsp]], behId: String)
+	private type SysEntry = (msg: SystemMsg, rsp: Option[Promise[Unit]])
+
 	// a mutable queue of messages incoming from other actors and other sources; see the ! operator.
-	private val msgs         = mutable.Queue[(Msg, Option[Promise[Rsp]])]()
+	private val msgs         = mutable.Queue[MsgEntry]()
 	// a stream that serves as a single entry for the msgs list to prevent concurrent modification; see the "!" operator.
-	private val msgStream    = Stream[(Msg, Option[Promise[Rsp]])]()
+	private val msgStream    = Stream[MsgEntry]()
 	// a mutable queue of system messages incoming from the controller; see the ! operator.
-	private val systemMsgs   = mutable.Queue[(SystemMsg, Option[Promise[Unit]])]()
+	private val systemMsgs   = mutable.Queue[SysEntry]()
 	// a stream that serves as a single entry for the systemMsgs list to prevent concurrent modification; see the "! operator.
-	private val systemStream = Stream[(SystemMsg, Option[Promise[Unit]])]()
+	private val systemStream = Stream[SysEntry]()
 	// a variable list of behaviors; a behavior is a partial function that tries to process an incoming message; see the processMessages method.
 	private var behaviors    = List[Beh[Msg, Rsp, State]]()
 	// the "beating heart" of the actor; depending on the strategy, accumulated messages are processed at each beat or when the message appears (reactive).
@@ -306,7 +321,7 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	}
 
 	override val in: SourceStream[Msg] = Stream[Msg]()
-	in.map(msg => (msg, None)).pipeTo(msgStream)
+	in.map(msg => (msg, None, "")).pipeTo(msgStream)
 
 	override val out: SourceStream[Rsp] = Stream[Rsp]()
 
@@ -372,21 +387,21 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	override def getBehavior(id: String): Option[PF[Msg, Rsp, State]] =
 		behaviors.collectFirst { case (`id`, pf) => pf }
 
-	@targetName("ask") override def ?(msg: SystemMsg): CloseableFuture[Unit] = {
+	override def ask(msg: SystemMsg): CloseableFuture[Unit] = {
 		val p = Promise[Unit]()
 		systemStream ! (msg, Some(p))
 		CloseableFuture.from(p)
 	}
 
-	@targetName("ask") override def ?(msg: Msg): CloseableFuture[Rsp] = {
+	override def ask(behId: String, msg: Msg): CloseableFuture[Rsp] = {
 		val p = Promise[Rsp]()
-		msgStream ! (msg, Some(p))
+		msgStream ! (msg, Some(p), behId)
 		CloseableFuture.from(p)
 	}
 
-	@targetName("bang") override def !(msg: SystemMsg): Unit = { systemStream ! (msg, None) }
+	override def bang(msg: SystemMsg): Unit = { systemStream ! (msg, None) }
 
-	@targetName("bang") override def !(msg: Msg): Unit = { msgStream ! (msg, None) }
+	override def bang(behId: String, msg: Msg): Unit = { msgStream ! (msg, None, behId) }
 
 	private val isProcessing = AtomicBoolean(false)
 
@@ -418,23 +433,26 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	// processed before regular ones, so at the beginning of the next processing the lsit will be changed and that new list
 	// will be used for that processing of regular messages.
 	private def processRegularMessages(): Unit = {
-		def process(msg: Msg, pfs: List[PF[Msg, Rsp, State]]): Try[Option[Rsp]] =
+		def process(msg: Msg, pfs: Iterable[PF[Msg, Rsp, State]]): Try[Option[Rsp]] =
 			pfs.find(_.isDefinedAt(msg, this)) match {
 				case Some(pf)                         => Try(pf(msg, this)) // todo: what if the pf is defined but fails? shouldn't we try another?
 				case _ if _finalBehavior == ignoreMsg => Ignored[Rsp]
 				case _                                => Try(_finalBehavior(msg, this))
 			}
 
-		while (!isPaused && !isClosed && msgs.nonEmpty) {
-			val pfs = behaviors.map(_.pf)
-			msgs.dequeue() match {
-				case (msg: Msg, Some(p)) =>
-					process(msg, pfs) match {
-						case Success(Some(rsp)) => p.complete(Try(rsp))
-						case Success(None)      => p.complete(NoResponse[Rsp])
-						case Failure(t)         => p.complete(Failure(t))
-					}
-				case (msg: Msg, _) => process(msg, pfs)
+		if (!isPaused && !isClosed && msgs.nonEmpty) {
+			val behs = behaviors.toArray
+			val pfs = behs.map(_.pf)
+			while (!isPaused && !isClosed && msgs.nonEmpty) {
+				val (pOpt, res) = msgs.dequeue() match {
+					case (msg, pOpt, behId) if behId.nonEmpty => (pOpt, process(msg, behs.collectFirst { case (`behId`, pf) => pf }))
+					case (msg, pOpt, _)                       => (pOpt, process(msg, pfs))
+				}
+				pOpt.foreach(p => res match {
+					case Success(Some(rsp)) => p.complete(Try(rsp))
+					case Success(None)      => p.complete(NoResponse[Rsp])
+					case Failure(t)         => p.complete(Failure(t))
+				})
 			}
 		}
 	}
@@ -496,6 +514,7 @@ object Actor {
 	// todo: change the behaviors list to a map - all behaviors that fit for a given message are executed, not only the oldest one v
 	// todo: change the name of finalBehavior to finalBehavior (the last behavior); the current one is confusing v
 	// todo: change the behaviors back to a list xD v
+	// todo: a way to request that a given message is handled by a behavior with the given id v
 
 	// todo: afterInit function that the actor can use, for example, to send out messages that it's alive
 	// todo: similarly, there should be an `onClose` function (but that's already implemented)
@@ -503,7 +522,6 @@ object Actor {
 	// todo: ActorBuilder
 	// todo: HealthCheck system message, sent from the parent to the child; if the child doesn't respond in time, the message is repeated, and the the child is closed
 	// todo: consider to allow the children to use different types of messages
-	// todo: a way to request that a given message is handled by a behavior with the given id
 	// and then: clusters? persistance?
 
 	@static private val noResponse: Failure[Nothing] = Failure[Nothing](new IllegalStateException("No response"))

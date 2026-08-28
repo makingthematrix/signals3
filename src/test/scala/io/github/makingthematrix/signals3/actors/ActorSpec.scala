@@ -86,7 +86,7 @@ class ActorSpec extends FunSuite {
 
     val futures: Seq[CloseableFuture[Int]] = (1 to 10).map { actor ? _ }
     val results: CloseableFuture[Iterable[Int]] = CloseableFuture.sequence(futures)
-    val finalResult: Int = resultCF(results).max
+    val finalResult: Int = resultCF(results)(using 2.seconds).max
     assertEquals(finalResult, 55)
     close(actor)
   }
@@ -167,6 +167,64 @@ class ActorSpec extends FunSuite {
     awaitCF(cf42)
 
     assertEquals(resultCF(actor ? 42), "Special: 42")
+    close(actor)
+  }
+
+  // ==================== Behavior ID Message Routing ====================
+
+  test("ask with behavior ID routes message to specific behavior") {
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Default: $msg"))
+    
+    // Add a special behavior
+    val behavior: Actor.PF[Int, String, Int] = {
+      case (42, _) => Some("Special: 42")
+    }
+    val cfAdd: CloseableFuture[Unit] = (actor ? actor.SystemMsg.AddBehavior("special_42", behavior))
+    awaitCF(cfAdd)
+
+    // Message 42 should be handled by the special behavior when using its ID
+    val response = actor.ask("special_42", 42)
+    assertEquals(resultCF(response), "Special: 42")
+    
+    close(actor)
+  }
+
+  test("bang with behavior ID routes message to specific behavior") {
+    val received = Signal(false)
+    val receivedSpecial = Signal(false)
+    
+    val actor = Actor[Int, Unit, Boolean](false, (msg, _) => None)
+    import actor.SystemMsg
+    
+    // Add behaviors via system messages
+    val defaultBehavior: Actor.PF[Int, Unit, Boolean] = { case (msg, actor) => 
+      received ! true
+      None
+    }
+    val specialBehavior: Actor.PF[Int, Unit, Boolean] = { case (msg, actor) => 
+      receivedSpecial ! true
+      None
+    }
+    
+    awaitCF(actor ? SystemMsg.AddBehavior("default", defaultBehavior))
+    awaitCF(actor ? SystemMsg.AddBehavior("special", specialBehavior))
+    
+    // Send via bang without behavior ID - should use normal processing
+    actor ! 1
+    waitFor(received, true)
+    
+    // Reset and send with behavior ID
+    received ! false
+    receivedSpecial ! false
+    
+    // Send via bang with specific behavior ID
+    actor.bang("special", 2)
+    waitFor(receivedSpecial, true)
+    
+    // The default behavior should NOT have been triggered
+    Thread.sleep(100)
+    assert(!received.currentValue.getOrElse(false), "Default behavior should not be triggered when using behavior ID")
+    
     close(actor)
   }
 
