@@ -32,9 +32,12 @@ trait CanBeClosed {
    * @param body Logic that is going to be executed when the closeable is closed.
    */
   def onClose(body: => Unit): Unit =
-    _onClose = (() => body) :: _onClose
+    _onClose ::= (() => body) 
 
-  private final inline def callOnClose(): Unit = _onClose.foreach(_())
+  private final def callOnClose(): Unit = {
+    _onClose.foreach(_())
+    _onClose = Nil
+  }
 
   private var _onClose: List[() => Unit] = Nil
 

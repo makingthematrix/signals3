@@ -451,8 +451,18 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 		}
 	}
 
-	// Initializes the heartbeat of the actor.
-	private[actors] def initialize(): Unit = beat.foreach(_ => processMessages())
+	// Calls the onInit functions and nitializes the heartbeat of the actor
+	private[actors] def initialize(): Unit = {
+		_onInit.foreach(_(this))
+		_onInit = Nil
+		beat.foreach(_ => processMessages())
+	}
+
+	private var _onInit: List[MutableActor[Msg, Rsp, State] => Unit] = Nil
+
+	// Registers a function that should be called exactly once when the actor is initialized
+	private[actors] def onInit(f: MutableActor[Msg, Rsp, State] => Unit): Unit =
+		_onInit ::= f
 
 	/**
 		* Closes the actor and performs necessary checks to ensure all messages are completed before finalizing the closure.
@@ -510,10 +520,10 @@ object Actor {
 	// todo: change the behaviors back to a list xD v
 	// todo: a way to request that a given message is handled by a behavior with the given id v
 	// todo: similarly, there should be an `onClose` function (but that's already implemented) v
+	// todo: onInit function that the actor can use, for example, to send out messages that it's alive v
 
-	// todo: onInit function that the actor can use, for example, to send out messages that it's alive
-	// todo: spawning sub-actors that are closed with the parent
 	// todo: ActorBuilder
+	// todo: spawning sub-actors that are closed with the parent
 	// todo: HealthCheck system message, sent from the parent to the child; if the child doesn't respond in time, the message is repeated, and the the child is closed
 	// todo: consider to allow the children to use different types of messages
 	// and then: clusters? persistance?
@@ -581,6 +591,25 @@ object Actor {
 		new ActorImpl(state, finalBehavior, beat).tap(_.initialize())
 
 	/**
+		* Creates a new actor instance with the given initial state, final behavior, and heartbeat strategy.
+		* The actor is initialized immediately after creation. It's going to use the `ExecutionContext` passed to it
+		* as an implicit parameter.
+		*
+		* @param state         The initial state of the actor.
+		* @param finalBehavior The final behavior of the actor, responsible for handling incoming messages.
+		* @param beat          The heartbeat strategy used to configure the actor's responsiveness.
+		* @param onInit        A function that will be called during the initialization of the actor.
+		* @return An initialized actor instance.
+		*/
+	def apply[Msg, Rsp, State](state: State, finalBehavior: F[Msg, Rsp, State], beat: HeartBeatStrategy,
+	                           onInit: MutableActor[Msg, Rsp, State] => Unit)
+	                          (using ExecutionContext): Actor[Msg, Rsp, State] =
+		new ActorImpl(state, finalBehavior, beat).tap { actor =>
+			actor.onInit(onInit)
+			actor.initialize()
+		}
+
+	/**
 		* Creates a new actor instance with the specified initial state, final behavior, and heartbeat strategy.
 		* The actor operates using a new serial dispatch queue to handle incoming messages.
 		*
@@ -591,6 +620,20 @@ object Actor {
 		*/
 	inline def serial[Msg, Rsp, State](state: State, finalBehavior: F[Msg, Rsp, State], beat: HeartBeatStrategy): Actor[Msg, Rsp, State] =
 		apply(state, finalBehavior, beat)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
+
+	/**
+		* Creates a new actor instance with the specified initial state, final behavior, and heartbeat strategy.
+		* The actor operates using a new serial dispatch queue to handle incoming messages.
+		*
+		* @param state         The initial state of the actor.
+		* @param finalBehavior The final behavior of the actor, responsible for handling incoming messages.
+		* @param beat          The heartbeat strategy used to configure the actor's responsiveness.
+		* @param onInit        A function that will be called during the initialization of the actor.
+		* @return An initialized actor instance.
+		*/
+	inline def serial[Msg, Rsp, State](state: State, finalBehavior: F[Msg, Rsp, State], beat: HeartBeatStrategy,
+	                                   onInit: MutableActor[Msg, Rsp, State] => Unit): Actor[Msg, Rsp, State] =
+		apply(state, finalBehavior, beat, onInit)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
 
 	/**
 		* Creates a new actor instance with the given initial state and a final behavior, while the heartbeat strategy
@@ -606,9 +649,23 @@ object Actor {
 		apply(state, finalBehavior, defBeat)
 
 	/**
+		* Creates a new actor instance with the given initial state and a final behavior, while the heartbeat strategy
+		* is set to Linear(100ms).
+		* The actor is initialized immediately after creation. It's going to use the `ExecutionContext` passed to it
+		* as an implicit parameter.
+		*
+		* @param state         The initial state of the actor.
+		* @param finalBehavior The final behavior of the actor, responsible for handling incoming messages.
+		* @param onInit        A function that will be called during the initialization of the actor.
+		* @return An initialized actor instance.
+		*/
+	inline def apply[Msg, Rsp, State](state: State, finalBehavior: F[Msg, Rsp, State], onInit: MutableActor[Msg, Rsp, State] => Unit)
+	                                 (using ExecutionContext): Actor[Msg, Rsp, State] =
+		apply(state, finalBehavior, defBeat, onInit)
+
+	/**
 		* Creates a new actor instance with the specified initial state, and a final behavior, while the heartbeat strategy
-		* * is sset to Linear(100ms).
-		* The actor operates using a new serial dispatch queue to handle incoming messages.
+		* * is set to Linear(100ms). The actor operates using a new serial dispatch queue to handle incoming messages.
 		*
 		* @param state       The initial state of the actor.
 		* @param finalBehavior The final behavior of the actor, responsible for handling incoming messages.
@@ -616,6 +673,19 @@ object Actor {
 		*/
 	inline def serial[Msg, Rsp, State](state: State, finalBehavior: F[Msg, Rsp, State]): Actor[Msg, Rsp, State] =
 		serial(state, finalBehavior, defBeat)
+
+	/**
+		* Creates a new actor instance with the specified initial state, and a final behavior, while the heartbeat strategy
+		* is set to Linear(100ms). The actor operates using a new serial dispatch queue to handle incoming messages.
+		*
+		* @param state         The initial state of the actor.
+		* @param finalBehavior The final behavior of the actor, responsible for handling incoming messages.
+		* @param onInit        A function that will be called during the initialization of the actor.
+		* @return An initialized actor instance.
+		*/
+	inline def serial[Msg, Rsp, State](state: State, finalBehavior: F[Msg, Rsp, State],
+	                                   onInit: MutableActor[Msg, Rsp, State] => Unit): Actor[Msg, Rsp, State] =
+		serial(state, finalBehavior, defBeat, onInit)
 
 	/**
 		* Creates a new actor instance with the provided initial state, a list of partial functions
@@ -637,6 +707,28 @@ object Actor {
 		}
 
 	/**
+		* Creates a new actor instance with the provided initial state, a list of partial functions
+		* for behavior, and a heartbeat strategy. The actor is initialized immediately after creation
+		* and will use the provided `ExecutionContext` for its operation.
+		*
+		* @param state  The initial state of the actor.
+		* @param pfs    A list of partial functions that define the actor's behaviors. Each function
+		*               specifies how the actor should handle a specific type of message.
+		* @param beat   The heartbeat strategy used to configure the actor's responsiveness.
+		* @param onInit A function that will be called during the initialization of the actor.
+		* @return An initialized actor instance configured with the given state, behaviors,
+		*         and heartbeat strategy.
+		*/
+	def apply[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy,
+	                           onInit: MutableActor[Msg, Rsp, State] => Unit)
+	                          (using ExecutionContext): Actor[Msg, Rsp, State] =
+		new ActorImpl[Msg, Rsp, State](state, ignoreMsg, beat).tap { actor =>
+			pfs.foreach(actor.addBehavior)
+			actor.onInit(onInit)
+			actor.initialize()
+		}
+
+	/**
 		* Creates a new actor instance with the given initial state, a list of partial functions
 		* defining its behaviors, and a heartbeat strategy.
 		* The actor operates using a new serial dispatch queue to handle incoming messages.
@@ -650,6 +742,23 @@ object Actor {
 		*/
 	inline def serial[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy): Actor[Msg, Rsp, State] =
 		apply(state, pfs, beat)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
+
+	/**
+		* Creates a new actor instance with the given initial state, a list of partial functions
+		* defining its behaviors, and a heartbeat strategy.
+		* The actor operates using a new serial dispatch queue to handle incoming messages.
+		*
+		* @param state  The initial state of the actor.
+		* @param pfs    A list of partial functions representing the actor's behavior. Each partial
+		*               function specifies how the actor should process specific types of messages.
+		* @param beat   The heartbeat strategy that determines the actor's responsiveness.
+		* @param onInit A function that will be called during the initialization of the actor.
+		* @return An initialized actor instance configured with the specified state, behaviors,
+		*         and heartbeat strategy, operating on a serial dispatch queue.
+		*/
+	inline def serial[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy,
+	                                   onInit: MutableActor[Msg, Rsp, State] => Unit): Actor[Msg, Rsp, State] =
+		apply(state, pfs, beat, onInit)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
 
 	/**
 		* Creates a new actor instance with the provided initial state and a list of partial functions
@@ -666,6 +775,21 @@ object Actor {
 
 	/**
 		* Creates a new actor instance with the provided initial state and a list of partial functions
+		* defining the actor's behaviors. The actor is immediately initialized and uses the implicit
+		* `ExecutionContext` for its operations. The heartbeat strategy is sset to Linear(100ms).
+		*
+		* @param state  The initial state of the actor.
+		* @param pfs    A list of partial functions defining the behavior of the actor. Each partial
+		*               function specifies how the actor should process specific types of messages.
+		* @param onInit A function that will be called during the initialization of the actor.
+		* @return An initialized actor instance configured with the specified state and behaviors.
+		*/
+	inline def apply[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]],
+	                                  onInit: MutableActor[Msg, Rsp, State] => Unit)(using ExecutionContext): Actor[Msg, Rsp, State] =
+		apply(state, pfs, defBeat, onInit)
+
+	/**
+		* Creates a new actor instance with the provided initial state and a list of partial functions
 		* defining its behaviors. The actor operates using a new serial dispatch queue to handle
 		* incoming messages. The the heartbeat strategy is set to Linear(100ms).
 		*
@@ -677,4 +801,20 @@ object Actor {
 		*/
 	inline def serial[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]]): Actor[Msg, Rsp, State] =
 		serial(state, pfs, defBeat)
+
+	/**
+		* Creates a new actor instance with the provided initial state and a list of partial functions
+		* defining its behaviors. The actor operates using a new serial dispatch queue to handle
+		* incoming messages. The the heartbeat strategy is set to Linear(100ms).
+		*
+		* @param state  The initial state of the actor.
+		* @param pfs    A list of partial functions defining the actor's behavior. Each partial
+		*               function specifies how the actor should process specific types of messages.
+		* @param onInit A function that will be called during the initialization of the actor.
+		* @return An initialized actor instance configured with the specified state and behaviors,
+		*         operating on a serial dispatch queue.
+		*/
+	inline def serial[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]],
+	                                   onInit: MutableActor[Msg, Rsp, State] => Unit): Actor[Msg, Rsp, State] =
+		serial(state, pfs, defBeat, onInit)
 }

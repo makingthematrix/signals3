@@ -8,7 +8,7 @@ trait Pausable {
 	private var _onPause: List[() => Unit] = Nil
 
 	def onPause(body: => Unit): Unit =
-		_onPause = (() => body) :: _onPause
+		_onPause ::= (() => body)
 
 	private final inline def callOnPause(): Unit = _onPause.foreach(_())
 

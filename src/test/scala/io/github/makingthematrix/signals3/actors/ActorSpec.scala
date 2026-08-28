@@ -696,4 +696,224 @@ class ActorSpec extends FunSuite {
     
     close(actor)
   }
+
+  // ==================== onInit Tests =====================
+
+  test("onInit is called during actor initialization") {
+    val initCalled = Signal(false)
+    
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Processed: $msg"),
+      onInit = { _ => initCalled ! true })
+    
+    // onInit should have been called during initialization
+    waitFor(initCalled, true)
+    close(actor)
+  }
+
+  test("onInit receives the actor as parameter") {
+    var receivedActor: Option[Actor[Int, String, Int]] = None
+    
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Processed: $msg"),
+      onInit = { a => receivedActor = Some(a) })
+    
+    // onInit should have received the actor
+    assert(receivedActor.isDefined)
+    assert(receivedActor.contains(actor))
+    close(actor)
+  }
+
+  test("onInit is called before the actor starts processing messages") {
+    val order = Signal(Seq.empty[String])
+    
+    val actor = Actor[Int, String, Int](0, (msg, _) => {
+      order.mutate(_ :+ "behavior")
+      Some(s"Processed: $msg")
+    }, onInit = { _ => order.mutate(_ :+ "onInit") })
+    
+    // Send a message immediately
+    actor ! 1
+    
+    // onInit should have been called before the behavior processes the message
+    waitForResult(order, Seq("onInit", "behavior"))
+    close(actor)
+  }
+
+  test("onInit with serial dispatch queue") {
+    val initCalled = Signal(false)
+    
+    val actor = Actor.serial[Int, String, Int](0, (msg, _) => Some(s"Processed: $msg"),
+      onInit = { _ => initCalled ! true })
+    
+    waitFor(initCalled, true)
+    close(actor)
+  }
+
+  test("onInit can send messages via out stream") {
+    val initMessage = Signal("")
+    
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Processed: $msg"),
+      onInit = { actorImpl => actorImpl.out ! "Initialized" })
+    
+    actor.out.foreach { msg => initMessage ! msg }
+    
+    waitFor(initMessage, "Initialized")
+    close(actor)
+  }
+
+  test("onInit handshake - actor sends reference to another actor") {
+    // Create a parent actor that will receive the child's reference
+    val parent = Actor[Actor[Int, String, Int], String, String]("", (childActor, _) => {
+      Some(s"Child registered: ${childActor.hashCode}")
+    })
+    
+    val parentReceivedChild = Signal(false)
+    
+    // Create a child actor with onInit that sends its reference to the parent
+    val child = Actor[Int, String, Int](0, (msg, _) => Some(s"Child: $msg"),
+      onInit = { childActor =>
+        // Send this actor's reference to the parent via the parent's in stream
+        parent.in ! childActor
+      })
+    
+    parent.out.foreach { _ => parentReceivedChild ! true }
+    
+    // Wait for the parent to receive the child's reference
+    waitFor(parentReceivedChild, true)
+    
+    close(child)
+    close(parent)
+  }
+
+  test("onInit with behaviors list") {
+    val initCalled = Signal(false)
+    val behavior: Actor.PF[Int, String, Int] = { case (42, _) => Some("Special") }
+    
+    val actor = Actor[Int, String, Int](0, List(behavior),
+      onInit = { _ => initCalled ! true })
+    
+    waitFor(initCalled, true)
+    
+    // Verify behavior works
+    assertEquals(resultCF(actor ? 42), "Special")
+    close(actor)
+  }
+
+  test("onInit can modify actor state") {
+    val actor = Actor[Int, String, Int](0, (msg, actorImpl) => {
+      Some(s"State: ${actorImpl.state}")
+    }, onInit = { actorImpl =>
+      actorImpl.state = 100
+    })
+    
+    // State should have been modified by onInit
+    assertEquals(actor.state, 100)
+    
+    val response = actor ? 1
+    assertEquals(resultCF(response), "State: 100")
+    close(actor)
+  }
+
+  test("onInit can add behaviors") {
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Default: $msg"),
+      onInit = { actorImpl =>
+        actorImpl.addBehavior { case (42, _) => Some("Special: 42") }
+      })
+    
+    // The added behavior should work
+    assertEquals(resultCF(actor ? 42), "Special: 42")
+    assertEquals(resultCF(actor ? 1), "Default: 1")
+    close(actor)
+  }
+
+  test("onInit with heartbeat strategy") {
+    val initCalled = Signal(false)
+    
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Processed: $msg"),
+      HeartBeatStrategy.Linear(50),
+      onInit = { _ => initCalled ! true })
+    
+    waitFor(initCalled, true)
+    close(actor)
+  }
+
+  test("Multiple onInit functions via factory method with behaviors") {
+    val init1Called = Signal(false)
+    val init2Called = Signal(false)
+    
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Processed: $msg"))
+    
+    // Note: Since onInit is private[actors], we need to use the factory methods
+    // But we can only pass one onInit function per factory call
+    // So this test just verifies a single onInit works
+    
+    val actorWithInit = Actor[Int, String, Int](0, (msg, _) => Some(s"Processed: $msg"),
+      onInit = { _ =>
+        init1Called ! true
+        init2Called ! true
+      })
+    
+    waitFor(init1Called, true)
+    waitFor(init2Called, true)
+    close(actorWithInit)
+  }
+
+  test("onInit can send messages to external stream") {
+    val externalStreamReceived = Signal(Seq.empty[String])
+    val externalStream: SourceStream[String] = Stream()
+    
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Processed: $msg"),
+      onInit = { actorImpl =>
+        externalStream ! "Actor initialized"
+        externalStream ! "Ready to process"
+      })
+    
+    externalStream.foreach { msg => externalStreamReceived.mutate(_ :+ msg) }
+    
+    waitForResult(externalStreamReceived, Seq("Actor initialized", "Ready to process"))
+    close(actor)
+  }
+
+  test("onInit bidirectional handshake between two actors") {
+    val handshakeComplete = Signal(false)
+    
+    // Create first actor with a reference to where the second will send its handshake
+    val actor1 = Actor[Int, String, Int](0, (msg, _) => Some(s"A1: $msg"))
+    
+    // Create second actor with onInit that sends a message to actor1's in stream
+    val actor2 = Actor[Int, String, Int](0, (msg, _) => Some(s"A2: $msg"),
+      onInit = { actor2Impl =>
+        actor1.in ! 42
+      })
+    
+    actor1.in.foreach { msg =>
+      if (msg == 42) handshakeComplete ! true
+    }
+    
+    waitFor(handshakeComplete, true)
+    
+    close(actor1)
+    close(actor2)
+  }
+
+  test("onInit exception handling") {
+    // onInit is called during initialization, so if it throws, the exception propagates
+    // during actor construction
+    intercept[RuntimeException] {
+      Actor[Int, String, Int](0, (msg, _) => Some(s"Processed: $msg"),
+        onInit = { _ =>
+          throw new RuntimeException("Init error")
+        })
+    }
+  }
+
+  test("onInit with default heartbeat") {
+    val initCalled = Signal(false)
+    
+    // Using the simpler apply method with just state, behavior, and onInit
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Processed: $msg"),
+      onInit = { _ => initCalled ! true })
+    
+    waitFor(initCalled, true)
+    close(actor)
+  }
 }
