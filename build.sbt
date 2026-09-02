@@ -2,8 +2,8 @@ val _scalaVersion = "3.9.0"
 
 ThisBuild / organization := "io.github.makingthematrix"
 name := "signals3"
-ThisBuild / homepage := Some(uri("https://github.com/makingthematrix/signals3"))
-ThisBuild / licenses := Seq("GPL 3.0" -> uri("https://www.gnu.org/licenses/gpl-3.0.en.html"))
+ThisBuild / homepage := Some(url("https://github.com/makingthematrix/signals3"))
+ThisBuild / licenses := Seq("GPL 3.0" -> url("https://www.gnu.org/licenses/gpl-3.0.en.html"))
 ThisBuild / scalaVersion := _scalaVersion
 ThisBuild / versionScheme := Some("semver-spec")
 Test / scalaVersion := _scalaVersion
@@ -25,7 +25,7 @@ val scala3Options = Seq(
 
 scmInfo := Some(
   ScmInfo(
-    uri("https://github.com/makingthematrix/signals3"),
+    url("https://github.com/makingthematrix/signals3"),
     "scm:git:git@github.com:makingthematrix/signals3.git"
   )
 )
@@ -35,15 +35,14 @@ developers := List(
     "makingthematrix",
     "Maciej Gorywoda",
     "makingthematrix@protonmail.com",
-    uri("https://github.com/makingthematrix"))
+    url("https://github.com/makingthematrix"))
 )
 
 lazy val root = (project in file("."))
   .settings(
     name := "signals3",
     libraryDependencies ++= Seq(
-      //Test dependencies
-      "org.scalameta" %% "munit" % "1.3.5" % "test"
+      "org.scalameta" %% "munit" % "1.3.5" % Test
     ),
     scalacOptions ++= standardOptions ++ scala3Options
   )

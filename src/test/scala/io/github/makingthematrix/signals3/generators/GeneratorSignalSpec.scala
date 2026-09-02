@@ -59,7 +59,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
     val isSuccess = Signal(false)
 
     val signal = GeneratorSignal.generate((0, 1), (t: (Int, Int)) => fibDelay(t)) { case (a, b) => (b, a + b) }
-    signal.foreach { case (a, b) =>
+    signal.foreach { case (_, b) =>
       builder.addOne(b)
       isSuccess ! (b == 5)
     }
