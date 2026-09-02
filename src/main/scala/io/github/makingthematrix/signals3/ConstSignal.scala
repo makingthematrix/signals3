@@ -27,7 +27,4 @@ final class ConstSignal[V] (private val v: Option[V])
   
   /** Always returns true - ConstSignal is always treated as closed. */
   override inline def isClosed: Boolean = true
-
-  /** Always returns true - ConstSignal is always treated as paused. */
-  override def isPaused: Boolean = true
 }

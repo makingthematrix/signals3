@@ -1,6 +1,5 @@
 package io.github.makingthematrix.signals3
 
-import io.github.makingthematrix.signals3.Closeable.CloseableStream
 import io.github.makingthematrix.signals3.testutils.*
 
 class PausableSpec extends munit.FunSuite {
@@ -95,7 +94,7 @@ class PausableSpec extends munit.FunSuite {
   // ===== Stream Pausability Tests =====
 
   test("Stream - events are not dispatched when paused") {
-    val src = Stream[Int]()
+    val src = CloseableSourceStream[Int]()
     val received = Signal(Seq.empty[Int])
     
     src.foreach { n => received.mutate(_ :+ n) }
@@ -124,7 +123,7 @@ class PausableSpec extends munit.FunSuite {
   test("Stream - events dispatched after unpause include those sent while paused") {
     // This is actually NOT the case - events sent while paused are LOST
     // The pause only affects future dispatch calls, not buffering
-    val src = Stream[Int]()
+    val src = CloseableSourceStream[Int]()
     val received = Signal(Seq.empty[Int])
     
     src.foreach { n => received.mutate(_ :+ n) }
@@ -148,7 +147,7 @@ class PausableSpec extends munit.FunSuite {
   }
 
   test("Stream - onPause callback is triggered") {
-    val src = Stream[Int]()
+    val src = CloseableSourceStream[Int]()
     val pausedSignal = Signal(false)
     
     src.onPause { pausedSignal ! true }
@@ -159,7 +158,7 @@ class PausableSpec extends munit.FunSuite {
   }
 
   test("Stream - can pause and unpause multiple times") {
-    val src = Stream[Int]()
+    val src = CloseableSourceStream[Int]()
     val received = Signal(Seq.empty[Int])
     
     src.foreach { n => received.mutate(_ :+ n) }
@@ -192,7 +191,7 @@ class PausableSpec extends munit.FunSuite {
   }
 
   test("Stream - pausing a SourceStream prevents publishing") {
-    val src: SourceStream[Int] = Stream()
+    val src = CloseableSourceStream[Int]()
     val received = Signal(Seq.empty[Int])
     
     src.foreach { n => received.mutate(_ :+ n) }
@@ -221,7 +220,7 @@ class PausableSpec extends munit.FunSuite {
   // ===== Signal Pausability Tests =====
 
   test("Signal - value changes are not published when paused") {
-    val sig = Signal(0)
+    val sig = CloseableSourceSignal(0)
     val received = Signal(Seq.empty[Int])
     
     sig.foreach { n => received.mutate(_ :+ n) }
@@ -251,7 +250,7 @@ class PausableSpec extends munit.FunSuite {
   }
 
   test("Signal - value changes while paused do not update the signal value") {
-    val sig = Signal(0)
+    val sig = CloseableSourceSignal(0)
     
     sig ! 1
     assert(sig.currentValue.contains(1))
@@ -270,7 +269,7 @@ class PausableSpec extends munit.FunSuite {
   }
 
   test("Signal - onPause callback is triggered") {
-    val sig = Signal(0)
+    val sig = CloseableSourceSignal(0)
     val pausedSignal = Signal(false)
     
     sig.onPause { pausedSignal ! true }
@@ -281,7 +280,7 @@ class PausableSpec extends munit.FunSuite {
   }
 
   test("Signal - can pause and unpause multiple times") {
-    val sig = Signal(0)
+    val sig = CloseableSourceSignal(0)
     val received = Signal(Seq.empty[Int])
     
     sig.foreach { n => received.mutate(_ :+ n) }
@@ -312,7 +311,7 @@ class PausableSpec extends munit.FunSuite {
   }
 
   test("Signal - pausing a SourceSignal prevents value changes") {
-    val sig: SourceSignal[Int] = Signal(0)
+    val sig = CloseableSourceSignal(0)
     val received = Signal(Seq.empty[Int])
     
     sig.foreach { n => received.mutate(_ :+ n) }
@@ -341,7 +340,7 @@ class PausableSpec extends munit.FunSuite {
   }
 
   test("Signal - mutate while paused does not change value") {
-    val sig = Signal(0)
+    val sig = CloseableSourceSignal(0)
     
     sig ! 1
     assert(sig.currentValue.contains(1))
@@ -357,22 +356,6 @@ class PausableSpec extends munit.FunSuite {
     assert(sig.currentValue.contains(2))
   }
 
-  // ===== ConstSignal pausability =====
-
-  test("ConstSignal - is always paused") {
-    val constSig = Signal.const(42)
-    assert(constSig.isPaused)
-  }
-
-  test("ConstSignal - pause and unpause do not change isPaused") {
-    val constSig = Signal.const(42)
-    assert(constSig.isPaused)
-    constSig.unpause()
-    assert(constSig.isPaused)
-    constSig.pause()
-    assert(constSig.isPaused)
-  }
-
   // ===== Pause and Close Interaction Tests =====
 
   // Note: Regular Stream and Signal are not Closeable by default.
@@ -380,7 +363,7 @@ class PausableSpec extends munit.FunSuite {
   // The pause/unpause functionality works independently of close functionality.
   
   test("SourceStream - pausing then closing - pause state can be toggled") {
-    val src: SourceStream[Int] = Stream()
+    val src = CloseableSourceStream[Int]()
     val closeableSrc = src.closeable
     
     // Can pause before close
@@ -397,7 +380,7 @@ class PausableSpec extends munit.FunSuite {
   }
 
   test("SourceSignal - pausing then closing - pause state can be toggled") {
-    val sig: SourceSignal[Int] = Signal(0)
+    val sig = CloseableSourceSignal(0)
     val closeableSig = sig.closeable
     
     // Can pause before close
@@ -414,11 +397,11 @@ class PausableSpec extends munit.FunSuite {
   }
 
   test("CloseableStream - can be paused and closed independently") {
-    val src: SourceStream[Int] = Stream()
-    val closeableSrc: CloseableStream[Int] = src.closeable
+    val src = CloseableSourceStream[Int]()
+    val closeableSrc = src.closeable
     val received = Signal(Seq.empty[Int])
     
-    closeableSrc.foreach { n => received.mutate(_ :+ n) }
+    src.foreach { n => received.mutate(_ :+ n) }
     
     src ! 1
     waitForResult(received, Seq(1))
@@ -451,7 +434,7 @@ class PausableSpec extends munit.FunSuite {
   // ===== Map/FlatMap with Pausability =====
 
   test("Stream - pausing works through map transformation") {
-    val src = Stream[Int]()
+    val src = CloseableSourceStream[Int]()
     val received = Signal(Seq.empty[Int])
     
     src.map(_ * 2).foreach { n => received.mutate(_ :+ n) }
@@ -470,7 +453,7 @@ class PausableSpec extends munit.FunSuite {
   }
 
   test("Signal - pausing works through map transformation") {
-    val sig = Signal(0)
+    val sig = CloseableSourceSignal(0)
     val received = Signal(Seq.empty[Int])
     
     sig.map(_ * 2).foreach { n => received.mutate(_ :+ n) }
@@ -494,7 +477,7 @@ class PausableSpec extends munit.FunSuite {
   // ===== onPause callback edge cases =====
 
   test("Stream - onPause callback can be set multiple times, only last one counts") {
-    val src = Stream[Int]()
+    val src = CloseableSourceStream[Int]()
     var firstCalled = false
     var secondCalled = false
     
@@ -508,7 +491,7 @@ class PausableSpec extends munit.FunSuite {
   }
 
   test("Signal - onPause callback can be set multiple times, only last one counts") {
-    val sig = Signal(0)
+    val sig = CloseableSourceSignal(0)
     var firstCalled = false
     var secondCalled = false
     
@@ -522,14 +505,14 @@ class PausableSpec extends munit.FunSuite {
   }
 
   test("Stream - onPause with no callback set does not throw") {
-    val src = Stream[Int]()
+    val src = CloseableSourceStream[Int]()
     // Don't set any callback
     src.pause() // Should not throw
     assert(src.isPaused)
   }
 
   test("Signal - onPause with no callback set does not throw") {
-    val sig = Signal(0)
+    val sig = CloseableSourceSignal(0)
     // Don't set any callback
     sig.pause() // Should not throw
     assert(sig.isPaused)

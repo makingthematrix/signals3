@@ -33,10 +33,8 @@ class LazyListGeneratorStream[E] protected[signals3] (interval: FiniteDuration |
 
   override protected def onBeat(): Unit = {
     super.onBeat()
-    if (!isPaused) {
-      val event = events(getAndInc())
-      publish(event)
-    }
+    val event = events(getAndInc())
+    publish(event)
   }
 }
 

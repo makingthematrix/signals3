@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, DispatchQueue, Pausable, SourceStream, Stream}
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, CloseableSourceStream, DispatchQueue, Pausable, SourceStream, Stream}
 import io.github.makingthematrix.signals3.actors.Actor.{Beh, F, HeartBeatStrategy, Ignored, NoResponse, PF, ignoreMsg}
 import io.github.makingthematrix.signals3.generators.GeneratorStream
 
@@ -194,8 +194,9 @@ trait MutableActor[Msg, Rsp, State] extends Actor[Msg, Rsp, State] {
 		* @param id A unique identifier for the behavior being added.
 		* @param pf The behavior function represented as a partial function that takes a message
 		*           and an actor, and optionally returns a response.
+		* @return true if the behavior was sucessfully added
 		*/
-	def addBehavior(id: String, pf: PF[Msg, Rsp, State]): Unit
+	def addBehavior(id: String, pf: PF[Msg, Rsp, State]): Boolean
 
 	/**
 		* Adds a new behavior to the actor. The behavior is appended to the list of existing behaviors,
@@ -203,8 +204,9 @@ trait MutableActor[Msg, Rsp, State] extends Actor[Msg, Rsp, State] {
 		*
 		* @param behavior The behavior to be added, represented as a tuple containing a unique identifier
 		*                 and a partial function that defines the behavior logic.
+		* @return true if the behavior was sucessfully added
 		*/
-	def addBehavior(behavior: Beh[Msg, Rsp, State]): Unit
+	def addBehavior(behavior: Beh[Msg, Rsp, State]): Boolean
 
 	/**
 		* Adds a behavior function to the actor and returns a unique identifier for it.
@@ -218,7 +220,7 @@ trait MutableActor[Msg, Rsp, State] extends Actor[Msg, Rsp, State] {
 		* @return   A unique identifier for the newly added behavior.
 		*/
 	def addBehavior(pf: PF[Msg, Rsp, State]): String =
-		UUID.randomUUID().toString.tap { name => addBehavior(name -> pf) }
+		UUID.randomUUID().toString.tap { name => addBehavior(name -> pf) } // we assume uuids are unique
 
 	/**
 		* Adds the provided partial function as a behavior to this entity.
@@ -320,10 +322,10 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 			nextAgitation.millis
 	}
 
-	override val in: SourceStream[Msg] = Stream[Msg]()
+	override val in: CloseableSourceStream[Msg] = CloseableSourceStream[Msg]()
 	in.map(msg => (msg, None, "")).pipeTo(msgStream)
 
-	override val out: SourceStream[Rsp] = Stream[Rsp]()
+	override val out: CloseableSourceStream[Rsp] = CloseableSourceStream[Rsp]()
 
 	msgStream.foreach { msg =>
 		msgs.enqueue(msg)
@@ -342,26 +344,32 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	}
 
 	/**
-		* Adds a new behavior to the actor. The behavior is appended to the list of existing behaviors,
+		* Adds a new behavior to the actor. If a behavior with the same id already exists, it will be replaced.
+		* The behavior is appended to the list of existing behaviors,
 		* meaning it will be executed only if all preceding behaviors fail to handle the message.
 		*
 		* @param id A unique identifier for the behavior being added.
 		* @param pf The behavior function represented as a partial function that takes a message
 		*           and an actor, and optionally returns a response.
 		*/
-	def addBehavior(id: String, pf: PF[Msg, Rsp, State]): Unit = {
-		behaviors = behaviors.appended(id -> pf)
-	}
+	override def addBehavior(id: String, pf: PF[Msg, Rsp, State]): Boolean =
+		if (behaviors.exists(_.id == id)) false else {
+			behaviors = behaviors :+ (id -> pf)
+			true
+		}
 
 	/**
-		* Adds a new behavior to the actor. The behavior is appended to the list of existing behaviors,
+		* Adds a new behavior to the actor. If a behavior with the same id already exists, it will be replaced.
+		* The behavior is appended to the list of existing behaviors,
 		* meaning it will be executed only if all preceding behaviors fail to handle the message.
 		*
 		* @param behavior The behavior to be added, represented as a tuple containing a unique identifier
 		*                 and a partial function that defines the behavior logic.
 		*/
-	def addBehavior(behavior: Beh[Msg, Rsp, State]): Unit = {
-		behaviors = behaviors.appended(behavior)
+	def addBehavior(behavior: Beh[Msg, Rsp, State]): Boolean =
+		if (behaviors.exists(_.id == behavior.id)) false else {
+		behaviors = behaviors :+ behavior
+		true
 	}
 
 	/**
@@ -453,9 +461,16 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 
 	// Calls the onInit functions and nitializes the heartbeat of the actor
 	private[actors] def initialize(): Unit = {
-		_onInit.foreach(_(this))
-		_onInit = Nil
-		beat.foreach(_ => processMessages())
+		try {
+			_onInit.foreach(_(this))
+			_onInit = Nil
+			beat.foreach(_ => processMessages())
+		} catch {
+			case t: Throwable =>
+				// Clean up resources if initialization fails
+				closeAndCheck()
+				throw t
+		}
 	}
 
 	private var _onInit: List[MutableActor[Msg, Rsp, State] => Unit] = Nil
@@ -476,6 +491,8 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 		*/
 	override def closeAndCheck(): Boolean = {
 		beat.close()
+		in.close()
+		out.close()
 		if (msgs.isEmpty) super.closeAndCheck()
 		else {
 			shutdown().onComplete(_ => super.closeAndCheck())

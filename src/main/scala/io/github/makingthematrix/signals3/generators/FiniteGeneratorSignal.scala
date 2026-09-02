@@ -39,7 +39,7 @@ class FiniteGeneratorSignal[V] protected[signals3] (interval: FiniteDuration | (
 
   override protected def onBeat(): Unit = {
     super.onBeat()
-    if (!isPaused && !isClosed) {
+    if (!isClosed) {
       val v = it.next()
       inc()
       publish(v, ec)

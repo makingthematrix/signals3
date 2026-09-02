@@ -37,7 +37,7 @@ import scala.util.chaining.scalaUtilChainingOps
   * @tparam V The type of the value held in the signal.
   */
 class Signal[V] (@volatile private[signals3] var value: Option[V] = None)
-  extends EventSource[V, SignalSubscriber] with Pausable { self =>
+  extends EventSource[V, SignalSubscriber] { self =>
   private object updateMonitor
 
   /** Updates the current value of the signal by applying a given function to it.
@@ -71,7 +71,7 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None)
     *         false if the new value is the same as the old one.
     */
   private[signals3] def setValue(v: Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
-    if (!isPaused && value != v) {
+    if (value != v) {
       value = v
       notifySubscribers(currentContext)
       true
@@ -746,7 +746,7 @@ object Signal {
     * @tparam V The type of the value.
     * @return A new const signal initialized to the given value.
     */
-  inline def const[V](v: V): Signal[V] = new ConstSignal[V](Some(v))
+  inline def const[V](v: V): ConstSignal[V] = new ConstSignal[V](Some(v))
 
   /** Creates a new signal by joining together the original signals of two different types of values, `A` and `B`.
     * The resulting signal will hold a tuple of the original values and update every time one of them changes.

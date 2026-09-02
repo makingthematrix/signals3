@@ -34,7 +34,7 @@ class FiniteGeneratorStream[E] protected[signals3] (interval: FiniteDuration | (
 
   override protected def onBeat(): Unit = {
     super.onBeat()
-    if (!isClosed && !isPaused) {
+    if (!isClosed) {
       val event = it.next()
       inc()
       publish(event)

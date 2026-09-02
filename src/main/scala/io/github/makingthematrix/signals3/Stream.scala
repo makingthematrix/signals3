@@ -23,7 +23,7 @@ import scala.util.chaining.scalaUtilChainingOps
   *
   * @see `ExecutionContext`
   */
-class Stream[E] extends EventSource[E, StreamSubscriber[E]] with Pausable {
+class Stream[E] extends EventSource[E, StreamSubscriber[E]] {
   /** Dispatches the event to all subscribers.
     *
     * @param event The event to be dispatched.
@@ -33,7 +33,7 @@ class Stream[E] extends EventSource[E, StreamSubscriber[E]] with Pausable {
     *                         execution context will be created.
     */
   private[signals3] def dispatch(event: E, executionContext: Option[ExecutionContext]): Unit =
-    if (!isPaused) notifySubscribers(_.onEvent(event, executionContext))
+    notifySubscribers(_.onEvent(event, executionContext))
 
   /** Publishes the event to all subscribers using the current execution context.
     *

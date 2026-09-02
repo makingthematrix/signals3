@@ -12,7 +12,7 @@ import io.github.makingthematrix.signals3.priv.ZipSignal.*
   * logic. 
   * [[Closeable]] extends [[java.lang.AutoCloseable]] so in theory it can be used in Java `try-with-resources`.
   */
-trait Closeable extends java.lang.AutoCloseable with CanBeClosed {
+trait Closeable extends java.lang.AutoCloseable with CanBeClosed with Pausable {
   override def closeAndCheck(): Boolean = super.closeAndCheck()
 
   /**

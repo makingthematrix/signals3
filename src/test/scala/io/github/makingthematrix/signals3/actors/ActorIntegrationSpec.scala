@@ -266,7 +266,7 @@ class ActorIntegrationSpec extends FunSuite {
     val completedTasks = Signal(Seq.empty[Int])
 
     // Create 3 worker actors
-    val workers = (1 to 3).map { id =>
+    val workers = (1 to 3).map { _ =>
       Actor[Int, Int, Int](0, (msg, actor) => {
         actor.state = actor.state + msg
         Some(actor.state)

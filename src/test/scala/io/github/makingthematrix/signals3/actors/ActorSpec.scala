@@ -139,16 +139,16 @@ class ActorSpec extends FunSuite {
       case (99, _) => Some("Special: 99")
     }
 
-    val cf42: CloseableFuture[Unit] = (actor ? actor.SystemMsg.AddBehavior("special_42", behavior42))
-    val cf99: CloseableFuture[Unit] = (actor ? actor.SystemMsg.AddBehavior("special_99", behavior99))
+    val cf42: CloseableFuture[Unit] = actor ? actor.SystemMsg.AddBehavior("special_42", behavior42)
+    val cf99: CloseableFuture[Unit] = actor ? actor.SystemMsg.AddBehavior("special_99", behavior99)
     awaitCF(cf42)
     awaitCF(cf99)
     
     assertEquals(resultCF(actor ? 42), "Special: 42")
     assertEquals(resultCF(actor ? 99), "Special: 99")
 
-    val cf42r: CloseableFuture[Unit] = (actor ? actor.SystemMsg.RemoveBehavior("special_42"))
-    val cf99r: CloseableFuture[Unit] = (actor ? actor.SystemMsg.RemoveBehavior("special_99"))
+    val cf42r: CloseableFuture[Unit] = actor ? actor.SystemMsg.RemoveBehavior("special_42")
+    val cf99r: CloseableFuture[Unit] = actor ? actor.SystemMsg.RemoveBehavior("special_99")
     awaitCF(cf42r)
     awaitCF(cf99r)
     
@@ -158,15 +158,41 @@ class ActorSpec extends FunSuite {
   }
 
   test("Behavior added and used") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Default: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Default: $msg"))
     val behavior: Actor.PF[Int, String, Int] = {
       case (42, _) => Some("Special: 42")
     }
 
-    val cf42: CloseableFuture[Unit] = (actor ? actor.SystemMsg.AddBehavior("special_42", behavior))
+    val cf42: CloseableFuture[Unit] = actor ? actor.SystemMsg.AddBehavior("special_42", behavior)
     awaitCF(cf42)
 
     assertEquals(resultCF(actor ? 42), "Special: 42")
+    close(actor)
+  }
+
+  test("Duplicate behavior IDs are NOT replaced") {
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Default: $msg"))
+    
+    // Add first behavior that handles 42
+    val behavior1: Actor.PF[Int, String, Int] = {
+      case (42, _) => Some("First: 42")
+    }
+    val cf1 = actor ? actor.SystemMsg.AddBehavior("duplicate_id", behavior1)
+    awaitCF(cf1)
+    
+    // Verify first behavior works
+    assertEquals(resultCF(actor ? 42), "First: 42")
+    
+    // Add second behavior with the same ID but different response
+    val behavior2: Actor.PF[Int, String, Int] = {
+      case (42, _) => Some("Second: 42")
+    }
+    val cf2 = actor ? actor.SystemMsg.AddBehavior("duplicate_id", behavior2)
+    awaitCF(cf2)
+    
+    // The second behavior should have replaced the first
+    assertEquals(resultCF(actor ? 42), "First: 42")
+    
     close(actor)
   }
 
@@ -179,7 +205,7 @@ class ActorSpec extends FunSuite {
     val behavior: Actor.PF[Int, String, Int] = {
       case (42, _) => Some("Special: 42")
     }
-    val cfAdd: CloseableFuture[Unit] = (actor ? actor.SystemMsg.AddBehavior("special_42", behavior))
+    val cfAdd: CloseableFuture[Unit] = actor ? actor.SystemMsg.AddBehavior("special_42", behavior)
     awaitCF(cfAdd)
 
     // Message 42 should be handled by the special behavior when using its ID
@@ -193,15 +219,15 @@ class ActorSpec extends FunSuite {
     val received = Signal(false)
     val receivedSpecial = Signal(false)
     
-    val actor = Actor[Int, Unit, Boolean](false, (msg, _) => None)
+    val actor = Actor[Int, Unit, Boolean](false, (_, _) => None)
     import actor.SystemMsg
     
     // Add behaviors via system messages
-    val defaultBehavior: Actor.PF[Int, Unit, Boolean] = { case (msg, actor) => 
+    val defaultBehavior: Actor.PF[Int, Unit, Boolean] = { case (_, _) =>
       received ! true
       None
     }
-    val specialBehavior: Actor.PF[Int, Unit, Boolean] = { case (msg, actor) => 
+    val specialBehavior: Actor.PF[Int, Unit, Boolean] = { case (_, _) =>
       receivedSpecial ! true
       None
     }
@@ -255,7 +281,7 @@ class ActorSpec extends FunSuite {
 
   test("System messages with messages in queue") {
     val received = Signal(false)
-    val actor = Actor[Int, Unit, Boolean](false, (msg, actor) => {
+    val actor = Actor[Int, Unit, Boolean](false, (_, actor) => {
       actor.state = true
       received ! true
       None
@@ -379,7 +405,7 @@ class ActorSpec extends FunSuite {
   // ==================== System Message Behavior Management ====================
 
   test("AddBehavior system message") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Default: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Default: $msg"))
     import actor.SystemMsg
     
     val behavior: Actor.PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
@@ -391,11 +417,11 @@ class ActorSpec extends FunSuite {
   }
 
   test("RemoveBehavior system message") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Default: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Default: $msg"))
     import actor.SystemMsg
     
     val behavior: Actor.PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
-    val cf = (actor ? actor.SystemMsg.AddBehavior("behavior", behavior))
+    val cf = actor ? actor.SystemMsg.AddBehavior("behavior", behavior)
     awaitCF(cf)
     
     assertEquals(resultCF(actor ? 42), "Special: 42")
@@ -408,7 +434,7 @@ class ActorSpec extends FunSuite {
   }
 
   test("AddBehavior and RemoveBehavior via system messages") {
-    val actor = Actor[Int, String, Int](0, (msg, actor) => Some(s"Default: $msg"))
+    val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Default: $msg"))
     import actor.SystemMsg
     
     val behavior: Actor.PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
@@ -799,7 +825,7 @@ class ActorSpec extends FunSuite {
   }
 
   test("onInit can modify actor state") {
-    val actor = Actor[Int, String, Int](0, (msg, actorImpl) => {
+    val actor = Actor[Int, String, Int](0, (_, actorImpl) => {
       Some(s"State: ${actorImpl.state}")
     }, onInit = { actorImpl =>
       actorImpl.state = 100
@@ -855,6 +881,7 @@ class ActorSpec extends FunSuite {
     waitFor(init1Called, true)
     waitFor(init2Called, true)
     close(actorWithInit)
+    close(actor)
   }
 
   test("onInit can send messages to external stream") {
@@ -862,7 +889,7 @@ class ActorSpec extends FunSuite {
     val externalStream: SourceStream[String] = Stream()
     
     val actor = Actor[Int, String, Int](0, (msg, _) => Some(s"Processed: $msg"),
-      onInit = { actorImpl =>
+      onInit = { _ =>
         externalStream ! "Actor initialized"
         externalStream ! "Ready to process"
       })
@@ -881,7 +908,7 @@ class ActorSpec extends FunSuite {
     
     // Create second actor with onInit that sends a message to actor1's in stream
     val actor2 = Actor[Int, String, Int](0, (msg, _) => Some(s"A2: $msg"),
-      onInit = { actor2Impl =>
+      onInit = { _ =>
         actor1.in ! 42
       })
     
@@ -895,9 +922,10 @@ class ActorSpec extends FunSuite {
     close(actor2)
   }
 
-  test("onInit exception handling") {
+  test("onInit exception handling with resource cleanup") {
     // onInit is called during initialization, so if it throws, the exception propagates
-    // during actor construction
+    // during actor construction. The initialize() method now calls closeAndCheck() in a catch block,
+    // ensuring that heartbeat and other resources are properly released even on initialization failure.
     intercept[RuntimeException] {
       Actor[Int, String, Int](0, (msg, _) => Some(s"Processed: $msg"),
         onInit = { _ =>

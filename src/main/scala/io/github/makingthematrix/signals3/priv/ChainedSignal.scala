@@ -6,7 +6,7 @@ import io.github.makingthematrix.signals3.Signal
 import scala.concurrent.ExecutionContext
 
 final private[signals3] class ChainedSignal[V, W <: V](first: FiniteSignal[V], second: => Signal[W])
-  extends Signal[V] with SignalSubscriber{
+  extends Signal[V] with SignalSubscriber {
   override protected[signals3] def onWire(): Unit =
     if (!first.isClosed) {
       first.subscribe(this)

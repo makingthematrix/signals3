@@ -2,7 +2,8 @@ package io.github.makingthematrix.signals3.priv
 
 import io.github.makingthematrix.signals3.{Finite, Signal}
 
-private[signals3] final class TakeWhileSignal[V](source: Signal[V], p: V => Boolean) extends ProxySignal[V](source) with Finite[V] {
+private[signals3] final class TakeWhileSignal[V](source: Signal[V], p: V => Boolean) 
+  extends ProxySignal[V](source) with Finite[V] {
   computeValue(source.value)
 
   override protected def computeValue(current: Option[V]): Option[V] =
