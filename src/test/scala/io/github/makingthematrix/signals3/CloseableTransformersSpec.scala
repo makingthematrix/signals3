@@ -813,7 +813,7 @@ class CloseableTransformersSpec extends munit.FunSuite {
 
   test("CloseableSignal grouped with partial batch") {
     var counter = 0
-    val original = GeneratorSignal.generate(0, HeartBeatMs) { v =>
+    val original = GeneratorSignal.generate(0, HeartBeatMs) { _ =>
       counter += 1
       if (counter <= 5) counter else -1
     }
@@ -1055,7 +1055,7 @@ class CloseableTransformersSpec extends munit.FunSuite {
 
   test("CloseableSignal dropWhile with alternating predicate") {
     var counter = 0
-    val original = GeneratorSignal.generate(0, HeartBeatMs) { v =>
+    val original = GeneratorSignal.generate(0, HeartBeatMs) { _ =>
       counter += 1
       counter
     }

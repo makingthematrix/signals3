@@ -200,7 +200,7 @@ class RecoverStreamSpec extends munit.FunSuite {
 
   test("Empty stream with IGNORE strategy") {
     val in = SourceStream[Int]()
-    val out: Stream[Int] = in.ignoreExceptions.map { n =>
+    val out: Stream[Int] = in.ignoreExceptions.map { _ =>
       throw new RuntimeException("Should not be called")
     }
 

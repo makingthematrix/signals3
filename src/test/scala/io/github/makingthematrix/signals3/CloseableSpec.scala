@@ -48,7 +48,7 @@ class CloseableSpec extends munit.FunSuite {
     var res = 0
 
     val cf = CloseableFuture.successful { res = 1 }
-
+    assert(cf.isCompleted)
     assertEquals(res, 1)
   }
 

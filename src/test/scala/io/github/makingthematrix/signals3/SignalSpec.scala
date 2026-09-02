@@ -316,7 +316,7 @@ class SignalSpec extends munit.FunSuite {
       val received = new AtomicInteger(0)
       val p = Promise[Unit]()
 
-      val subscriber = subscribe(signal) { i =>
+      subscribe(signal) { i =>
         lastSent = i
         if (received.incrementAndGet() == dispatches + 1) p.trySuccess({})
       }
@@ -367,7 +367,6 @@ class SignalSpec extends munit.FunSuite {
   }
 
   test("After the value is changed, onUpdated should return the new value, and the old value") {
-    given ec: ExecutionContext = SerialDispatchQueue()
     val s = Signal[Int](0)
     var p = Promise[(Option[Int], Int)]()
 
@@ -395,7 +394,6 @@ class SignalSpec extends munit.FunSuite {
   }
 
   test("After the value is changed, onChanged should return only the new value") {
-    given ec: ExecutionContext = SerialDispatchQueue()
     val s = Signal[Int](0)
     var p = Promise[Int]()
 

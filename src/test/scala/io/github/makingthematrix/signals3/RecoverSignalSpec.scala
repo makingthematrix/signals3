@@ -219,7 +219,7 @@ class RecoverSignalSpec extends munit.FunSuite {
 
   test("Empty signal with IGNORE strategy") {
     val in = SourceSignal[Int]()
-    val out: Signal[Int] = in.ignoreExceptions.map { n =>
+    val out: Signal[Int] = in.ignoreExceptions.map { _ =>
       throw new RuntimeException("Should not be called")
     }
 
@@ -449,9 +449,7 @@ class RecoverSignalSpec extends munit.FunSuite {
   test("Map and recover from exception") {
     given dq: DispatchQueue = SerialDispatchQueue()
 
-    val in = SourceSignal[Int]().recover { t =>
-      42
-    }
+    val in = SourceSignal[Int]().recover { _ => 42 }
     val out = in.map {
       case 2 => throw new RuntimeException("Map and throw exception")
       case n => n
