@@ -23,7 +23,7 @@ In new apps, it can be of use for the same tasks, as well as - if you write an A
 
 **sbt**:
 ```sbt
-  libraryDependencies += "io.github.makingthematrix" %% "signals3" % "1.2.0"
+  libraryDependencies += "io.github.makingthematrix" %% "signals3" % "1.2.1"
 ```
 
 **Maven**:
@@ -31,18 +31,18 @@ In new apps, it can be of use for the same tasks, as well as - if you write an A
 <dependency>
     <groupId>io.github.makingthematrix</groupId>
     <artifactId>signals3_3</artifactId>
-    <version>1.2.0</version>
+    <version>1.2.1</version>
 </dependency>
 ```
 
 **Mill**:
 ```
-ivy"io.github.makingthematrix::signals3:1.2.0"
+ivy"io.github.makingthematrix::signals3:1.2.1"
 ```
 
 **Gradle**:
 ```
-compile group: 'io.github.makingthematrix', name: 'signals3_3', version: '1.2.0'
+compile group: 'io.github.makingthematrix', name: 'signals3_3', version: '1.2.1'
 ```
 
 ### Syntax
