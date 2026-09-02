@@ -1,9 +1,9 @@
-val _scalaVersion = "3.8.4"
+val _scalaVersion = "3.9.0"
 
 ThisBuild / organization := "io.github.makingthematrix"
 name := "signals3"
-ThisBuild / homepage := Some(url("https://github.com/makingthematrix/signals3"))
-ThisBuild / licenses := Seq("GPL 3.0" -> url("https://www.gnu.org/licenses/gpl-3.0.en.html"))
+ThisBuild / homepage := Some(uri("https://github.com/makingthematrix/signals3"))
+ThisBuild / licenses := Seq("GPL 3.0" -> uri("https://www.gnu.org/licenses/gpl-3.0.en.html"))
 ThisBuild / scalaVersion := _scalaVersion
 ThisBuild / versionScheme := Some("semver-spec")
 Test / scalaVersion := _scalaVersion
@@ -19,12 +19,13 @@ val standardOptions = Seq(
 
 val scala3Options = Seq(
   "-explain",
-  "-Wunused:imports"
+  "-Wunused:all",
+  "-no-indent"
 )
 
 scmInfo := Some(
   ScmInfo(
-    url("https://github.com/makingthematrix/signals3"),
+    uri("https://github.com/makingthematrix/signals3"),
     "scm:git:git@github.com:makingthematrix/signals3.git"
   )
 )
@@ -34,7 +35,7 @@ developers := List(
     "makingthematrix",
     "Maciej Gorywoda",
     "makingthematrix@protonmail.com",
-    url("https://github.com/makingthematrix"))
+    uri("https://github.com/makingthematrix"))
 )
 
 lazy val root = (project in file("."))
@@ -42,7 +43,7 @@ lazy val root = (project in file("."))
     name := "signals3",
     libraryDependencies ++= Seq(
       //Test dependencies
-      "org.scalameta" %% "munit" % "1.3.2" % "test"
+      "org.scalameta" %% "munit" % "1.3.5" % "test"
     ),
     scalacOptions ++= standardOptions ++ scala3Options
   )
@@ -52,6 +53,7 @@ Test / parallelExecution := true
 fork := true
 Test / fork := true
 
+javaOptions ++= Seq("--sun-misc-unsafe-memory-access=allow")
 
 // new setting for the Central Portal
 ThisBuild / publishTo := {
