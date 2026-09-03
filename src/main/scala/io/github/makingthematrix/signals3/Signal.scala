@@ -49,12 +49,12 @@ class Signal[V] (@volatile private[signals3] var value: Option[V] = None)
     * @param currentContext The execution context on which the subscriber functions will be called if subscriptions don't specify otherwise (optional).
     * @return true if the update actually happened and subscribers will be notified, false if the new value is the same as the old one.
     */
-  private[signals3] def update(f: Option[V] => Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
+  protected[signals3] def update(f: Option[V] => Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
     updateMonitor.synchronized {
       setValue(f(value), currentContext)
     }
 
-  private[signals3] def updateWith(v: Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
+  protected[signals3] def updateWith(v: Option[V], currentContext: Option[ExecutionContext] = None): Boolean =
     updateMonitor.synchronized {
       setValue(v, currentContext)
     }

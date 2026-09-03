@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.generators
 
-import io.github.makingthematrix.signals3.Indexed
+import io.github.makingthematrix.signals3.{Indexed, Pausable}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
@@ -29,9 +29,9 @@ import scala.util.chaining.scalaUtilChainingOps
 class LazyListGeneratorStream[E] protected[signals3] (interval: FiniteDuration | (() => FiniteDuration),
                                                       val events: LazyList[E])
                                                      (using ExecutionContext)
-  extends GeneratorStream[E](interval) with Indexed {
+  extends GeneratorStream[E](interval) with Indexed with Pausable {
 
-  override protected def onBeat(): Unit = {
+  override protected def onBeat(): Unit = if (!isPaused) {
     super.onBeat()
     val event = events(getAndInc())
     publish(event)

@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.generators
 
-import io.github.makingthematrix.signals3.Indexed
+import io.github.makingthematrix.signals3.{Indexed, Pausable}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
@@ -28,10 +28,10 @@ import scala.util.chaining.scalaUtilChainingOps
 class LazyListGeneratorSignal[V] protected[signals3] (interval: FiniteDuration | (V => FiniteDuration),
                                                       val values: LazyList[V])
                                                      (using ec: ExecutionContext)
-  extends GeneratorSignal[V](values.head, interval) with Indexed {
+  extends GeneratorSignal[V](values.head, interval) with Indexed with Pausable {
   inc() // the first value in values becomes the initial value, so we already increase the counter to 1
 
-  override protected def onBeat(): Unit = {
+  override protected def onBeat(): Unit = if (!isPaused) {
     super.onBeat()
     val v =  values(getAndInc())
     publish(v, ec)

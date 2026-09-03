@@ -6,6 +6,8 @@ import scala.concurrent.ExecutionContext
 final private[signals3] class CloseableStream[E](source: Stream[E])
   extends ProxyStream[E, E](source) with Closeable {
   override protected[signals3] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
-    if (!isClosed && !isPaused) dispatch(event, sourceContext)
-}
+    if (!isClosed) dispatch(event, sourceContext)
 
+  override def publish(event: E): Unit =
+    if (!isClosed) super.publish(event)
+}

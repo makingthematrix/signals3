@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.generators
 
-import io.github.makingthematrix.signals3.Closeable
+import io.github.makingthematrix.signals3.{Closeable, Pausable}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
@@ -32,7 +32,7 @@ class CloseableGeneratorSignal[V] protected[signals3] (init: V,
                                                        update: V => V,
                                                        interval: FiniteDuration | (V => FiniteDuration))
                                                       (using ec: ExecutionContext)
-  extends GeneratorSignal[V](init, interval) with Closeable {
+  extends GeneratorSignal[V](init, interval) with Closeable with Pausable {
   override protected def onBeat(): Unit = {
     super.onBeat()
     if (!isPaused && !isClosed) currentValue.foreach(v => publish(update(v), ec))
