@@ -3,7 +3,7 @@ package io.github.makingthematrix.signals3.actors
 import io.github.makingthematrix.signals3.actors.Actor.*
 import io.github.makingthematrix.signals3.generators.GeneratorStream
 import io.github.makingthematrix.signals3.priv.DoneSignal
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, CloseableSourceStream, DispatchQueue, Pausable, Signal, SourceStream, Stream}
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, CloseableSourceStream, DispatchQueue, Pausable, SerialDispatchQueue, Signal, SourceStream, Stream}
 
 import java.util.UUID
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
@@ -11,7 +11,7 @@ import scala.annotation.static
 import scala.collection.mutable.Queue as MQueue
 import scala.collection.mutable
 import scala.concurrent.duration.{DurationLong, FiniteDuration}
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.util.chaining.*
 import scala.util.{Failure, Success, Try}
 
@@ -202,7 +202,7 @@ trait MutableActor[Msg, Rsp, State] extends Actor[Msg, Rsp, State] {
 	*/
 final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State,
                                                        override val heartbeat: HeartBeatStrategy = Actor.defBeat)
-                                                      (using ExecutionContext)
+                                                      (using ec: ExecutionContext)
 	extends MutableActor[Msg, Rsp, State] with Closeable with Pausable {
 	import HeartBeatStrategy.*
 
@@ -226,24 +226,26 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	// the next agitation time of the actor in milliseconds); used to determine the interval between beats when using the Agitated heartbeat strategy.
 	private var nextAgitation: Long = 0L
 
-	inline def enqueue(entry: MsgEntry): Unit = msgs.updateAndGet(_ :+ entry)
+	private val isSerial: Boolean = ec.isInstanceOf[SerialDispatchQueue]
 
-	inline def enqueue(entry: SysEntry): Unit = systemMsgs.updateAndGet(_ :+ entry)
+	inline private def enqueue(entry: MsgEntry): Unit = msgs.updateAndGet(_ :+ entry)
 
-	inline def dequeueMsgs(): MQueue[MsgEntry] = msgs.getAndSet(MQueue.empty)
+	inline private def enqueue(entry: SysEntry): Unit = systemMsgs.updateAndGet(_ :+ entry)
 
-	inline def dequeueSystemMsgs(): MQueue[SysEntry] = systemMsgs.getAndSet(MQueue.empty)
+	inline private def dequeueMsgs(): MQueue[MsgEntry] = msgs.getAndSet(MQueue.empty)
+
+	inline private def dequeueSystemMsgs(): MQueue[SysEntry] = systemMsgs.getAndSet(MQueue.empty)
 
 	// a method used every consecutive beat to calculate the time for the next beat
 	private def interval(): FiniteDuration = heartbeat match {
-		case Linear(ms) => ms.millis
-		case Reactive(maxMs, _) => maxMs.millis
-		case Agitated(minMs, _, _) if msgs.get().isEmpty && nextAgitation <= minMs => minMs.millis
-		case Agitated(_, _, maxMs) if msgs.get().isEmpty && nextAgitation >= maxMs => maxMs.millis
-		case Agitated(minMs, coeff, maxMs) if msgs.get().isEmpty =>
+		case Linear(ms, _) => ms.millis
+		case Reactive(maxMs, _, _) => maxMs.millis
+		case Agitated(minMs, _, _, _) if msgs.get().isEmpty && nextAgitation <= minMs => minMs.millis
+		case Agitated(_, _, maxMs, _) if msgs.get().isEmpty && nextAgitation >= maxMs => maxMs.millis
+		case Agitated(minMs, coeff, maxMs, _) if msgs.get().isEmpty =>
 			nextAgitation = (nextAgitation * (1.0 * coeff)).toLong
 			nextAgitation.millis
-		case Agitated(minMs, _, _) =>
+		case Agitated(minMs, _, _, _) =>
 			nextAgitation = minMs
 			nextAgitation.millis
 	}
@@ -256,7 +258,7 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	msgStream.foreach { msg =>
 		enqueue(msg)
 		heartbeat match {
-			case Reactive(_, maxMsgs) if msgs.get().size >= maxMsgs => Future { processMessages() }
+			case Reactive(_, maxMsgs, _) if msgs.get().size >= maxMsgs => processMessages()
 			case _ =>
 		}
 	}
@@ -264,7 +266,7 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	systemStream.foreach { msg =>
 		enqueue(msg)
 		heartbeat match {
-			case Reactive(_, _) => Future { processMessages() }
+			case Reactive(_, _, _) => processMessages()
 			case _ =>
 		}
 	}
@@ -336,12 +338,16 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 
 	// Processes awaiting messages and system messages
 	// Should NOT be called directly - always only through `inStream` or wrapped in a future.
-	private def processMessages(): Unit =
-		if (!isProcessing.getAndSet(true)) {
+	private def processMessages(): Unit = {
+		def process(): Unit = {
 			processSystemMessages()
 			if (!isClosed && !isPaused) processRegularMessages()
-			isProcessing.set(false)
 		}
+		if (!isProcessing.getAndSet(true)) {
+			if (isSerial) { process(); isProcessing.set(false) }
+			else Future(process()).onComplete(_ => isProcessing.set(false))
+		}
+	}
 
 	// Processes system messages; should NOT be called directly - always from `processMessages`
 	private def processSystemMessages(): Unit = {
@@ -371,10 +377,11 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 				if (bId.nonEmpty) getBehavior(bId)
 				else behaviors.collectFirst { case (_, pf) if pf.isDefinedAt(msg, this) => pf }
 			val res = pfOpt match	{
-				case Some(pf) => Try(pf(msg, this))
-				case _        => Ignored[Rsp]
-
+				case Some(pf) if isSerial => Try(pf(msg, this))
+				case Some(pf)             => Try(Await.result(Future { pf(msg, this) }, heartbeat.timeout))
+				case _                    => Ignored[Rsp]
 			}
+
 			pOpt.foreach(p => try {
 				res match {
 					case Success(Some(rsp)) => p.tryComplete(Try(rsp))
@@ -392,19 +399,17 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	override def isInitialized: Boolean = initialized.get()
 
 	// Calls the onInit functions and nitializes the heartbeat of the actor
-	private[actors] def initialize(): Unit = if (!initialized.get()) {
-		try {
+	private[actors] def initialize(): Unit =
+		if (!isInitialized) try {
 			_onInit.foreach(_(this))
 			_onInit = Nil
 			beat.foreach(_ => processMessages())
 			initialized.set(true)
-		} catch {
-			case t: Throwable =>
-				// Clean up resources if initialization fails
-				closeAndCheck()
-				throw t
+		} finally {
+			if (!isInitialized) {
+				try closeAndCheck() catch {case _: Throwable =>}
+			}
 		}
-	}
 
 	private var _onInit: List[MutableActor[Msg, Rsp, State] => Unit] = Nil
 
@@ -463,13 +468,16 @@ object Actor {
 	// todo: similarly, there should be an `onClose` function (but that's already implemented) v
 	// todo: onInit function that the actor can use, for example, to send out messages that it's alive v
 	// todo: remove finalBehavior; unprocessed messages are ignored v
-	// todo: maybe think about plugging in a logging functionality so that an unprocessed message can be logged as a warning
+	// todo: serial actors can have fewer safe-guards (and in fact they should have)  v
 
 	// todo: ActorBuilder
 	// todo: spawning sub-actors that are closed with the parent
 	// todo: HealthCheck system message, sent from the parent to the child; if the child doesn't respond in time, the message is repeated, and the the child is closed
-	// todo: consider to allow the children to use different types of messages
-	// and then: clusters? persistance?
+	// todo: consider to allow the children to use different types of messages ; and then: clusters? persistance?
+	// todo: maybe think about plugging in a logging functionality so that an unprocessed message can be logged as a warning
+	// todo: similarly about metrics
+	// todo: and about the max number of messages processed per heartbeat
+	// todo: make constants configurable through environment variables
 
 	@static private val noResponse: Failure[Nothing] = Failure[Nothing](new IllegalStateException("No response"))
 	@static private val ignored: Success[Option[Nothing]] = Success[Option[Nothing]](None)
@@ -502,10 +510,10 @@ object Actor {
 		* This enum defines various approaches to managing heartbeat intervals, suitable for
 		* different scenarios based on the requirements of responsiveness.
 		*/
-	enum HeartBeatStrategy {
-		case Linear(ms: Long)
-		case Agitated(minMs: Long, coeff: Double, maxMs: Long)
-		case Reactive(maxMs: Long, maxMsgs: Int)
+	enum HeartBeatStrategy(val timeout: FiniteDuration) {
+		case Linear(ms: Long, override val timeout: FiniteDuration = 5.second) extends HeartBeatStrategy(timeout)
+		case Agitated(minMs: Long, coeff: Double, maxMs: Long, override val timeout: FiniteDuration = 5.second) extends HeartBeatStrategy(timeout)
+		case Reactive(maxMs: Long, maxMsgs: Int, override val timeout: FiniteDuration = 5.second) extends HeartBeatStrategy(timeout)
 	}
 
 	/**
