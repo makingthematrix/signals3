@@ -6,8 +6,9 @@ import io.github.makingthematrix.signals3.priv.DoneSignal
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, CloseableSourceStream, DispatchQueue, Pausable, Signal, SourceStream, Stream}
 
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.annotation.static
+import scala.collection.mutable.Queue as MQueue
 import scala.collection.mutable
 import scala.concurrent.duration.{DurationLong, FiniteDuration}
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -209,28 +210,37 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	private type SysEntry = (msg: SystemMsg, rsp: Option[Promise[Unit]])
 
 	// a mutable queue of messages incoming from other actors and other sources; see the ! operator.
-	private val msgs         = mutable.Queue[MsgEntry]()
+	private val msgs         = new AtomicReference[MQueue[MsgEntry]](MQueue.empty)
 	// a stream that serves as a single entry for the msgs list to prevent concurrent modification; see the "!" operator.
 	private val msgStream    = Stream[MsgEntry]()
 	// a mutable queue of system messages incoming from the controller; see the ! operator.
-	private val systemMsgs   = mutable.Queue[SysEntry]()
+	private val systemMsgs   = new AtomicReference[MQueue[SysEntry]](MQueue.empty)
 	// a stream that serves as a single entry for the systemMsgs list to prevent concurrent modification; see the "! operator.
 	private val systemStream = Stream[SysEntry]()
 	// a variable list of behaviors; a behavior is a partial function that tries to process an incoming message; see the processMessages method.
 	private var behaviors    = List[Beh[Msg, Rsp, State]]()
+	private val behMap       = mutable.HashMap[String, PF[Msg, Rsp, State]]()
 	// the "beating heart" of the actor; depending on the strategy, accumulated messages are processed at each beat or when the message appears (reactive).
 	private lazy val beat    = GeneratorStream.heartbeat(() => interval())
 
 	// the next agitation time of the actor in milliseconds); used to determine the interval between beats when using the Agitated heartbeat strategy.
 	private var nextAgitation: Long = 0L
 
+	inline def enqueue(entry: MsgEntry): Unit = msgs.updateAndGet(_ :+ entry)
+
+	inline def enqueue(entry: SysEntry): Unit = systemMsgs.updateAndGet(_ :+ entry)
+
+	inline def dequeueMsgs(): MQueue[MsgEntry] = msgs.getAndSet(MQueue.empty)
+
+	inline def dequeueSystemMsgs(): MQueue[SysEntry] = systemMsgs.getAndSet(MQueue.empty)
+
 	// a method used every consecutive beat to calculate the time for the next beat
 	private def interval(): FiniteDuration = heartbeat match {
 		case Linear(ms) => ms.millis
 		case Reactive(maxMs, _) => maxMs.millis
-		case Agitated(minMs, _, _) if msgs.isEmpty && nextAgitation <= minMs => minMs.millis
-		case Agitated(_, _, maxMs) if msgs.isEmpty && nextAgitation >= maxMs => maxMs.millis
-		case Agitated(minMs, coeff, maxMs) if msgs.isEmpty =>
+		case Agitated(minMs, _, _) if msgs.get().isEmpty && nextAgitation <= minMs => minMs.millis
+		case Agitated(_, _, maxMs) if msgs.get().isEmpty && nextAgitation >= maxMs => maxMs.millis
+		case Agitated(minMs, coeff, maxMs) if msgs.get().isEmpty =>
 			nextAgitation = (nextAgitation * (1.0 * coeff)).toLong
 			nextAgitation.millis
 		case Agitated(minMs, _, _) =>
@@ -244,15 +254,15 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	override val out: CloseableSourceStream[Rsp] = CloseableSourceStream[Rsp]()
 
 	msgStream.foreach { msg =>
-		msgs.enqueue(msg)
+		enqueue(msg)
 		heartbeat match {
-			case Reactive(_, maxMsgs) if msgs.size >= maxMsgs => Future { processMessages() }
+			case Reactive(_, maxMsgs) if msgs.get().size >= maxMsgs => Future { processMessages() }
 			case _ =>
 		}
 	}
 
 	systemStream.foreach { msg =>
-		systemMsgs.enqueue(msg)
+		enqueue(msg)
 		heartbeat match {
 			case Reactive(_, _) => Future { processMessages() }
 			case _ =>
@@ -268,10 +278,11 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 		*                 and a partial function that defines the behavior logic.
 		*/
 	private[actors] def addBehavior(behavior: Beh[Msg, Rsp, State]): Boolean =
-		if (behaviors.exists(_.id == behavior.id)) false else {
-		behaviors ::= behavior
-		true
-	}
+		if (behMap.contains(behavior.id)) false else {
+			behMap += behavior.id -> behavior.pf
+			behaviors ::= behavior
+			true
+		}
 
 	/**
 		* Removes a behavior from the actor's list of behaviors based on its unique identifier.
@@ -281,10 +292,10 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 		*/
 	private def removeBehavior(id: String): Unit = {
 		behaviors = behaviors.filterNot(_.id == id)
+		behMap -= id
 	}
 
-	override def getBehavior(id: String): Option[PF[Msg, Rsp, State]] =
-		behaviors.collectFirst { case (`id`, pf) => pf }
+	override def getBehavior(id: String): Option[PF[Msg, Rsp, State]] = behMap.get(id)
 
 	/**
 		* Adds a behavior function to the actor and returns a unique identifier for it.
@@ -299,24 +310,27 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 		UUID.randomUUID().toString.tap { name => addBehavior(name -> pf) } // we assume uuids are unique
 
 	// adds all new behavior functions in front of the list of behaviors but maintains their own internal order
-	private[actors] def addBehaviors(pfs: Iterable[PF[Msg, Rsp, State]]): Unit =
-		behaviors = pfs.map(pf => UUID.randomUUID().toString -> pf).toList ::: behaviors
-	
-	override def ask(msg: SystemMsg): CloseableFuture[Unit] = {
+	private[actors] def addBehaviors(pfs: Iterable[PF[Msg, Rsp, State]]): Unit = {
+		val newBehs = pfs.map(pf => UUID.randomUUID().toString -> pf)
+		behaviors = newBehs.toList ::: behaviors
+		behMap ++= newBehs
+	}
+
+	override def ask(msg: SystemMsg): CloseableFuture[Unit] = if (!isClosed) {
 		val p = Promise[Unit]()
 		systemStream ! (msg, Some(p))
 		CloseableFuture.from(p)
-	}
+	} else ActorIsClosed[Unit]
 
-	override def ask(behId: String, msg: Msg): CloseableFuture[Rsp] = {
+	override def ask(behId: String, msg: Msg): CloseableFuture[Rsp] = if (!isClosed) {
 		val p = Promise[Rsp]()
 		msgStream ! (msg, Some(p), behId)
 		CloseableFuture.from(p)
-	}
+	} else ActorIsClosed[Rsp]
 
-	override def bang(msg: SystemMsg): Unit = { systemStream ! (msg, None) }
+	override def bang(msg: SystemMsg): Unit = if (!isClosed) { systemStream ! (msg, None) }
 
-	override def bang(behId: String, msg: Msg): Unit = { msgStream ! (msg, None, behId) }
+	override def bang(behId: String, msg: Msg): Unit = if (!isClosed) { msgStream ! (msg, None, behId) }
 
 	private val isProcessing = AtomicBoolean(false)
 
@@ -325,14 +339,15 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	private def processMessages(): Unit =
 		if (!isProcessing.getAndSet(true)) {
 			processSystemMessages()
-			processRegularMessages()
+			if (!isClosed && !isPaused) processRegularMessages()
 			isProcessing.set(false)
 		}
 
 	// Processes system messages; should NOT be called directly - always from `processMessages`
 	private def processSystemMessages(): Unit = {
 		import SystemMsg.*
-		inline def success(p: Option[Promise[Unit]]): Unit = p.foreach(_.complete(Success(())))
+		inline def success(pOpt: Option[Promise[Unit]]): Unit = pOpt.foreach(p => Try(p.tryComplete(Success(()))))
+		val systemMsgs = dequeueSystemMsgs()
 		while (systemMsgs.nonEmpty) systemMsgs.dequeue() match {
 			case (Pause, p)               => pause(); success(p)
 			case (Unpause, p)             => unpause(); success(p)
@@ -348,7 +363,8 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	// This is actually consistent with sending a system message for altering the list of behaviors, as system messages are
 	// processed before regular ones, so at the beginning of the next processing the lsit will be changed and that new list
 	// will be used for that processing of regular messages.
-	private def processRegularMessages(): Unit =
+	private def processRegularMessages(): Unit = {
+		val msgs = dequeueMsgs()
 		while (!isPaused && !isClosed && msgs.nonEmpty) {
 			val (msg, pOpt, bId) = msgs.dequeue()
 			val pfOpt =
@@ -359,12 +375,17 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 				case _        => Ignored[Rsp]
 
 			}
-			pOpt.foreach(p => res match {
-				case Success(Some(rsp)) => p.complete(Try(rsp))
-				case Success(None)      => p.complete(NoResponse[Rsp])
-				case Failure(t)         => p.complete(Failure(t))
+			pOpt.foreach(p => try {
+				res match {
+					case Success(Some(rsp)) => p.tryComplete(Try(rsp))
+					case Success(None)      => p.tryComplete(NoResponse[Rsp])
+					case Failure(t)         => p.tryComplete(Failure(t))
+				}
+			} catch {
+				case _: IllegalStateException => // Promise already completed
 			})
 		}
+	}
 
 	private val initialized: AtomicBoolean = new AtomicBoolean(false)
 
@@ -406,23 +427,18 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 		* @return `true` if the actor and its heartbeat are successfully closed, `false` otherwise.
 		*/
 	override def closeAndCheck(): Boolean = {
-		beat.close()
-		in.close()
-		out.close()
-		if (msgs.isEmpty) super.closeAndCheck()
-		else {
-			shutdown().onComplete(_ => super.closeAndCheck())
-			true
-		}
+		shutdown()
+		true
 	}
 
-	private def shutdown(): Future[Unit] =
-		for {
-			_ =  beat.closeAndCheck()
-			_ <- if (msgs.nonEmpty) Future { processMessages() } else Future.successful(())
-			_ <- beat.isClosedSignal.onTrue
-			_ =  super.closeAndCheck()
-		} yield ()
+	private def shutdown(): Future[Unit] = {
+		dequeueMsgs().collect { case (_, Some(p), _) => p }.foreach(_.tryFailure(actorIsClosed))
+		dequeueSystemMsgs().collect { case (_, Some(p)) => p }.foreach(_.tryFailure(actorIsClosed))
+		beat.closeAndCheck()
+		in.close()
+		out.close()
+		beat.isClosedSignal.onTrue.map(_ => super.closeAndCheck())
+	}
 
 	override def state: State = _state
 
@@ -446,7 +462,7 @@ object Actor {
 	// todo: a way to request that a given message is handled by a behavior with the given id v
 	// todo: similarly, there should be an `onClose` function (but that's already implemented) v
 	// todo: onInit function that the actor can use, for example, to send out messages that it's alive v
-	// todo: remove finalBehavior; unprocessed messages are ignored
+	// todo: remove finalBehavior; unprocessed messages are ignored v
 	// todo: maybe think about plugging in a logging functionality so that an unprocessed message can be logged as a warning
 
 	// todo: ActorBuilder
@@ -457,6 +473,7 @@ object Actor {
 
 	@static private val noResponse: Failure[Nothing] = Failure[Nothing](new IllegalStateException("No response"))
 	@static private val ignored: Success[Option[Nothing]] = Success[Option[Nothing]](None)
+	@static private[actors] val actorIsClosed = IllegalStateException("Actor is closed")
 
 	/**
 		* A special type of a failure indicating that although the message was received via the "?" (ask) operator and it was
@@ -471,6 +488,8 @@ object Actor {
 		* @return A `Success` instance wrapping `None`
 		*/
 	inline def Ignored[Rsp]: Success[Option[Rsp]] = ignored.asInstanceOf[Success[Option[Rsp]]]
+
+	inline def ActorIsClosed[Rsp](using ExecutionContext): CloseableFuture[Rsp] = CloseableFuture.failed[Rsp](actorIsClosed)
 
 	// The type of a custom behavior: a partial function that takes a message and an actor and returns an optional response.
 	type PF[Msg, Rsp, State] = PartialFunction[(Msg, MutableActor[Msg, Rsp, State]), Option[Rsp]]

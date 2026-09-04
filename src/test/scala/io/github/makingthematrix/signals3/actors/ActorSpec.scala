@@ -142,7 +142,6 @@ class ActorSpec extends FunSuite {
 
   // ==================== Behavior Modification ====================
 
-  // @todo: This test is flaky, fix it
   test("Concurrent behavior addition and removal") {
     val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Default: $msg") })
     val behavior42: PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
