@@ -1,8 +1,8 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy
+import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, PF}
 import io.github.makingthematrix.signals3.testutils.*
-import io.github.makingthematrix.signals3.{CloseableFuture, EventContext, Signal, SourceStream, Stream, Threading}
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, EventContext, Pausable, Signal, SourceStream, Stream, Threading}
 import munit.FunSuite
 
 import scala.concurrent.duration.*
@@ -19,10 +19,16 @@ class ActorIntegrationSpec extends FunSuite {
   override def afterEach(context: AfterEach): Unit =
     eventContext.stop()
 
-  private def close(actor: Actor[?, ?, ?]): Unit = {
+  private def close(actor: Actor[?, ?, ?] & Closeable): Unit = {
     actor.close()
     waitFor(actor.isClosedSignal, true)
   }
+
+  private def create[Msg, Rsp, State](state: State, pf: PF[Msg, Rsp, State]): Actor[Msg, Rsp, State] & Closeable & Pausable =
+    Actor[Msg, Rsp, State](state, pf).asInstanceOf[ActorImpl[Msg, Rsp, State]]
+
+  private def create[Msg, Rsp, State](state: State, pf: PF[Msg, Rsp, State], hbs: HeartBeatStrategy): Actor[Msg, Rsp, State] & Closeable & Pausable =
+    Actor[Msg, Rsp, State](state, pf, hbs).asInstanceOf[ActorImpl[Msg, Rsp, State]]
 
   // ==================== Actor-to-Actor Communication ====================
 
@@ -31,9 +37,9 @@ class ActorIntegrationSpec extends FunSuite {
     val outputSignal = Signal(Seq.empty[String])
 
     // Actor1: adds 10 to input
-    val actor1 = Actor[Int, Int, Unit]((), (msg, _) => Some(msg + 10))
+    val actor1 = create[Int, Int, Unit]((), { case (msg, _) => Some(msg + 10) })
     // Actor2: converts to string
-    val actor2 = Actor[Int, String, Unit]((), (msg, _) => Some(s"Result: $msg"))
+    val actor2 = create[Int, String, Unit]((), { case (msg, _) => Some(s"Result: $msg") })
 
     // Pipe: inputStream -> actor1.in -> actor1.out -> actor2.in -> actor2.out -> outputSignal
     inputStream.pipeTo(actor1.in)
@@ -54,8 +60,8 @@ class ActorIntegrationSpec extends FunSuite {
   // ==================== Bidirectional Actor Communication ====================
 
   test("Request-response between actors") {
-    val requestor = Actor[String, String, Unit]((), (msg, _) => Some(s"Request: $msg"))
-    val responder = Actor[String, String, Unit]((), (msg, _) => Some(s"Response to: $msg"))
+    val requestor = create[String, String, Unit]((), { case (msg, _) => Some(s"Request: $msg") })
+    val responder = create[String, String, Unit]((), { case (msg, _) => Some(s"Response to: $msg") })
 
     val finalResponse = Signal("")
 
@@ -82,7 +88,7 @@ class ActorIntegrationSpec extends FunSuite {
     val sink: SourceStream[String] = Stream()
 
     // Actor processes integers to strings with state
-    val processor = Actor[Int, String, Int](0, (msg, actor) => {
+    val processor = create[Int, String, Int](0, { case (msg, actor) =>
       actor.state = actor.state + msg
       Some(s"Processed-${actor.state}")
     })
@@ -107,12 +113,12 @@ class ActorIntegrationSpec extends FunSuite {
   // ==================== Stateful Multi-Actor System ====================
 
   test("Coordinated state across multiple actors") {
-    val counterActor = Actor[Unit, Int, Int](0, (_, actor) => {
+    val counterActor = create[Unit, Int, Int](0, { case (_, actor) =>
       actor.state = actor.state + 1
       Some(actor.state)
     })
 
-    val aggregatorActor = Actor[Int, Int, Int](0, (msg, actor) => {
+    val aggregatorActor = create[Int, Int, Int](0, { case (msg, actor) =>
       actor.state = actor.state + msg
       Some(actor.state)
     })
@@ -143,8 +149,8 @@ class ActorIntegrationSpec extends FunSuite {
     val consumer1Results = Signal(Seq.empty[String])
     val consumer2Results = Signal(Seq.empty[String])
 
-    val consumer1 = Actor[Int, String, Unit]((), (msg, _) => Some(s"C1-$msg"))
-    val consumer2 = Actor[Int, String, Unit]((), (msg, _) => Some(s"C2-$msg"))
+    val consumer1 = create[Int, String, Unit]((), { case (msg, _) => Some(s"C1-$msg") })
+    val consumer2 = create[Int, String, Unit]((), { case (msg, _) => Some(s"C2-$msg") })
 
     // Fan out: producer -> both consumers
     producer.pipeTo(consumer1.in)
@@ -171,7 +177,7 @@ class ActorIntegrationSpec extends FunSuite {
     val producer2 = Stream[Int]()
     val combinedResults = Signal(Seq.empty[String])
 
-    val consumer = Actor[Int, String, Unit]((), (msg, _) => Some(s"Combined-$msg"))
+    val consumer = create[Int, String, Unit]((), { case (msg, _) => Some(s"Combined-$msg") })
 
     // Fan in: both producers -> consumer
     producer1.pipeTo(consumer.in)
@@ -196,7 +202,7 @@ class ActorIntegrationSpec extends FunSuite {
     val source = Stream[String]()
     val results = Signal(Seq.empty[String])
 
-    val processor = Actor[String, String, Unit]((), (msg, _) => Some(s"default-$msg"))
+    val processor = create[String, String, Unit]((), { case (msg, _) => Some(s"default-$msg") })
 
     source.pipeTo(processor.in)
     processor.out.foreach { msg => results.mutate(_ :+ msg) }
@@ -207,7 +213,7 @@ class ActorIntegrationSpec extends FunSuite {
 
     // Add special behavior for "special" messages via system message
     import processor.SystemMsg
-    val specialBehavior: Actor.PF[String, String, Unit] = { case ("special", _) => Some("SPECIAL") }
+    val specialBehavior: PF[String, String, Unit] = { case ("special", _) => Some("SPECIAL") }
     processor ! SystemMsg.AddBehavior("special", specialBehavior)
     Thread.sleep(200) // Wait for behavior to be added
 
@@ -226,7 +232,7 @@ class ActorIntegrationSpec extends FunSuite {
     val results = Signal(Seq.empty[String])
 
     // Actor that sends responses to out stream
-    val actor = Actor[Int, String, Unit]((), (msg, actor) => {
+    val actor = create[Int, String, Unit]((), { case (msg, actor) =>
       actor.out ! s"Processed-$msg"
       None
     })
@@ -267,7 +273,7 @@ class ActorIntegrationSpec extends FunSuite {
 
     // Create 3 worker actors
     val workers = (1 to 3).map { _ =>
-      Actor[Int, Int, Int](0, (msg, actor) => {
+      create[Int, Int, Int](0, { case (msg, actor) =>
         actor.state = actor.state + msg
         Some(actor.state)
       })
@@ -311,9 +317,9 @@ class ActorIntegrationSpec extends FunSuite {
     val results = Signal(Seq.empty[String])
 
     // Actor with Linear heartbeat
-    val linearActor = Actor[Int, String, Unit]((), (msg, _) => Some(s"Linear-$msg"), HeartBeatStrategy.Linear(50))
+    val linearActor = create[Int, String, Unit]((), { case (msg, _) => Some(s"Linear-$msg") }, HeartBeatStrategy.Linear(50))
     // Actor with Reactive heartbeat
-    val reactiveActor = Actor[String, String, Unit]((), (msg, _) => Some(s"Reactive-$msg"), HeartBeatStrategy.Reactive(100, 2))
+    val reactiveActor = create[String, String, Unit]((), { case (msg, _) => Some(s"Reactive-$msg") }, HeartBeatStrategy.Reactive(100, 2))
 
     // Chain: source -> linear -> reactive -> results
     source.pipeTo(linearActor.in)
