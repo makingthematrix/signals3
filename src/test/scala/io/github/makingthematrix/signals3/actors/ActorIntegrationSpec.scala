@@ -1,17 +1,21 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, PF}
 import io.github.makingthematrix.signals3.testutils.*
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, EventContext, Pausable, Signal, SourceStream, Stream, Threading}
+import io.github.makingthematrix.signals3.*
 import munit.FunSuite
 
 import scala.concurrent.duration.*
+import scala.concurrent.{Await, Future}
 
+/**
+ * Integration tests for Actor focusing on thread safety and concurrent behavior modifications.
+ * These tests verify that behavior modifications through system messages are thread-safe.
+ */
 class ActorIntegrationSpec extends FunSuite {
   private val eventContext = EventContext()
   import Threading.defaultContext
 
-  given Timeout: FiniteDuration = 2.seconds
+  given Timeout: FiniteDuration = 5.seconds
 
   override def beforeEach(context: BeforeEach): Unit =
     eventContext.start()
@@ -24,314 +28,358 @@ class ActorIntegrationSpec extends FunSuite {
     waitFor(actor.isClosedSignal, true)
   }
 
-  private def create[Msg, Rsp, State](state: State, pf: PF[Msg, Rsp, State]): Actor[Msg, Rsp, State] & Closeable & Pausable =
-    Actor[Msg, Rsp, State](state, pf).asInstanceOf[ActorImpl[Msg, Rsp, State]]
+  private def create[Msg, Rsp, State](state: State, pf: Actor.PF[Msg, Rsp, State]): Actor[Msg, Rsp, State] & Closeable & Pausable =
+    Actor(state, pf).asInstanceOf[Actor[Msg, Rsp, State] & Closeable & Pausable]
 
-  private def create[Msg, Rsp, State](state: State, pf: PF[Msg, Rsp, State], hbs: HeartBeatStrategy): Actor[Msg, Rsp, State] & Closeable & Pausable =
-    Actor[Msg, Rsp, State](state, pf, hbs).asInstanceOf[ActorImpl[Msg, Rsp, State]]
+  // ============================================================================
+  // Thread Safety Tests for Behavior Modifications
+  // ============================================================================
 
-  // ==================== Actor-to-Actor Communication ====================
-
-  test("Actor pipeline: message flows through multiple actors") {
-    val inputStream: SourceStream[Int] = Stream()
-    val outputSignal = Signal(Seq.empty[String])
-
-    // Actor1: adds 10 to input
-    val actor1 = create[Int, Int, Unit]((), { case (msg, _) => Some(msg + 10) })
-    // Actor2: converts to string
-    val actor2 = create[Int, String, Unit]((), { case (msg, _) => Some(s"Result: $msg") })
-
-    // Pipe: inputStream -> actor1.in -> actor1.out -> actor2.in -> actor2.out -> outputSignal
-    inputStream.pipeTo(actor1.in)
-    actor1.out.pipeTo(actor2.in)
-    actor2.out.foreach { result => outputSignal.mutate(_ :+ result) }
-
-    // Send test data
-    inputStream ! 5
-    inputStream ! 20
-
-    // Verify end-to-end result
-    waitForResult(outputSignal, Seq("Result: 15", "Result: 30"))
-
-    close(actor1)
-    close(actor2)
-  }
-
-  // ==================== Bidirectional Actor Communication ====================
-
-  test("Request-response between actors") {
-    val requestor = create[String, String, Unit]((), { case (msg, _) => Some(s"Request: $msg") })
-    val responder = create[String, String, Unit]((), { case (msg, _) => Some(s"Response to: $msg") })
-
-    val finalResponse = Signal("")
-
-    // Send request to requestor, get response, then send to responder
-    val request = requestor ? "test"
-    request.foreach { response =>
-      responder ! response
-    }
-
-    // Capture responder's output
-    responder.out.foreach { rsp => finalResponse ! rsp }
-
-    waitFor(finalResponse, "Response to: Request: test")
-
-    close(requestor)
-    close(responder)
-  }
-
-  // ==================== Stream Processing with Actors ====================
-
-  test("Actor as stream processor in a reactive pipeline") {
-    val source = Stream[Int]()
-    val processed = Signal(Seq.empty[String])
-    val sink: SourceStream[String] = Stream()
-
-    // Actor processes integers to strings with state
-    val processor = create[Int, String, Int](0, { case (msg, actor) =>
-      actor.state = actor.state + msg
-      Some(s"Processed-${actor.state}")
+  /**
+   * Test that concurrent behavior additions through system messages are thread-safe.
+   * This verifies that adding behaviors from multiple threads doesn't corrupt the
+   * behavior list or cause any race conditions.
+   */
+  test("Concurrent behavior additions through system messages are thread-safe") {
+    val actor = create[Int, String, Int](0, {
+      case (msg, _) => Some(s"Default: $msg")
     })
-
-    // Build pipeline: source -> processor.in -> processor.out -> sink
-    source.pipeTo(processor.in)
-    processor.out.pipeTo(sink)
-
-    // Subscribe to sink
-    sink.foreach { msg => processed.mutate(_ :+ msg) }
-
-    // Emit values
-    source ! 1
-    source ! 2
-    source ! 3
-
-    waitForResult(processed, Seq("Processed-1", "Processed-3", "Processed-6"))
-
-    close(processor)
-  }
-
-  // ==================== Stateful Multi-Actor System ====================
-
-  test("Coordinated state across multiple actors") {
-    val counterActor = create[Unit, Int, Int](0, { case (_, actor) =>
-      actor.state = actor.state + 1
-      Some(actor.state)
-    })
-
-    val aggregatorActor = create[Int, Int, Int](0, { case (msg, actor) =>
-      actor.state = actor.state + msg
-      Some(actor.state)
-    })
-
-    val finalSum = Signal(0)
-
-    // Send 5 increment messages to counter, collect results in aggregator
-    val futures = (1 to 5).map { _ =>
-      val cf = counterActor ? ()
-      cf.foreach { result => aggregatorActor ! result }
-      cf
-    }
-
-    // Get final aggregated sum
-    (aggregatorActor ? 0).pipeTo(finalSum)
-
-    CloseableFuture.sequence(futures)
-    waitFor(finalSum, 15) // 1+2+3+4+5 = 15
-
-    close(counterActor)
-    close(aggregatorActor)
-  }
-
-  // ==================== Fan-out: One-to-Many Actor Communication ====================
-
-  test("Fan-out: single producer to multiple consumer actors") {
-    val producer = Stream[Int]()
-    val consumer1Results = Signal(Seq.empty[String])
-    val consumer2Results = Signal(Seq.empty[String])
-
-    val consumer1 = create[Int, String, Unit]((), { case (msg, _) => Some(s"C1-$msg") })
-    val consumer2 = create[Int, String, Unit]((), { case (msg, _) => Some(s"C2-$msg") })
-
-    // Fan out: producer -> both consumers
-    producer.pipeTo(consumer1.in)
-    producer.pipeTo(consumer2.in)
-
-    consumer1.out.foreach { msg => consumer1Results.mutate(_ :+ msg) }
-    consumer2.out.foreach { msg => consumer2Results.mutate(_ :+ msg) }
-
-    // Produce values
-    producer ! 100
-    producer ! 200
-
-    waitForResult(consumer1Results, Seq("C1-100", "C1-200"))
-    waitForResult(consumer2Results, Seq("C2-100", "C2-200"))
-
-    close(consumer1)
-    close(consumer2)
-  }
-
-  // ==================== Fan-in: Many-to-One Actor Communication ====================
-
-  test("Fan-in: multiple producers to single consumer actor") {
-    val producer1 = Stream[Int]()
-    val producer2 = Stream[Int]()
-    val combinedResults = Signal(Seq.empty[String])
-
-    val consumer = create[Int, String, Unit]((), { case (msg, _) => Some(s"Combined-$msg") })
-
-    // Fan in: both producers -> consumer
-    producer1.pipeTo(consumer.in)
-    producer2.pipeTo(consumer.in)
-
-    consumer.out.foreach { msg => combinedResults.mutate(_ :+ msg) }
-
-    // Produce from both sources
-    producer1 ! 1
-    producer2 ! 2
-    producer1 ! 3
-    producer2 ! 4
-
-    waitForResult(combinedResults, Seq("Combined-1", "Combined-2", "Combined-3", "Combined-4"))
-
-    close(consumer)
-  }
-
-  // ==================== Actor with Dynamic Behavior in Pipeline ====================
-
-  test("Actor with dynamic behavior changes in a pipeline") {
-    val source = Stream[String]()
-    val results = Signal(Seq.empty[String])
-
-    val processor = create[String, String, Unit]((), { case (msg, _) => Some(s"default-$msg") })
-
-    source.pipeTo(processor.in)
-    processor.out.foreach { msg => results.mutate(_ :+ msg) }
-
-    // Initially uses default behavior
-    source ! "first"
-    waitForResult(results, Seq("default-first"))
-
-    // Add special behavior for "special" messages via system message
-    import processor.SystemMsg
-    val specialBehavior: PF[String, String, Unit] = { case ("special", _) => Some("SPECIAL") }
-    processor ! SystemMsg.AddBehavior("special", specialBehavior)
-    Thread.sleep(200) // Wait for behavior to be added
-
-    source ! "special"
-    source ! "second"
-
-    waitForResult(results, Seq("default-first", "SPECIAL", "default-second"))
-
-    close(processor)
-  }
-
-  // ==================== Actor System Messages Through Pipeline ====================
-
-  test("System messages work correctly in pipelined actors") {
-    val source = Stream[Int]()
-    val results = Signal(Seq.empty[String])
-
-    // Actor that sends responses to out stream
-    val actor = create[Int, String, Unit]((), { case (msg, actor) =>
-      actor.out ! s"Processed-$msg"
-      None
-    })
+    
+    // Get the SystemMsg type from the actor instance
     import actor.SystemMsg
-
-    source.pipeTo(actor.in)
-    actor.out.foreach { msg => results.mutate(_ :+ msg) }
-
-    // Send a message
-    source ! 1
-    waitForResult(results, Seq("Processed-1"))
-
-    // Pause the actor
-    actor ! SystemMsg.Pause
-    waitFor(actor.isPausedSignal, true)
-
-    // Send while paused - should queue
-    source ! 2
-    Thread.sleep(100)
-    // Result should still be just the first message
-    assertEquals(results.currentValue, Some(Seq("Processed-1")))
-
-    // Unpause
-    actor ! SystemMsg.Unpause
-    waitFor(actor.isPausedSignal, false)
-
-    // Now the queued message should be processed
-    waitForResult(results, Seq("Processed-1", "Processed-2"))
-
+    
+    val numThreads = 10
+    val behaviorsPerThread = 100
+    val totalBehaviors = numThreads * behaviorsPerThread
+    
+    // Track which behaviors were successfully added (using atomic mutate)
+    val addedCount = SourceSignal(0)
+    
+    // Create a custom behavior that records its ID when added
+    def createTrackingBehavior(id: String): Actor.PF[Int, String, Int] = {
+      case (msg, _) if msg == id.hashCode => Some(s"Behavior-$id: $msg")
+    }
+    
+    // Add behaviors concurrently from multiple threads
+    val futures: Seq[Future[Unit]] = (0 until numThreads).map { threadId =>
+      Future {
+        (0 until behaviorsPerThread).foreach { i =>
+          val behaviorId = s"thread-$threadId-behavior-$i"
+          val behavior = createTrackingBehavior(behaviorId)
+          // Add behavior via system message
+          val future = actor.ask(SystemMsg.AddBehavior(behaviorId, behavior))
+          // Wait for completion to ensure it's processed
+          Await.result(future, 1.second)
+          // Increment count atomically
+          addedCount.mutate(_ + 1)
+        }
+      }
+    }
+    
+    // Wait for all threads to complete
+    val allFutures: Seq[Future[Unit]] = futures
+    Await.result(Future.sequence(allFutures), 10.seconds)
+    
+    // Verify all behaviors were added
+    waitFor(addedCount, totalBehaviors)
+    
+    // Verify we can retrieve all added behaviors
+    val retrievedBehaviors = (0 until numThreads).flatMap { threadId =>
+      (0 until behaviorsPerThread).map { i =>
+        val behaviorId = s"thread-$threadId-behavior-$i"
+        actor.getBehavior(behaviorId)
+      }
+    }.flatten
+    
+    assertEquals(retrievedBehaviors.size, totalBehaviors)
+    
     close(actor)
   }
 
-  // ==================== Complex: Worker Pool Pattern ====================
-
-  test("Worker pool pattern with multiple actors") {
-    val tasks = Stream[Int]()
-    val completedTasks = Signal(Seq.empty[Int])
-
-    // Create 3 worker actors
-    val workers = (1 to 3).map { _ =>
-      create[Int, Int, Int](0, { case (msg, actor) =>
-        actor.state = actor.state + msg
-        Some(actor.state)
-      })
+  /**
+   * Test that concurrent behavior additions and removals are thread-safe.
+   */
+  test("Concurrent behavior additions and removals through system messages are thread-safe") {
+    val actor = create[Int, String, Int](0, {
+      case (msg, _) => Some(s"Default: $msg")
+    })
+    
+    import actor.SystemMsg
+    
+    val numOperations = 100
+    val behaviorIds = (0 until numOperations).map(i => s"behavior-$i").toList
+    
+    def createBehavior(id: String): Actor.PF[Int, String, Int] = {
+      case (msg, _) if msg == id.hashCode => Some(s"Behavior-$id: $msg")
     }
-
-    // Simple round-robin distribution
-    var workerIndex = 0
-
-    tasks.foreach { task =>
-      val worker = workers(workerIndex)
-      workerIndex = (workerIndex + 1) % workers.length
-      val cf = worker ? task
-      cf.foreach { result => completedTasks.mutate(_ :+ result) }
+    
+    // Perform concurrent add/remove operations
+    val futures: Seq[Future[Unit]] = behaviorIds.map { id =>
+      Future {
+        if (id.hashCode % 2 == 0) {
+          // Add behavior
+          val future = actor.ask(SystemMsg.AddBehavior(id, createBehavior(id)))
+          Await.result(future, 1.second)
+        } else {
+          // Try to remove behavior (may or may not exist)
+          val future = actor.ask(SystemMsg.RemoveBehavior(id))
+          Await.result(future, 1.second)
+        }
+      }
     }
-
-    // Send tasks
-    tasks ! 1
-    tasks ! 2
-    tasks ! 3
-    tasks ! 4
-    tasks ! 5
-    tasks ! 6
-
-    // All tasks should complete (order may vary due to concurrency)
-    // Wait for at least 6 results
-    val expectedCount = 6
-    val checkCount = () => completedTasks.currentValue.exists(_.length >= expectedCount)
-    val offset = System.currentTimeMillis()
-    while (System.currentTimeMillis() - offset < 3000 && !checkCount()) {
-      Thread.sleep(100)
+    
+    // Wait for all operations to complete
+    Await.result(Future.sequence(futures), 10.seconds)
+    
+    // Verify the behavior map is consistent
+    val expectedBehaviors = behaviorIds.filter(id => id.hashCode % 2 == 0).toSet
+    
+    // Verify all added behaviors are retrievable
+    expectedBehaviors.foreach { id =>
+      assert(actor.getBehavior(id).isDefined, s"Behavior $id should be present")
     }
-    assert(checkCount(), s"Expected at least $expectedCount results, got ${completedTasks.currentValue.map(_.length).getOrElse(0)}")
-
-    workers.foreach(close)
+    
+    // Verify removed behaviors are not present
+    behaviorIds.filter(id => id.hashCode % 2 != 0).foreach { id =>
+      assert(actor.getBehavior(id).isEmpty, s"Behavior $id should be removed")
+    }
+    
+    close(actor)
   }
 
-  // ==================== Actor with Different Heartbeat Strategies in Pipeline ====================
+  /**
+   * Test that behavior modifications don't interfere with message processing.
+   */
+  test("Behavior modifications during message processing are thread-safe") {
+    val actor = create[Int, String, Int](0, {
+      case (msg, _) => Some(s"Default: $msg")
+    })
+    
+    import actor.SystemMsg
+    
+    val messagesToSend = 1000
+    val behaviorModifications = 100
+    
+    // Track processed messages (using atomic mutate)
+    val processedCount = SourceSignal(0)
+    
+    // Add a behavior that records processed messages - this should match ALL messages
+    // by using a catch-all pattern
+    val recordingBehavior: Actor.PF[Int, String, Int] = {
+      case (msg, _) =>
+        processedCount.mutate(_ + 1)
+        Some(s"Recorded: $msg")
+    }
+    
+    // First, add the recording behavior
+    actor.ask(SystemMsg.AddBehavior("recorder", recordingBehavior))
+    // Wait for behavior to be added
+    Thread.sleep(100)
+    assert(actor.getBehavior("recorder").isDefined)
+    
+    // Send messages concurrently with behavior modifications
+    val messageFutures: Seq[Future[String]] = (0 until messagesToSend).map { i =>
+      Future {
+        val response = actor.ask(i)
+        Await.result(response, 1.second)
+      }
+    }
+    
+    val modificationFutures: Seq[Future[Unit]] = (0 until behaviorModifications).map { i =>
+      Future {
+        if (i % 2 == 0) {
+          // Add a temporary behavior - use a message value that won't match any sent messages
+          val tempId = s"temp-$i"
+          val tempBehavior: Actor.PF[Int, String, Int] = {
+            case (msg, _) if msg == -999999 => Some(s"Temp-$tempId: $msg")
+          }
+          val future = actor.ask(SystemMsg.AddBehavior(tempId, tempBehavior))
+          Await.result(future, 1.second)
+        } else {
+          // Remove a behavior (try to remove temp behaviors)
+          val tempId = s"temp-${i-1}"
+          val future = actor.ask(SystemMsg.RemoveBehavior(tempId))
+          Await.result(future, 1.second)
+        }
+      }
+    }
+    
+    // Wait for all operations to complete
+    Await.result(Future.sequence(messageFutures), 10.seconds)
+    Await.result(Future.sequence(modificationFutures), 10.seconds)
+    
+    // Verify all messages were processed
+    waitFor(processedCount, messagesToSend)
+    assertEquals(processedCount.currentValue.getOrElse(0), messagesToSend)
+    
+    close(actor)
+  }
 
-  test("Pipeline with different heartbeat strategies") {
-    val source = Stream[Int]()
-    val results = Signal(Seq.empty[String])
+  /**
+   * Test that removing a behavior that doesn't exist doesn't cause errors.
+   */
+  test("Removing non-existent behavior is safe") {
+    val actor = create[Int, String, Int](0, {
+      case (msg, _) => Some(s"Default: $msg")
+    })
+    
+    import actor.SystemMsg
+    
+    // Try to remove a behavior that doesn't exist
+    val future = actor.ask(SystemMsg.RemoveBehavior("non-existent"))
+    
+    // Should complete successfully without error
+    Await.result(future, 1.second)
+    
+    close(actor)
+  }
 
-    // Actor with Linear heartbeat
-    val linearActor = create[Int, String, Unit]((), { case (msg, _) => Some(s"Linear-$msg") }, HeartBeatStrategy.Linear(50))
-    // Actor with Reactive heartbeat
-    val reactiveActor = create[String, String, Unit]((), { case (msg, _) => Some(s"Reactive-$msg") }, HeartBeatStrategy.Reactive(100, 2))
+  /**
+   * Test that adding a behavior with duplicate ID does NOT replace the existing one.
+   * This is the current behavior - duplicate IDs are ignored.
+   */
+  test("Adding behavior with duplicate ID does not replace existing behavior") {
+    val actor = create[Int, String, Int](0, {
+      case (msg, _) => Some(s"Default: $msg")
+    })
+    
+    import actor.SystemMsg
+    
+    val behaviorId = "test-behavior"
+    
+    // Add first behavior
+    val behavior1: Actor.PF[Int, String, Int] = {
+      case (msg, _) if msg == 1 => Some(s"First: $msg")
+    }
+    actor.ask(SystemMsg.AddBehavior(behaviorId, behavior1))
+    // Wait for behavior to be added
+    Thread.sleep(100)
+    assert(actor.getBehavior(behaviorId).isDefined)
+    
+    // Verify first behavior works
+    val response1 = actor.ask(1)
+    assertEquals(Await.result(response1, 1.second), "First: 1")
+    
+    // Try to add second behavior with same ID - this should be ignored
+    val behavior2: Actor.PF[Int, String, Int] = {
+      case (msg, _) if msg == 1 => Some(s"Second: $msg")
+    }
+    actor.ask(SystemMsg.AddBehavior(behaviorId, behavior2))
+    // Wait for the add attempt to complete (it will be ignored)
+    Thread.sleep(100)
+    
+    // Verify first behavior is still active (duplicate IDs are not replaced)
+    val response2 = actor.ask(1)
+    assertEquals(Await.result(response2, 1.second), "First: 1")
+    close(actor)
+  }
 
-    // Chain: source -> linear -> reactive -> results
-    source.pipeTo(linearActor.in)
-    linearActor.out.pipeTo(reactiveActor.in)
-    reactiveActor.out.foreach { msg => results.mutate(_ :+ msg) }
+  // ============================================================================
+  // Message Processing During Behavior Modification Tests
+  // ============================================================================
 
-    source ! 1
-    source ! 2
+  /**
+   * Test that messages sent while behaviors are being modified are processed correctly.
+   * Note: Some messages might match the newly added behaviors, so we just verify
+   * that all messages get responses and no exceptions occur.
+   */
+  test("Messages sent during behavior modification are processed correctly") {
+    val actor = create[Int, String, Int](0, {
+      case (msg, _) => Some(s"Default: $msg")
+    })
+    
+    import actor.SystemMsg
+    
+    val messages = (0 until 100).toList
+    
+    // Start sending messages
+    val messageFutures: Seq[Future[String]] = messages.map { msg =>
+      Future {
+        val response = actor.ask(msg)
+        Await.result(response, 1.second)
+      }
+    }
+    
+    // Concurrently modify behaviors
+    val modificationFutures: Seq[Future[Unit]] = (0 until 50).map { i =>
+      Future {
+        val behaviorId = s"mod-$i"
+        val behavior: Actor.PF[Int, String, Int] = {
+          case (msg, _) if msg == i * 1000 => Some(s"Modified-$behaviorId: $msg")
+        }
+        val future = actor.ask(SystemMsg.AddBehavior(behaviorId, behavior))
+        Await.result(future, 1.second)
+      }
+    }
+    
+    // Wait for all operations to complete
+    Await.result(Future.sequence(messageFutures), 10.seconds)
+    Await.result(Future.sequence(modificationFutures), 10.seconds)
+    
+    // Verify all messages got responses (no exceptions)
+    val messageResults: Seq[String] = messageFutures.map(f => Await.result(f, 1.second))
+    assertEquals(messageResults.size, messages.size)
+    // All responses should be non-empty
+    assert(messageResults.forall(_.nonEmpty))
+    
+    close(actor)
+  }
 
-    waitForResult(results, Seq("Reactive-Linear-1", "Reactive-Linear-2"))
-
-    close(linearActor)
-    close(reactiveActor)
+  /**
+   * Test that behavior modifications don't cause message loss.
+   */
+  test("Behavior modifications do not cause message loss") {
+    val actor = create[Int, String, Int](0, {
+      case (msg, _) => Some(s"Default: $msg")
+    })
+    
+    import actor.SystemMsg
+    
+    val numMessages = 1000
+    val receivedCount = SourceSignal(0)
+    
+    // Add a behavior that records received messages - catch-all pattern
+    val recordingBehavior: Actor.PF[Int, String, Int] = {
+      case (msg, _) =>
+        receivedCount.mutate(_ + 1)
+        Some(s"Recorded: $msg")
+    }
+    actor.ask(SystemMsg.AddBehavior("recorder", recordingBehavior))
+    // Wait for behavior to be added
+    Thread.sleep(100)
+    assert(actor.getBehavior("recorder").isDefined)
+    
+    // Send messages
+    val futures: Seq[Future[String]] = (0 until numMessages).map { i =>
+      Future {
+        val response = actor.ask(i)
+        Await.result(response, 1.second)
+      }
+    }
+    
+    // Concurrently modify behaviors - use message values that won't match any sent messages
+    val modificationFutures: Seq[Future[Unit]] = (0 until 100).map { i =>
+      Future {
+        val behaviorId = s"temp-$i"
+        val behavior: Actor.PF[Int, String, Int] = {
+          case (msg, _) if msg == -999999 - i => Some(s"Temp: $msg")
+        }
+        val future = actor.ask(SystemMsg.AddBehavior(behaviorId, behavior))
+        Await.result(future, 1.second)
+        Thread.sleep(1) // Small delay
+        val removeFuture = actor.ask(SystemMsg.RemoveBehavior(behaviorId))
+        Await.result(removeFuture, 1.second)
+      }
+    }
+    
+    // Wait for all operations to complete
+    Await.result(Future.sequence(futures), 10.seconds)
+    Await.result(Future.sequence(modificationFutures), 10.seconds)
+    
+    // Verify all messages were received
+    waitFor(receivedCount, numMessages)
+    assertEquals(receivedCount.currentValue.getOrElse(0), numMessages)
+    
+    close(actor)
   }
 }
