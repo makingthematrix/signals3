@@ -161,6 +161,8 @@ trait Actor[Msg, Rsp, State] {
 	def isInitializedSignal(using ExecutionContext): Signal[Boolean]
 	
 	def isInitialized: Boolean
+
+	val isSerial: Boolean
 }
 
 /**
@@ -226,7 +228,7 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	// the next agitation time of the actor in milliseconds); used to determine the interval between beats when using the Agitated heartbeat strategy.
 	private var nextAgitation: Long = 0L
 
-	private val isSerial: Boolean = ec.isInstanceOf[SerialDispatchQueue]
+	override val isSerial: Boolean = ec.isInstanceOf[SerialDispatchQueue]
 
 	inline private def enqueue(entry: MsgEntry): Unit = msgs.updateAndGet(_ :+ entry)
 
@@ -437,12 +439,13 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 	}
 
 	private def shutdown(): Future[Unit] = {
-		dequeueMsgs().collect { case (_, Some(p), _) => p }.foreach(_.tryFailure(actorIsClosed))
-		dequeueSystemMsgs().collect { case (_, Some(p)) => p }.foreach(_.tryFailure(actorIsClosed))
-		beat.closeAndCheck()
+		super.closeAndCheck()
 		in.close()
 		out.close()
-		beat.isClosedSignal.onTrue.map(_ => super.closeAndCheck())
+		beat.closeAndCheck()
+		dequeueMsgs().collect { case (_, Some(p), _) => p }.foreach(_.tryFailure(actorIsClosed))
+		dequeueSystemMsgs().collect { case (_, Some(p)) => p }.foreach(_.tryFailure(actorIsClosed))
+		beat.isClosedSignal.onTrue
 	}
 
 	override def state: State = _state

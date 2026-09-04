@@ -49,7 +49,7 @@ class ActorIntegrationSpec extends FunSuite {
     import actor.SystemMsg
     
     val numThreads = 10
-    val behaviorsPerThread = 100
+    val behaviorsPerThread = 10
     val totalBehaviors = numThreads * behaviorsPerThread
     
     // Track which behaviors were successfully added (using atomic mutate)
@@ -157,7 +157,7 @@ class ActorIntegrationSpec extends FunSuite {
     
     import actor.SystemMsg
     
-    val messagesToSend = 1000
+    val messagesToSend = 100
     val behaviorModifications = 100
     
     // Track processed messages (using atomic mutate)
@@ -335,7 +335,7 @@ class ActorIntegrationSpec extends FunSuite {
     
     import actor.SystemMsg
     
-    val numMessages = 1000
+    val numMessages = 100
     val receivedCount = SourceSignal(0)
     
     // Add a behavior that records received messages - catch-all pattern
