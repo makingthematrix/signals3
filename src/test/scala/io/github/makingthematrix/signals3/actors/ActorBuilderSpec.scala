@@ -1,13 +1,10 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.actors.Actor.PF
 import io.github.makingthematrix.signals3.testutils.*
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, EventContext, Pausable, Signal, SourceStream, Stream, Threading}
+import io.github.makingthematrix.signals3.*
 import munit.FunSuite
 
-import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.*
-import scala.util.Try
 
 class ActorBuilderSpec extends FunSuite {
   private val eventContext = EventContext()
@@ -224,20 +221,7 @@ class ActorBuilderSpec extends FunSuite {
     assertEquals(resultCF(response2), "Processed: 42")
     close(actor2)
   }
-
-  test("ActorBuilder create method works") {
-    val actor = buildActor(
-      ActorBuilder.create[Int, String, Int](0)
-        .withBehavior {
-          case (msg, _) => Some(s"Processed: $msg")
-        }
-    )
-
-    val response = actor ? 42
-    assertEquals(resultCF(response), "Processed: 42")
-    close(actor)
-  }
-
+  
   test("ActorBuilder with all options configured") {
     var initCalled = false
 

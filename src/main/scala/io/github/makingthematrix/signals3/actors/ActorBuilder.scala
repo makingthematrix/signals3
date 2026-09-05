@@ -1,53 +1,16 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.DispatchQueue
-import scala.annotation.targetName
-import scala.concurrent.ExecutionContext
 
 import java.util.UUID
+import scala.concurrent.ExecutionContext
 
-/**
- * Builder for creating Actor instances with a fluent API.
- *
- * This builder provides a clean, type-safe way to configure and create actors without
- * needing to remember the many overloaded factory method signatures. All configuration
- * options can be chained together in a readable, declarative style.
- *
- * @tparam Msg   The type of incoming messages
- * @tparam Rsp   The type of responses
- * @tparam State The type of internal state
- *
- * @example Basic usage:
- * {{{
- * val actor = ActorBuilder[Int, String, Int](0)
- *   .withBehavior {
- *     case (msg, actor) => Some(s"Processed: $msg")
- *   }
- *   .build()
- * }}}
- *
- * @example With multiple behaviors and custom heartbeat:
- * {{{
- * val actor = ActorBuilder[Int, String, Int](0)
- *   .withBehavior("special", {
- *     case (42, _) => Some("The answer!")
- *   })
- *   .withBehavior {
- *     case (msg, _) => Some(s"Default: $msg")
- *   }
- *   .withReactiveHeartbeat(50, 10)
- *   .build()
- * }}}
- */
-final class ActorBuilder[Msg, Rsp, State] private[
-  ActorBuilder
-] (
+final class ActorBuilder[Msg, Rsp, State] (
   private val state: State,
   private val behaviors: List[Actor.Beh[Msg, Rsp, State]],
   private val heartbeat: Actor.HeartBeatStrategy,
   private val onInit: Option[MutableActor[Msg, Rsp, State] => Unit],
-  private val useSerialDispatch: Boolean,
-  private val executionContext: Option[ExecutionContext]
+  private val useSerialDispatch: Boolean
 ) {
 
   /**
@@ -57,14 +20,7 @@ final class ActorBuilder[Msg, Rsp, State] private[
    * @return A new builder with the updated state
    */
   def withState(newState: State): ActorBuilder[Msg, Rsp, State] =
-    new ActorBuilder(
-      newState,
-      behaviors,
-      heartbeat,
-      onInit,
-      useSerialDispatch,
-      executionContext
-    )
+    new ActorBuilder(newState, behaviors, heartbeat, onInit, useSerialDispatch)
 
   /**
    * Adds a behavior with an explicit ID.
@@ -92,14 +48,7 @@ final class ActorBuilder[Msg, Rsp, State] private[
    * @return A new builder with the added behavior
    */
   def withBehavior(behavior: Actor.Beh[Msg, Rsp, State]): ActorBuilder[Msg, Rsp, State] =
-    new ActorBuilder(
-      state,
-      behavior :: behaviors,
-      heartbeat,
-      onInit,
-      useSerialDispatch,
-      executionContext
-    )
+    new ActorBuilder(state, behavior :: behaviors, heartbeat, onInit, useSerialDispatch)
 
   /**
    * Adds multiple behaviors with explicit IDs.
@@ -108,14 +57,7 @@ final class ActorBuilder[Msg, Rsp, State] private[
    * @return A new builder with the added behaviors
    */
   def withBehaviors(newBehaviors: Iterable[Actor.Beh[Msg, Rsp, State]]): ActorBuilder[Msg, Rsp, State] =
-    new ActorBuilder(
-      state,
-      newBehaviors.toList ::: behaviors,
-      heartbeat,
-      onInit,
-      useSerialDispatch,
-      executionContext
-    )
+    new ActorBuilder(state, newBehaviors.toList ::: behaviors, heartbeat, onInit, useSerialDispatch)
 
   /**
    * Adds multiple behaviors with auto-generated IDs.
@@ -123,8 +65,7 @@ final class ActorBuilder[Msg, Rsp, State] private[
    * @param newBehaviors A collection of partial functions to add
    * @return A new builder with the added behaviors
    */
-  @targetName("withBehaviorsPF")
-  def withBehaviors(newBehaviors: Iterable[Actor.PF[Msg, Rsp, State]]): ActorBuilder[Msg, Rsp, State] =
+  def withBehaviorPFs(newBehaviors: Iterable[Actor.PF[Msg, Rsp, State]]): ActorBuilder[Msg, Rsp, State] =
     withBehaviors(newBehaviors.map(pf => ActorBuilder.generateId() -> pf))
 
   /**
@@ -134,14 +75,7 @@ final class ActorBuilder[Msg, Rsp, State] private[
    * @return A new builder with the updated heartbeat strategy
    */
   def withHeartbeat(newHeartbeat: Actor.HeartBeatStrategy): ActorBuilder[Msg, Rsp, State] =
-    new ActorBuilder(
-      state,
-      behaviors,
-      newHeartbeat,
-      onInit,
-      useSerialDispatch,
-      executionContext
-    )
+    new ActorBuilder(state, behaviors, newHeartbeat, onInit, useSerialDispatch)
 
   /**
    * Sets a linear heartbeat strategy with the specified interval.
@@ -163,11 +97,7 @@ final class ActorBuilder[Msg, Rsp, State] private[
    * @param maxMs  The maximum interval in milliseconds
    * @return A new builder with the agitated heartbeat strategy
    */
-  def withAgitatedHeartbeat(
-    minMs: Long,
-    coeff: Double,
-    maxMs: Long
-  ): ActorBuilder[Msg, Rsp, State] =
+  def withAgitatedHeartbeat(minMs: Long, coeff: Double, maxMs: Long): ActorBuilder[Msg, Rsp, State] =
     withHeartbeat(Actor.HeartBeatStrategy.Agitated(minMs, coeff, maxMs))
 
   /**
@@ -179,10 +109,7 @@ final class ActorBuilder[Msg, Rsp, State] private[
    * @param maxMsgs  The maximum number of messages to queue before triggering
    * @return A new builder with the reactive heartbeat strategy
    */
-  def withReactiveHeartbeat(
-    maxMs: Long,
-    maxMsgs: Int
-  ): ActorBuilder[Msg, Rsp, State] =
+  def withReactiveHeartbeat(maxMs: Long, maxMsgs: Int): ActorBuilder[Msg, Rsp, State] =
     withHeartbeat(Actor.HeartBeatStrategy.Reactive(maxMs, maxMsgs))
 
   /**
@@ -194,151 +121,42 @@ final class ActorBuilder[Msg, Rsp, State] private[
    * @param callback The function to call on initialization
    * @return A new builder with the initialization callback
    */
-  def withOnInit(
-    callback: MutableActor[Msg, Rsp, State] => Unit
-  ): ActorBuilder[Msg, Rsp, State] =
-    new ActorBuilder(
-      state,
-      behaviors,
-      heartbeat,
-      Some(callback),
-      useSerialDispatch,
-      executionContext
-    )
+  def withOnInit(callback: MutableActor[Msg, Rsp, State] => Unit): ActorBuilder[Msg, Rsp, State] =
+    new ActorBuilder(state, behaviors, heartbeat, Some(callback), useSerialDispatch)
 
   /**
    * Configures the actor to use a serial dispatch queue.
    *
-   * Serial dispatch ensures that messages are processed one at a time
-   * in the order they are received, with reduced overhead.
+   * Serial dispatch ensures that messages are processed one at a time in the order they are received, with reduced overhead.
    *
    * @return A new builder configured for serial dispatch
    */
   def withSerialDispatch(): ActorBuilder[Msg, Rsp, State] =
-    new ActorBuilder(
-      state,
-      behaviors,
-      heartbeat,
-      onInit,
-      useSerialDispatch = true,
-      executionContext
-    )
+    new ActorBuilder(state, behaviors, heartbeat, onInit, useSerialDispatch = true)
 
-  /**
-   * Sets a custom execution context.
-   *
-   * @param ec The execution context to use
-   * @return A new builder with the custom execution context
-   */
-  def withExecutionContext(ec: ExecutionContext): ActorBuilder[Msg, Rsp, State] =
-    new ActorBuilder(
-      state,
-      behaviors,
-      heartbeat,
-      onInit,
-      useSerialDispatch,
-      Some(ec)
-    )
-
-  /**
-   * Builds the actor with the configured settings.
-   *
-   * This method selects the appropriate factory method based on the configuration:
-   * - Serial vs non-serial dispatch
-   * - Single behavior vs multiple behaviors
-   * - Presence of onInit callback
-   *
-   * Note: For serial dispatch, the ExecutionContext is ignored as serial actors
-   * always use ExecutionContext.global internally.
-   *
-   * @param ec The execution context to use for non-serial dispatch
-   * @return A new Actor instance configured with all the builder settings
-   */
-  def build()(using ec: ExecutionContext): Actor[Msg, Rsp, State] = {
-    // Behaviors are prepended in the builder, so the list is in reverse order of addition.
-    // addBehaviors prepends the list to the actor's behaviors, so we need to keep the order.
-    // The Actor processes behaviors in the order they appear in the list (first match wins).
-    // Since we prepend in the builder, the list is [last, ..., first].
-    // When addBehaviors prepends this to the actor, it becomes [last, ..., first].
-    // So the last added behavior will be checked first (LIFO).
-    val finalBehaviors = behaviors
-
-    if (useSerialDispatch) {
-      // Note: Serial actors use ExecutionContext.global internally
-      // The custom EC and onInit EC are ignored for serial dispatch
-      buildSerial(finalBehaviors)
-    } else {
-      buildParallel(finalBehaviors, ec)
-    }
-  }
-
-  /**
-   * Alias for build().
-   *
-   * @param ec The execution context to use for non-serial dispatch
-   * @return A new Actor instance
-   */
-  def buildAsync()(using ec: ExecutionContext): Actor[Msg, Rsp, State] = build()
+  def build()(using ec: ExecutionContext): Actor[Msg, Rsp, State] = 
+    if (useSerialDispatch) buildSerial() else buildParallel(ec)
 
   /**
    * Builds an actor using serial dispatch.
    *
-   * Note: Serial actors always use ExecutionContext.global internally,
-   * so the custom execution context is ignored for serial dispatch.
+   * Note: Serial actors always use ExecutionContext.global internally so the custom execution context is ignored for serial dispatch.
    */
-  private def buildSerial(
-    finalBehaviors: List[Actor.Beh[Msg, Rsp, State]]
-  ): Actor[Msg, Rsp, State] = {
-    import Actor.PF
-
-    (finalBehaviors, onInit) match {
-      // Single behavior, no onInit
-      case (beh :: Nil, None) =>
-        Actor.serial[Msg, Rsp, State](state, beh, heartbeat)
-
-      // Single behavior, with onInit
-      case (beh :: Nil, Some(init)) =>
-        Actor.serial[Msg, Rsp, State](state, beh, heartbeat, init)
-
-      // Multiple behaviors, no onInit
-      case (_, None) =>
-        Actor.serial[Msg, Rsp, State](state, extractPFs(finalBehaviors), heartbeat)
-
-      // Multiple behaviors, with onInit
-      case (_, Some(init)) =>
-        Actor.serial[Msg, Rsp, State](state, extractPFs(finalBehaviors), heartbeat, init)
-    }
+  private def buildSerial(): Actor[Msg, Rsp, State] = (behaviors, onInit) match {
+    case (beh :: Nil, None)       => Actor.serial(state, beh, heartbeat) // Single behavior, no onInit
+    case (beh :: Nil, Some(init)) => Actor.serial(state, beh, heartbeat, init) // Single behavior, with onInit
+    case (_, None)                => Actor.serial(state, extractPFs(behaviors), heartbeat) // Multiple behaviors, no onInit
+    case (_, Some(init))          => Actor.serial(state, extractPFs(behaviors), heartbeat, init) // Multiple behaviors, with onInit
   }
 
   /**
    * Builds an actor using parallel (non-serial) dispatch.
    */
-  private def buildParallel(
-    finalBehaviors: List[Actor.Beh[Msg, Rsp, State]],
-    ec: ExecutionContext
-  ): Actor[Msg, Rsp, State] = {
-    import Actor.PF
-
-    (finalBehaviors, onInit) match {
-      // Single behavior, no onInit
-      case (beh :: Nil, None) =>
-        Actor[Msg, Rsp, State](state, beh, heartbeat)(using ec)
-
-      // Single behavior, with onInit
-      case (beh :: Nil, Some(init)) =>
-        Actor[Msg, Rsp, State](state, beh, heartbeat, init)(using ec)
-
-      // Multiple behaviors, no onInit
-      case (_, None) =>
-        Actor[Msg, Rsp, State](state, extractPFs(finalBehaviors), heartbeat)(using ec)
-
-      // Multiple behaviors, with onInit
-      case (_, Some(init)) =>
-        Actor[Msg, Rsp, State](state, extractPFs(finalBehaviors), heartbeat, init)(
-          using
-            ec
-        )
-    }
+  private def buildParallel(ec: ExecutionContext): Actor[Msg, Rsp, State] = (behaviors, onInit) match {
+    case (beh :: Nil, None)       => Actor(state, beh, heartbeat)(using ec) // Single behavior, no onInit
+    case (beh :: Nil, Some(init)) => Actor(state, beh, heartbeat, init)(using ec) // Single behavior, with onInit
+    case (_, None)                => Actor(state, extractPFs(behaviors), heartbeat)(using ec) // Multiple behaviors, no onInit
+    case (_, Some(init))          => Actor(state, extractPFs(behaviors), heartbeat, init)(using ec) // Multiple behaviors, with onInit
   }
 
   /**
@@ -363,25 +181,7 @@ object ActorBuilder {
    * @return A new ActorBuilder instance
    */
   def apply[Msg, Rsp, State](state: State): ActorBuilder[Msg, Rsp, State] =
-    new ActorBuilder(
-      state,
-      Nil,
-      Actor.defBeat,
-      None,
-      useSerialDispatch = false,
-      None
-    )
-
-  /**
-   * Alias for apply().
-   *
-   * @tparam Msg   The type of incoming messages
-   * @tparam Rsp   The type of responses
-   * @tparam State The type of internal state
-   * @param state  The initial state of the actor
-   * @return A new ActorBuilder instance
-   */
-  def create[Msg, Rsp, State](state: State): ActorBuilder[Msg, Rsp, State] = apply(state)
+    new ActorBuilder(state, Nil, Actor.defBeat, None, useSerialDispatch = false)
 
   /**
    * Generates a unique ID for behaviors.
@@ -420,12 +220,10 @@ object ActorBuilder {
   /**
    * Agitated heartbeat with 50ms min, 1.5x growth, 500ms max.
    */
-  val Agitated50to500: Actor.HeartBeatStrategy =
-    Actor.HeartBeatStrategy.Agitated(50L, 1.5, 500L)
+  val Agitated50to500: Actor.HeartBeatStrategy = Actor.HeartBeatStrategy.Agitated(50L, 1.5, 500L)
 
   /**
    * Agitated heartbeat with 100ms min, 2x growth, 1000ms max.
    */
-  val Agitated100to1000: Actor.HeartBeatStrategy =
-    Actor.HeartBeatStrategy.Agitated(100L, 2.0, 1000L)
+  val Agitated100to1000: Actor.HeartBeatStrategy = Actor.HeartBeatStrategy.Agitated(100L, 2.0, 1000L)
 }
