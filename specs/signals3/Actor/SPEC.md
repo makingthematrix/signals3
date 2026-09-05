@@ -139,6 +139,8 @@ Defined in the companion object:
 
 All factory methods are in the `Actor` companion object. They return `Actor[Msg, Rsp, State]` which is actually an `ActorImpl` (private implementation) that extends `Closeable` and `Pausable`.
 
+**Note**: For a more convenient way to create actors, see the `ActorBuilder` class (spec: `signals3-actor-builder`), which provides a fluent API that consolidates all factory method combinations.
+
 ```scala
 // With ExecutionContext (implicit)
 Actor[Msg, Rsp, State](state, pf: PF[Msg, Rsp, State])(using ExecutionContext)
