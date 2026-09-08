@@ -383,7 +383,6 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 				case Some(pf)             => Try(Await.result(Future { pf(msg, this) }, heartbeat.timeout))
 				case _                    => Ignored[Rsp]
 			}
-
 			pOpt.foreach(p => try {
 				res match {
 					case Success(Some(rsp)) => p.tryComplete(Try(rsp))
@@ -408,9 +407,7 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 			beat.foreach(_ => processMessages())
 			initialized.set(true)
 		} finally {
-			if (!isInitialized) {
-				try closeAndCheck() catch {case _: Throwable =>}
-			}
+			if (!isInitialized) closeAndCheck()
 		}
 
 	private var _onInit: List[MutableActor[Msg, Rsp, State] => Unit] = Nil
@@ -472,8 +469,8 @@ object Actor {
 	// todo: onInit function that the actor can use, for example, to send out messages that it's alive v
 	// todo: remove finalBehavior; unprocessed messages are ignored v
 	// todo: serial actors can have fewer safe-guards (and in fact they should have)  v
+	// todo: ActorBuilder v
 
-	// todo: ActorBuilder
 	// todo: spawning sub-actors that are closed with the parent
 	// todo: HealthCheck system message, sent from the parent to the child; if the child doesn't respond in time, the message is repeated, and the the child is closed
 	// todo: consider to allow the children to use different types of messages ; and then: clusters? persistance?
@@ -481,6 +478,60 @@ object Actor {
 	// todo: similarly about metrics
 	// todo: and about the max number of messages processed per heartbeat
 	// todo: make constants configurable through environment variables
+
+	/**
+		* Persistence requires serialization of the actor state and behaviors' ids. For simplicity, we may assume that unprocessed messages are ignored.
+		* But if we persist only the behaviors' ids, it means that there needs to be somewhere a hardcoded dictionary of behaviors that
+		* we access at deserialization and take the PFs from. In vanilla Scala, PFs cannot be serialized, unlike e.g. Lua or Python,
+		* that is interpreted languages where we can simply keep PFs' source code stored somewhere and load it in when needed.
+		* (What are the ways to persist PFs in Scala?)
+		*
+		* Persistence of a parent requires persitence of the children. That means, we need to assign certain ids to the actors -
+		* we can't persist JVM references. We can even generate such ids at the moment of actor creation. And that helps us also
+		* with another issue.
+		*
+		* Ideally, the Actor model allows us to create a layer of abstraction where we don't care anymore if another actor is
+		* on the same server. We may start an Actor app on two servers, and let them talk to each to other via some API
+		* in such a way that when one actor sends a message to another, that message is serialized and sent over the network.
+		* At the receiver's server the message is deserialized and delivered as if it was sent from someone on the same server.
+		*
+		* If we knew that all actors are on the same server, we could simply use JVM references to deliver messages. But if
+		* they can be spread out on different machines, we need to use actors' unique ids, similar to how we need them to
+		* serialize and deserialize parent-children connections.
+		*
+		* Okay, but I left out one important detail. There needs to be an entity on every server that given the id is able to
+		* find the actor, and we need a sort of a higher level reference that consists of the id of the actor which we want to
+		* contact and an actual reference to that intermediary entity. Just for simplicity, let's call the higher level
+		* reference ActorRef, and the entity ActorDictionary. ActorDictionary can be implemented as a separate entity that
+		* is responsible for mapping actor ids to actual actor references, but it can also be the top-level actor on each
+		* server with special logic responsible for transferring messages.
+		*
+		* When a new actor is created, it's added as a child to ActorDictionary or as a child to another child of ActorDictionary,
+		* or further down the line, and its id and JVM reference is sent to ActorDictionary. Furthermore, if there is another
+		* Actor app on another server, that's already connected, ActorDictionary will share that id together with its own id,
+		* i.e. ths server's app id, with its counterpart from that other app. And in the same way, it receives ids of new actors
+		* living on that other server.
+		*
+		* When we call `actorRef ! msg`, we actually call `actorDict.transfer(actorId, msg)`. That actorDict then finds out
+		* to which server `actorId` belongs to. If it's on the same server, then actorDict has its JVM reference and can
+		* transfer `msg` directly. If not, it will serialize `msg` and send it to that other server together with the id of
+		* the receiver.
+		*
+		* But that's slow, right? If we only run one server, this layer of abstraction is completely unnecessary and it slows
+		* down sending and receiving messages. At the same time, we would like to keep using the same functionality: we're
+		* already used to it and there might be a possibility that in the future we would like to scale up our system, meaning
+		* we could start our Actor app on multiple servers.
+		*
+		* One solution we could use is to have different subclasses of ActorRef. Before an actor can contact another, it first
+		* needs to request its ActorRef from ActorDictionary. At that point ActorDictionary can decide: if the requested actor
+		* is on the same server, it can return a subclass of ActorRef that contains that actor's JVM reference, and so
+		* `actorRef ! msg` will turn simply into `actor ! msg` - maybe with some additional checks to make sure that the actor
+		* is still alive. If the requested actor is on a different server, ActorDictionary can return a subclass of ActorRef
+		* that contains the id of the requested actor and the id of the server it's on. In that case, `actorRef ! msg` will
+		* turn into a call to `actorDict.transfer(actorId, msg)` - which will serialize `msg` and send it to that other server
+		* together with the id of the receiver.
+		*
+		*/
 
 	@static private val noResponse: Failure[Nothing] = Failure[Nothing](new IllegalStateException("No response"))
 	@static private val ignored: Success[Option[Nothing]] = Success[Option[Nothing]](None)
