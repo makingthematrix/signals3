@@ -47,12 +47,24 @@ trait Actor[Msg, Rsp, State] {
 		*/
 	enum SystemMsg {
 		case Pause, Unpause, Close
+		case Done
+		case InvalidId
 		case AddBehavior(id: String, pf: PF[Msg, Rsp, State])
 		case RemoveBehavior(id: String)
 		case AddPF(pf: PF[Msg, Rsp, State]) // use instead of AddBehavior if you don't care about persistence of behaviors
-		case GetRef(ref: ActorRef[Msg, Rsp])
+		case Spawn(id: String = "",
+			         state: Option[State] = None,
+			         behaviors: List[Actor.Beh[Msg, Rsp, State]] = Nil,
+			         heartbeat: Option[Actor.HeartBeatStrategy] = None,
+			         onInit: Option[MutableActor[Msg, Rsp, State] => Unit] = None,
+			         useSerialDispatch: Boolean = false,
+			         executionContext: Option[ExecutionContext] = None,
+		          )
+		case NewChild(child: Actor[Msg, Rsp, State])
+		case ActorClosed(id: String)
+/*		case GetRef(ref: ActorRef[Msg, Rsp])
 		case Register(actor: Actor[Msg, Rsp, State])
-		case AskForRef(actor: Actor[Msg, Rsp, State], id: String)
+		case AskForRef(actor: Actor[Msg, Rsp, State], id: String)*/
 	}
 	
 	def id: String
@@ -93,8 +105,8 @@ trait Actor[Msg, Rsp, State] {
 		* @param msg the message to send to the actor.
 		* @return a `CloseableFuture` of the type `Unit`.
 		*/
-	def ask(msg: SystemMsg): CloseableFuture[Unit]
-	inline def ?(msg: SystemMsg): CloseableFuture[Unit] = ask(msg)
+	def ask(msg: SystemMsg): CloseableFuture[SystemMsg]
+	inline def ?(msg: SystemMsg): CloseableFuture[SystemMsg] = ask(msg)
 
 	/**
 		* Sends a message to the actor, expecting a response in the form of a `CloseableFuture`.
@@ -176,6 +188,8 @@ trait Actor[Msg, Rsp, State] {
 	def isPaused: Boolean
 	
 	def isPausedSignal: Signal[Boolean]
+
+	def parent: Option[Actor[Msg, Rsp, State]]
 }
 
 /**
@@ -217,14 +231,16 @@ trait MutableActor[Msg, Rsp, State] extends Actor[Msg, Rsp, State] {
 	*/
 private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 	                                               private var _state: State,
-                                                 override protected val heartbeat: HeartBeatStrategy = Actor.defBeat)
+                                                 override protected val heartbeat: HeartBeatStrategy = Actor.defBeat,
+                                                 private var _parent: Option[Actor[Msg, Rsp, State]] = None)
                                                 (using ec: ExecutionContext)
 	extends MutableActor[Msg, Rsp, State] with Closeable with Pausable {
 	import HeartBeatStrategy.*
-
 	private type MsgEntry = (msg: Msg, rsp: Option[Promise[Rsp]], behId: String)
-	private type SysEntry = (msg: SystemMsg, rsp: Option[Promise[Unit]])
-	
+	private type SysEntry = (msg: SystemMsg, rsp: Option[Promise[SystemMsg]])
+
+	private var children: Map[String, Actor[Msg, Rsp, State]] = Map.empty
+
 	// a mutable queue of messages incoming from other actors and other sources; see the ! operator.
 	private val msgs         = new AtomicReference[MQueue[MsgEntry]](MQueue.empty)
 	// a stream that serves as a single entry for the msgs list to prevent concurrent modification; see the "!" operator.
@@ -243,6 +259,8 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 	private var nextAgitation: Long = 0L
 
 	override val isSerial: Boolean = ec.isInstanceOf[SerialDispatchQueue]
+
+	override def parent: Option[Actor[Msg, Rsp, State]] = _parent
 
 	inline private def enqueue(entry: MsgEntry): Unit = msgs.updateAndGet(_ :+ entry)
 
@@ -334,11 +352,11 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		behMap ++= newBehs
 	}
 
-	override def ask(msg: SystemMsg): CloseableFuture[Unit] = if (!isClosed) {
-		val p = Promise[Unit]()
+	override def ask(msg: SystemMsg): CloseableFuture[SystemMsg] = if (!isClosed) {
+		val p = Promise[SystemMsg]()
 		systemStream ! (msg, Some(p))
 		CloseableFuture.from(p)
-	} else ActorIsClosed[Unit]
+	} else ActorIsClosed[SystemMsg]
 
 	override def ask(behId: String, msg: Msg): CloseableFuture[Rsp] = if (!isClosed) {
 		val p = Promise[Rsp]()
@@ -368,19 +386,40 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 	// Processes system messages; should NOT be called directly - always from `processMessages`
 	private def processSystemMessages(): Unit = {
 		import SystemMsg.*
-		inline def success(pOpt: Option[Promise[Unit]]): Unit = pOpt.foreach(p => Try(p.tryComplete(Success(()))))
+		inline def success(pOpt: Option[Promise[SystemMsg]], rsp: SystemMsg): Unit = pOpt.foreach(p => Try(p.tryComplete(Success(rsp))))
 		val systemMsgs = dequeueSystemMsgs()
 		while (systemMsgs.nonEmpty) systemMsgs.dequeue() match {
-			case (Pause, p)               => pause(); success(p)
-			case (Unpause, p)             => unpause(); success(p)
-			case (Close, p)               => if (p.isEmpty) close() else p.foreach(_.completeWith(shutdown()))
-			case (AddBehavior(id, pf), p) => addBehavior(id, pf); success(p)
-			case (RemoveBehavior(id), p)  => removeBehavior(id); success(p)
-			case (AddPF(pf), p)           => addBehavior(pf); success(p)
-			case (SystemMsg.GetRef(_), _) => ???
+			case (Pause, p)               => pause(); success(p, Done)
+			case (Unpause, p)             => unpause(); success(p, Done)
+			case (Close, p)               => if (p.isEmpty) close() else p.foreach(_.completeWith(shutdown().map(_ => Done)))
+			case (AddBehavior(id, pf), p) => addBehavior(id, pf); success(p, Done)
+			case (RemoveBehavior(id), p)  => removeBehavior(id); success(p, Done)
+			case (AddPF(pf), p)           => addBehavior(pf); success(p, Done)
+			case (data: Spawn, p)         => val rsp = spawn(data); success(p, rsp)
+			case (ActorClosed(id), p)     => removeChild(id); success(p, Done)
+			case _ => // other system messages are response messages
+	/*		case (SystemMsg.GetRef(_), _) => ???
 			case (SystemMsg.Register(_), _) => ???
-			case (SystemMsg.AskForRef(_, _), _) => ???
+			case (SystemMsg.AskForRef(_, _), _) => ???*/
 		}
+	}
+
+	private def removeChild(id: String): Unit = {
+		children = children - id
+	}
+
+	private def spawn(data: SystemMsg.Spawn): SystemMsg = if (children.contains(data.id)) SystemMsg.InvalidId else {
+		val b0 = ActorBuilder[Msg, Rsp, State]()
+		  .withIdIf(data.id.nonEmpty, data.id)
+			.withState(data.state.getOrElse(this.state))
+			.withBehaviorsIf(data.behaviors.nonEmpty, data.behaviors, this.behaviors)
+			.withHeartbeat(data.heartbeat.getOrElse(this.heartbeat))
+		val b1 = data.onInit.fold(b0)(b0.withOnInit)
+		val b2 = data.executionContext.fold(b1)(b1.withParallelDispatch)
+		val b3 = if (data.useSerialDispatch) b2.withSerialDispatch() else b2
+		val child = b3.withParent(this).build()
+		children = children + (child.id -> child)
+		SystemMsg.NewChild(child)
 	}
 
 	// Processes regular messages; should NOT be called directly - always from `processMessages`
@@ -450,14 +489,16 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		*/
 	override def closeAndCheck(): Boolean = Try(Await.ready(shutdown(), heartbeat.timeout + 5.seconds)).isSuccess
 
-	private def shutdown(): Future[Unit] = {
+	private def shutdown(): Future[SystemMsg] = {
 		super.closeAndCheck()
+		children.values.foreach(child => child ! child.SystemMsg.Close)
 		in.close()
 		out.close()
 		beat.closeAndCheck()
 		dequeueMsgs().collect { case (_, Some(p), _) => p }.foreach(_.tryFailure(actorIsClosed))
 		dequeueSystemMsgs().collect { case (_, Some(p)) => p }.foreach(_.tryFailure(actorIsClosed))
-		beat.isClosedSignal.onTrue
+		parent.foreach(p => p ! p.SystemMsg.ActorClosed(id))
+		beat.isClosedSignal.onTrue.map(_ => SystemMsg.ActorClosed(id))
 	}
 
 	override def state: State = _state
@@ -486,7 +527,13 @@ object Actor {
 	// todo: serial actors can have fewer safe-guards (and in fact they should have)  v
 	// todo: ActorBuilder v
 
-	// todo: spawning sub-actors that are closed with the parent
+	// todo: spawn sub-actors v
+	// todo: close sub-actors when the parent is closed v
+	// todo: ActorSystem where you can register new actors with unique ids
+	// todo: ActorRef (local) retrieved from ActorSystem, used to send messages to other actors
+	// todo: RemoteActorRef and the ability to register actors from another app via https
+	// todo: LocalActorRef should carry the ActorSystem id too to enable communication between different actor systems
+
 	// todo: HealthCheck system message, sent from the parent to the child; if the child doesn't respond in time, the message is repeated, and the the child is closed
 	// todo: consider to allow the children to use different types of messages ; and then: clusters? persistance?
 	// todo: maybe think about plugging in a logging functionality so that an unprocessed message can be logged as a warning
@@ -541,6 +588,20 @@ object Actor {
 		*/
 	val defBeat: HeartBeatStrategy = HeartBeatStrategy.Linear(100L)
 
+	def apply[Msg, Rsp, State](id: String, state: State, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy, parent: Actor[Msg, Rsp, State])
+	                          (using ExecutionContext): ActorImpl[Msg, Rsp, State] =
+		new ActorImpl(id, state, beat, Some(parent)).tap { actor =>
+			actor.addBehavior(behavior)
+			actor.initialize()
+		}
+
+	def apply[Msg, Rsp, State](id: String, state: State, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy)
+	                          (using ExecutionContext): ActorImpl[Msg, Rsp, State] =
+		new ActorImpl(id, state, beat, None).tap { actor =>
+			actor.addBehavior(behavior)
+			actor.initialize()
+		}
+
 	/**
 		* Creates a new actor instance with the given initial state, final behavior, and heartbeat strategy.
 		* The actor is initialized immediately after creation. It's going to use the `ExecutionContext` passed to it
@@ -553,14 +614,20 @@ object Actor {
 		*/
 	inline def apply[Msg, Rsp, State](state: State, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy)
 	                                 (using ExecutionContext): ActorImpl[Msg, Rsp, State] =
-		new ActorImpl(IdGenerator.generate(), state, beat).tap { actor =>
-			actor.addBehavior(behavior)
-			actor.initialize()
-		}
+		apply(IdGenerator.generate(), state, behavior, beat)
 
 	inline def apply[Msg, Rsp, State](state: State, behavior: PF[Msg, Rsp, State], beat: HeartBeatStrategy)
 	                                 (using ExecutionContext): ActorImpl[Msg, Rsp, State] =
 		apply(state, "default" -> behavior, beat)
+
+	def apply[Msg, Rsp, State](id: String, state: State, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy,
+	                           onInit: MutableActor[Msg, Rsp, State] => Unit)
+	                          (using ExecutionContext): ActorImpl[Msg, Rsp, State] =
+		new ActorImpl(id, state, beat).tap { actor =>
+			actor.onInit(onInit)
+			actor.addBehavior(behavior)
+			actor.initialize()
+		}
 	/**
 		* Creates a new actor instance with the given initial state, final behavior, and heartbeat strategy.
 		* The actor is initialized immediately after creation. It's going to use the `ExecutionContext` passed to it
@@ -572,19 +639,21 @@ object Actor {
 		* @param onInit   A function that will be called during the initialization of the actor.
 		* @return An initialized actor instance.
 		*/
-	def apply[Msg, Rsp, State](state: State, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy,
+	inline def apply[Msg, Rsp, State](state: State, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy,
 	                           onInit: MutableActor[Msg, Rsp, State] => Unit)
 	                          (using ExecutionContext): Actor[Msg, Rsp, State] =
-		new ActorImpl(IdGenerator.generate(), state, beat).tap { actor =>
-			actor.onInit(onInit)
-			actor.addBehavior(behavior)
-			actor.initialize()
-		}
+		apply(IdGenerator.generate(), state, behavior,beat, onInit)
 
 	inline 	def apply[Msg, Rsp, State](state: State, behavior: PF[Msg, Rsp, State], beat: HeartBeatStrategy,
 	                                   onInit: MutableActor[Msg, Rsp, State] => Unit)
 	                                  (using ExecutionContext): Actor[Msg, Rsp, State] =
 		apply(state, "default" -> behavior, beat, onInit)
+
+	inline def serial[Msg, Rsp, State](id: String, state: State, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy, parent: Actor[Msg, Rsp, State]): Actor[Msg, Rsp, State] =
+		apply(id, state, behavior, beat, parent)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
+
+	inline def serial[Msg, Rsp, State](id: String, state: State, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy): Actor[Msg, Rsp, State] =
+		apply(id, state, behavior, beat)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
 
 	/**
 		* Creates a new actor instance with the specified initial state, final behavior, and heartbeat strategy.
@@ -600,6 +669,10 @@ object Actor {
 
 	inline def serial[Msg, Rsp, State](state: State, pf: PF[Msg, Rsp, State], beat: HeartBeatStrategy): Actor[Msg, Rsp, State] =
 		serial(state, "default" -> pf, beat)
+
+	inline def serial[Msg, Rsp, State](id: String, state: State, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy,
+	                                   onInit: MutableActor[Msg, Rsp, State] => Unit): Actor[Msg, Rsp, State] =
+		apply(id, state, behavior, beat, onInit)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
 	/**
 		* Creates a new actor instance with the specified initial state, final behavior, and heartbeat strategy.
 		* The actor operates using a new serial dispatch queue to handle incoming messages.
@@ -617,6 +690,7 @@ object Actor {
 	inline def serial[Msg, Rsp, State](state: State, pf: PF[Msg, Rsp, State], beat: HeartBeatStrategy,
 	                                   onInit: MutableActor[Msg, Rsp, State] => Unit): Actor[Msg, Rsp, State] =
 		serial(state, "default" -> pf, beat, onInit)
+
 	/**
 		* Creates a new actor instance with the given initial state and a final behavior, while the heartbeat strategy
 		* is set to Linear(100ms).
@@ -683,6 +757,12 @@ object Actor {
 	                                   onInit: MutableActor[Msg, Rsp, State] => Unit): Actor[Msg, Rsp, State] =
 		serial(state, "default" -> pf, onInit)
 
+	def apply[Msg, Rsp, State](id: String, state: State, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy)
+	                          (using ExecutionContext): Actor[Msg, Rsp, State] =
+		new ActorImpl[Msg, Rsp, State](id, state, beat).tap { actor =>
+			actor.addBehaviors(pfs)
+			actor.initialize()
+		}
 	/**
 		* Creates a new actor instance with the provided initial state, a list of partial functions
 		* for behavior, and a heartbeat strategy. The actor is initialized immediately after creation
@@ -695,13 +775,18 @@ object Actor {
 		* @return An initialized actor instance configured with the given state, behaviors,
 		*         and heartbeat strategy.
 		*/
-	def apply[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy)
+	inline def apply[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy)
+	                                 (using ExecutionContext): Actor[Msg, Rsp, State] =
+		apply(IdGenerator.generate(), state, pfs, beat)
+
+	def apply[Msg, Rsp, State](id: String, state: State, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy,
+	                           onInit: MutableActor[Msg, Rsp, State] => Unit)
 	                          (using ExecutionContext): Actor[Msg, Rsp, State] =
-		new ActorImpl[Msg, Rsp, State](IdGenerator.generate(), state, beat).tap { actor =>
+		new ActorImpl[Msg, Rsp, State](id, state, beat).tap { actor =>
 			actor.addBehaviors(pfs)
+			actor.onInit(onInit)
 			actor.initialize()
 		}
-
 	/**
 		* Creates a new actor instance with the provided initial state, a list of partial functions
 		* for behavior, and a heartbeat strategy. The actor is initialized immediately after creation
@@ -715,15 +800,13 @@ object Actor {
 		* @return An initialized actor instance configured with the given state, behaviors,
 		*         and heartbeat strategy.
 		*/
-	def apply[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy,
+	inline def apply[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy,
 	                           onInit: MutableActor[Msg, Rsp, State] => Unit)
 	                          (using ExecutionContext): Actor[Msg, Rsp, State] =
-		new ActorImpl[Msg, Rsp, State](IdGenerator.generate(), state, beat).tap { actor =>
-			actor.addBehaviors(pfs)
-			actor.onInit(onInit)
-			actor.initialize()
-		}
+		apply(IdGenerator.generate(), state, pfs, beat, onInit)
 
+	inline def serial[Msg, Rsp, State](id: String, state: State, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy): Actor[Msg, Rsp, State] =
+		apply(id, state, pfs, beat)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
 	/**
 		* Creates a new actor instance with the given initial state, a list of partial functions
 		* defining its behaviors, and a heartbeat strategy.
@@ -739,6 +822,9 @@ object Actor {
 	inline def serial[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy): Actor[Msg, Rsp, State] =
 		apply(state, pfs, beat)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
 
+	inline def serial[Msg, Rsp, State](id: String, state: State, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy,
+	                                   onInit: MutableActor[Msg, Rsp, State] => Unit): Actor[Msg, Rsp, State] =
+		apply(id, state, pfs, beat, onInit)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
 	/**
 		* Creates a new actor instance with the given initial state, a list of partial functions
 		* defining its behaviors, and a heartbeat strategy.

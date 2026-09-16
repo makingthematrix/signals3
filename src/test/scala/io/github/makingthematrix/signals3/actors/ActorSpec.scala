@@ -147,16 +147,16 @@ class ActorSpec extends FunSuite {
     val behavior42: PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
     val behavior99: PF[Int, String, Int] = { case (99, _) => Some("Special: 99") }
 
-    val cf42: CloseableFuture[Unit] = actor ? actor.SystemMsg.AddBehavior("special_42", behavior42)
-    val cf99: CloseableFuture[Unit] = actor ? actor.SystemMsg.AddBehavior("special_99", behavior99)
+    val cf42 = actor ? actor.SystemMsg.AddBehavior("special_42", behavior42)
+    val cf99 = actor ? actor.SystemMsg.AddBehavior("special_99", behavior99)
     awaitCF(cf42)
     awaitCF(cf99)
     
     assertEquals(resultCF(actor ? 42), "Special: 42")
     assertEquals(resultCF(actor ? 99), "Special: 99")
 
-    val cf42r: CloseableFuture[Unit] = actor ? actor.SystemMsg.RemoveBehavior("special_42")
-    val cf99r: CloseableFuture[Unit] = actor ? actor.SystemMsg.RemoveBehavior("special_99")
+    val cf42r = actor ? actor.SystemMsg.RemoveBehavior("special_42")
+    val cf99r = actor ? actor.SystemMsg.RemoveBehavior("special_99")
     awaitCF(cf42r)
     awaitCF(cf99r)
 
@@ -171,7 +171,7 @@ class ActorSpec extends FunSuite {
     val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Default: $msg") })
     val behavior: PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
 
-    val cf42: CloseableFuture[Unit] = actor ? actor.SystemMsg.AddBehavior("special_42", behavior)
+    val cf42 = actor ? actor.SystemMsg.AddBehavior("special_42", behavior)
     awaitCF(cf42)
 
     assertEquals(resultCF(actor ? 42), "Special: 42")
@@ -207,7 +207,7 @@ class ActorSpec extends FunSuite {
     
     // Add a special behavior
     val behavior: PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
-    val cfAdd: CloseableFuture[Unit] = actor ? actor.SystemMsg.AddBehavior("special_42", behavior)
+    val cfAdd = actor ? actor.SystemMsg.AddBehavior("special_42", behavior)
     awaitCF(cfAdd)
 
     // Message 42 should be handled by the special behavior when using its ID
@@ -523,7 +523,7 @@ class ActorSpec extends FunSuite {
     val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Default: $msg") })
     import actor.SystemMsg
     
-    val pauseFuture: CloseableFuture[Unit] = actor ? SystemMsg.Pause
+    val pauseFuture = actor ? SystemMsg.Pause
     awaitCF(pauseFuture)
     
     waitFor(actor.isPausedSignal, true)
@@ -554,7 +554,7 @@ class ActorSpec extends FunSuite {
     val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Received: $msg") })
     import actor.SystemMsg
     
-    val closeFuture: CloseableFuture[Unit] = actor ? SystemMsg.Close
+    val closeFuture = actor ? SystemMsg.Close
     awaitCF(closeFuture)(using 2.seconds)
 
     waitFor(actor.isClosedSignal, true)

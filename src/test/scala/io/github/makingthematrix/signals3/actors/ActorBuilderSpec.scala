@@ -28,7 +28,8 @@ class ActorBuilderSpec extends FunSuite {
 
   test("ActorBuilder creates actor with default configuration") {
     val actor = buildActor(
-      ActorBuilder[Int, String, Int](0)
+      ActorBuilder[Int, String, Int]()
+        .withState(0)
         .withBehavior {
           case (msg, _) => Some(s"Processed: $msg")
         }
@@ -42,7 +43,8 @@ class ActorBuilderSpec extends FunSuite {
   test("ActorBuilder creates actor with custom state") {
     val initialState = 100
     val actor = buildActor(
-      ActorBuilder[Int, String, Int](initialState)
+      ActorBuilder[Int, String, Int]()
+        .withState(initialState)
         .withBehavior {
           case (msg, actor) => Some(s"State: ${actor.state}, Msg: $msg")
         }
@@ -55,7 +57,8 @@ class ActorBuilderSpec extends FunSuite {
 
   test("ActorBuilder creates actor with multiple behaviors") {
     val actor = buildActor(
-      ActorBuilder[Int, String, Int](0)
+      ActorBuilder[Int, String, Int]()
+        .withState(0)
         .withBehavior("first", {
           case (1, _) => Some("First behavior")
         })
@@ -77,7 +80,8 @@ class ActorBuilderSpec extends FunSuite {
 
   test("ActorBuilder with linear heartbeat") {
     val actor = buildActor(
-      ActorBuilder[Int, String, Int](0)
+      ActorBuilder[Int, String, Int]()
+        .withState(0)
         .withBehavior {
           case (msg, _) => Some(s"Processed: $msg")
         }
@@ -91,7 +95,8 @@ class ActorBuilderSpec extends FunSuite {
 
   test("ActorBuilder with agitated heartbeat") {
     val actor = buildActor(
-      ActorBuilder[Int, String, Int](0)
+      ActorBuilder[Int, String, Int]()
+        .withState(0)
         .withBehavior {
           case (msg, _) => Some(s"Processed: $msg")
         }
@@ -105,7 +110,8 @@ class ActorBuilderSpec extends FunSuite {
 
   test("ActorBuilder with reactive heartbeat") {
     val actor = buildActor(
-      ActorBuilder[Int, String, Int](0)
+      ActorBuilder[Int, String, Int]()
+        .withState(0)
         .withBehavior {
           case (msg, _) => Some(s"Processed: $msg")
         }
@@ -119,7 +125,8 @@ class ActorBuilderSpec extends FunSuite {
 
   test("ActorBuilder with serial dispatch") {
     val actor = buildActor(
-      ActorBuilder[Int, String, Int](0)
+      ActorBuilder[Int, String, Int]()
+        .withState(0)
         .withBehavior {
           case (msg, _) => Some(s"Processed: $msg")
         }
@@ -135,7 +142,8 @@ class ActorBuilderSpec extends FunSuite {
     var initialized = false
 
     val actor = buildActor(
-      ActorBuilder[Int, String, Int](0)
+      ActorBuilder[Int, String, Int]()
+        .withState(0)
         .withBehavior {
           case (msg, _) => Some(s"Processed: $msg")
         }
@@ -155,7 +163,8 @@ class ActorBuilderSpec extends FunSuite {
 
   test("ActorBuilder with onInit and state mutation") {
     val actor = buildActor(
-      ActorBuilder[Int, String, Int](0)
+      ActorBuilder[Int, String, Int]()
+        .withState(0)
         .withBehavior {
           case (msg, actor) =>
             actor.state += msg
@@ -176,7 +185,8 @@ class ActorBuilderSpec extends FunSuite {
 
   test("ActorBuilder maintains LIFO behavior order") {
     val actor = buildActor(
-      ActorBuilder[Int, String, Int](0)
+      ActorBuilder[Int, String, Int]()
+        .withState(0)
         .withBehavior("first", {
           case (1, _) => Some("First")
         })
@@ -198,7 +208,8 @@ class ActorBuilderSpec extends FunSuite {
     import ActorBuilder.*
 
     val actor1 = buildActor(
-      ActorBuilder[Int, String, Int](0)
+      ActorBuilder[Int, String, Int]()
+        .withState(0)
         .withBehavior {
           case (msg, _) => Some(s"Processed: $msg")
         }
@@ -210,7 +221,8 @@ class ActorBuilderSpec extends FunSuite {
     close(actor1)
 
     val actor2 = buildActor(
-      ActorBuilder[Int, String, Int](0)
+      ActorBuilder[Int, String, Int]()
+        .withState(0)
         .withBehavior {
           case (msg, _) => Some(s"Processed: $msg")
         }
@@ -226,7 +238,8 @@ class ActorBuilderSpec extends FunSuite {
     var initCalled = false
 
     val actor = buildActor(
-      ActorBuilder[Int, String, Int](100)
+      ActorBuilder[Int, String, Int]()
+        .withState(100)
         .withBehavior("special", {
           case (42, _) => Some("The answer!")
         })
@@ -253,7 +266,8 @@ class ActorBuilderSpec extends FunSuite {
     var initCalled = false
 
     val actor = buildActor(
-      ActorBuilder[Int, String, Int](0)
+      ActorBuilder[Int, String, Int]()
+        .withState(0)
         .withBehavior {
           case (msg, _) => Some(s"Processed: $msg")
         }
