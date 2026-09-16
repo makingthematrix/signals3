@@ -1,11 +1,10 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.DispatchQueue
-
-import java.util.UUID
 import scala.concurrent.ExecutionContext
 
 final class ActorBuilder[Msg, Rsp, State] (
+  private val id: String,                                        
   private val state: State,
   private val behaviors: List[Actor.Beh[Msg, Rsp, State]],
   private val heartbeat: Actor.HeartBeatStrategy,
@@ -14,13 +13,21 @@ final class ActorBuilder[Msg, Rsp, State] (
 ) {
 
   /**
+    * Sets the id of the actor.
+    * 
+    * @param newId The new id
+    * @return A new builder with the new id
+    */
+  def withId(newId: String): ActorBuilder[Msg, Rsp, State] =
+    new ActorBuilder(newId, state, behaviors, heartbeat, onInit, useSerialDispatch)
+  /**
    * Sets the initial state of the actor.
    *
    * @param newState The new initial state
    * @return A new builder with the updated state
    */
   def withState(newState: State): ActorBuilder[Msg, Rsp, State] =
-    new ActorBuilder(newState, behaviors, heartbeat, onInit, useSerialDispatch)
+    new ActorBuilder(id, newState, behaviors, heartbeat, onInit, useSerialDispatch)
 
   /**
    * Adds a behavior with an explicit ID.
@@ -39,7 +46,7 @@ final class ActorBuilder[Msg, Rsp, State] (
    * @return A new builder with the added behavior
    */
   def withBehavior(pf: Actor.PF[Msg, Rsp, State]): ActorBuilder[Msg, Rsp, State] =
-    withBehavior(ActorBuilder.generateId(), pf)
+    withBehavior(IdGenerator.generate("beh:"), pf)
 
   /**
    * Adds a behavior as a Beh tuple (id, pf).
@@ -48,7 +55,7 @@ final class ActorBuilder[Msg, Rsp, State] (
    * @return A new builder with the added behavior
    */
   def withBehavior(behavior: Actor.Beh[Msg, Rsp, State]): ActorBuilder[Msg, Rsp, State] =
-    new ActorBuilder(state, behavior :: behaviors, heartbeat, onInit, useSerialDispatch)
+    new ActorBuilder(id, state, behavior :: behaviors, heartbeat, onInit, useSerialDispatch)
 
   /**
    * Adds multiple behaviors with explicit IDs.
@@ -57,7 +64,7 @@ final class ActorBuilder[Msg, Rsp, State] (
    * @return A new builder with the added behaviors
    */
   def withBehaviors(newBehaviors: Iterable[Actor.Beh[Msg, Rsp, State]]): ActorBuilder[Msg, Rsp, State] =
-    new ActorBuilder(state, newBehaviors.toList ::: behaviors, heartbeat, onInit, useSerialDispatch)
+    new ActorBuilder(id, state, newBehaviors.toList ::: behaviors, heartbeat, onInit, useSerialDispatch)
 
   /**
    * Adds multiple behaviors with auto-generated IDs.
@@ -66,7 +73,7 @@ final class ActorBuilder[Msg, Rsp, State] (
    * @return A new builder with the added behaviors
    */
   def withBehaviorPFs(newBehaviors: Iterable[Actor.PF[Msg, Rsp, State]]): ActorBuilder[Msg, Rsp, State] =
-    withBehaviors(newBehaviors.map(pf => ActorBuilder.generateId() -> pf))
+    withBehaviors(newBehaviors.map(pf => IdGenerator.generate("beh:") -> pf))
 
   /**
    * Sets the heartbeat strategy.
@@ -75,7 +82,7 @@ final class ActorBuilder[Msg, Rsp, State] (
    * @return A new builder with the updated heartbeat strategy
    */
   def withHeartbeat(newHeartbeat: Actor.HeartBeatStrategy): ActorBuilder[Msg, Rsp, State] =
-    new ActorBuilder(state, behaviors, newHeartbeat, onInit, useSerialDispatch)
+    new ActorBuilder(id, state, behaviors, newHeartbeat, onInit, useSerialDispatch)
 
   /**
    * Sets a linear heartbeat strategy with the specified interval.
@@ -122,7 +129,7 @@ final class ActorBuilder[Msg, Rsp, State] (
    * @return A new builder with the initialization callback
    */
   def withOnInit(callback: MutableActor[Msg, Rsp, State] => Unit): ActorBuilder[Msg, Rsp, State] =
-    new ActorBuilder(state, behaviors, heartbeat, Some(callback), useSerialDispatch)
+    new ActorBuilder(id, state, behaviors, heartbeat, Some(callback), useSerialDispatch)
 
   /**
    * Configures the actor to use a serial dispatch queue.
@@ -132,7 +139,7 @@ final class ActorBuilder[Msg, Rsp, State] (
    * @return A new builder configured for serial dispatch
    */
   def withSerialDispatch(): ActorBuilder[Msg, Rsp, State] =
-    new ActorBuilder(state, behaviors, heartbeat, onInit, useSerialDispatch = true)
+    new ActorBuilder(id, state, behaviors, heartbeat, onInit, useSerialDispatch = true)
 
   def build()(using ec: ExecutionContext): Actor[Msg, Rsp, State] = 
     if (useSerialDispatch) buildSerial() else buildParallel(ec)
@@ -181,15 +188,8 @@ object ActorBuilder {
    * @return A new ActorBuilder instance
    */
   def apply[Msg, Rsp, State](state: State): ActorBuilder[Msg, Rsp, State] =
-    new ActorBuilder(state, Nil, Actor.defBeat, None, useSerialDispatch = false)
-
-  /**
-   * Generates a unique ID for behaviors.
-   *
-   * @return A unique UUID string
-   */
-  private def generateId(): String = UUID.randomUUID().toString
-
+    new ActorBuilder(IdGenerator.generate(), state, Nil, Actor.defBeat, None, useSerialDispatch = false)
+  
   // Pre-defined heartbeat strategies for convenience
 
   /**

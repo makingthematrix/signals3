@@ -26,6 +26,6 @@ trait Pausable {
 	def isPaused: Boolean = paused.get()
 
 	private lazy val pausedSignal = FlagSignal()
-	
+
 	def isPausedSignal: Signal[Boolean] = pausedSignal
 }

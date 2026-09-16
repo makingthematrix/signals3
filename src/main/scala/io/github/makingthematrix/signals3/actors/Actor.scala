@@ -50,7 +50,12 @@ trait Actor[Msg, Rsp, State] {
 		case AddBehavior(id: String, pf: PF[Msg, Rsp, State])
 		case RemoveBehavior(id: String)
 		case AddPF(pf: PF[Msg, Rsp, State]) // use instead of AddBehavior if you don't care about persistence of behaviors
+		case GetRef(ref: ActorRef[Msg, Rsp])
+		case Register(actor: Actor[Msg, Rsp, State])
+		case AskForRef(actor: Actor[Msg, Rsp, State], id: String)
 	}
+	
+	def id: String
 
 	/** The input stream for handling incoming messages of type `Msg`.
 		*
@@ -150,7 +155,7 @@ trait Actor[Msg, Rsp, State] {
 		* Retrieves the current heartbeat strategy of the actor
 		* @return the current heartbeat strategy
 		*/
-	def heartbeat: HeartBeatStrategy
+	protected def heartbeat: HeartBeatStrategy
 
 	/**
 		* Returns a signal that works on a given [[scala.concurrent.ExecutionContext]]; it starts with the value set to `false` (unless it's
@@ -163,6 +168,14 @@ trait Actor[Msg, Rsp, State] {
 	def isInitialized: Boolean
 
 	val isSerial: Boolean
+	
+	def isClosed: Boolean
+	
+	def isClosedSignal(using ExecutionContext): Signal[Boolean]
+	
+	def isPaused: Boolean
+	
+	def isPausedSignal: Signal[Boolean]
 }
 
 /**
@@ -202,15 +215,16 @@ trait MutableActor[Msg, Rsp, State] extends Actor[Msg, Rsp, State] {
 	* @tparam Rsp   The type of responses returned by this actor.
 	* @tparam State The type representing the internal state of the actor.
 	*/
-final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State,
-                                                       override val heartbeat: HeartBeatStrategy = Actor.defBeat)
-                                                      (using ec: ExecutionContext)
+private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
+	                                               private var _state: State,
+                                                 override protected val heartbeat: HeartBeatStrategy = Actor.defBeat)
+                                                (using ec: ExecutionContext)
 	extends MutableActor[Msg, Rsp, State] with Closeable with Pausable {
 	import HeartBeatStrategy.*
 
 	private type MsgEntry = (msg: Msg, rsp: Option[Promise[Rsp]], behId: String)
 	private type SysEntry = (msg: SystemMsg, rsp: Option[Promise[Unit]])
-
+	
 	// a mutable queue of messages incoming from other actors and other sources; see the ! operator.
 	private val msgs         = new AtomicReference[MQueue[MsgEntry]](MQueue.empty)
 	// a stream that serves as a single entry for the msgs list to prevent concurrent modification; see the "!" operator.
@@ -363,6 +377,9 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 			case (AddBehavior(id, pf), p) => addBehavior(id, pf); success(p)
 			case (RemoveBehavior(id), p)  => removeBehavior(id); success(p)
 			case (AddPF(pf), p)           => addBehavior(pf); success(p)
+			case (SystemMsg.GetRef(_), _) => ???
+			case (SystemMsg.Register(_), _) => ???
+			case (SystemMsg.AskForRef(_, _), _) => ???
 		}
 	}
 
@@ -420,6 +437,7 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 		DoneSignal().tap { signal =>
 			if (isInitialized) signal.done() else onInit(_ => signal.done())
 		}
+
 	/**
 		* Closes the actor and performs necessary checks to ensure all messages are completed before finalizing the closure.
 		*
@@ -430,10 +448,7 @@ final private[actors] class ActorImpl[Msg, Rsp, State](private var _state: State
 		*
 		* @return `true` if the actor and its heartbeat are successfully closed, `false` otherwise.
 		*/
-	override def closeAndCheck(): Boolean = {
-		shutdown()
-		true
-	}
+	override def closeAndCheck(): Boolean = Try(Await.ready(shutdown(), heartbeat.timeout + 5.seconds)).isSuccess
 
 	private def shutdown(): Future[Unit] = {
 		super.closeAndCheck()
@@ -478,6 +493,7 @@ object Actor {
 	// todo: similarly about metrics
 	// todo: and about the max number of messages processed per heartbeat
 	// todo: make constants configurable through environment variables
+	// todo: actors should carry tags (strings) and the actor system ca get requests to connect an actor with any other actor that has a given tag
 
 	@static private val noResponse: Failure[Nothing] = Failure[Nothing](new IllegalStateException("No response"))
 	@static private val ignored: Success[Option[Nothing]] = Success[Option[Nothing]](None)
@@ -537,7 +553,7 @@ object Actor {
 		*/
 	inline def apply[Msg, Rsp, State](state: State, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy)
 	                                 (using ExecutionContext): ActorImpl[Msg, Rsp, State] =
-		new ActorImpl(state, beat).tap { actor =>
+		new ActorImpl(IdGenerator.generate(), state, beat).tap { actor =>
 			actor.addBehavior(behavior)
 			actor.initialize()
 		}
@@ -559,7 +575,7 @@ object Actor {
 	def apply[Msg, Rsp, State](state: State, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy,
 	                           onInit: MutableActor[Msg, Rsp, State] => Unit)
 	                          (using ExecutionContext): Actor[Msg, Rsp, State] =
-		new ActorImpl(state, beat).tap { actor =>
+		new ActorImpl(IdGenerator.generate(), state, beat).tap { actor =>
 			actor.onInit(onInit)
 			actor.addBehavior(behavior)
 			actor.initialize()
@@ -681,7 +697,7 @@ object Actor {
 		*/
 	def apply[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy)
 	                          (using ExecutionContext): Actor[Msg, Rsp, State] =
-		new ActorImpl[Msg, Rsp, State](state, beat).tap { actor =>
+		new ActorImpl[Msg, Rsp, State](IdGenerator.generate(), state, beat).tap { actor =>
 			actor.addBehaviors(pfs)
 			actor.initialize()
 		}
@@ -702,7 +718,7 @@ object Actor {
 	def apply[Msg, Rsp, State](state: State, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy,
 	                           onInit: MutableActor[Msg, Rsp, State] => Unit)
 	                          (using ExecutionContext): Actor[Msg, Rsp, State] =
-		new ActorImpl[Msg, Rsp, State](state, beat).tap { actor =>
+		new ActorImpl[Msg, Rsp, State](IdGenerator.generate(), state, beat).tap { actor =>
 			actor.addBehaviors(pfs)
 			actor.onInit(onInit)
 			actor.initialize()
