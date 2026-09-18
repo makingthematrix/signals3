@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, PF, serial}
+import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, PF}
 import io.github.makingthematrix.signals3.testutils.*
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, EventContext, Pausable, Signal, SourceStream, Stream, Threading}
 import munit.FunSuite
@@ -26,13 +26,24 @@ class ActorSpec extends FunSuite {
   }
   
   private def create[Msg, Rsp, State](state: State, pf: PF[Msg, Rsp, State]): Actor[Msg, Rsp, State] & Closeable & Pausable =
-    Actor[Msg, Rsp, State](state, pf).asInstanceOf[ActorImpl[Msg, Rsp, State]]
+    ActorBuilder[Msg, Rsp, State](state)
+      .withBehaviorPF(pf)
+      .build()
+      .asInstanceOf[Actor[Msg, Rsp, State] & Closeable & Pausable]
 
   private def create[Msg, Rsp, State](state: State, pf: PF[Msg, Rsp, State], hbs: HeartBeatStrategy): Actor[Msg, Rsp, State] & Closeable & Pausable =
-    Actor[Msg, Rsp, State](state, pf, hbs).asInstanceOf[ActorImpl[Msg, Rsp, State]]
+    ActorBuilder[Msg, Rsp, State](state)
+      .withBehaviorPF(pf)
+      .withHeartbeat(hbs)
+      .build()
+      .asInstanceOf[Actor[Msg, Rsp, State] & Closeable & Pausable]
 
   private def create[Msg, Rsp, State](state: State, pf: PF[Msg, Rsp, State], onInit: MutableActor[Msg, Rsp, State] => Unit): Actor[Msg, Rsp, State] & Closeable & Pausable =
-    Actor[Msg, Rsp, State](state, pf, onInit).asInstanceOf[ActorImpl[Msg, Rsp, State]]
+    ActorBuilder[Msg, Rsp, State](state)
+      .withBehaviorPF(pf)
+      .withOnInit(onInit)
+      .build()
+      .asInstanceOf[Actor[Msg, Rsp, State] & Closeable & Pausable]
 
   test("Actor creation with initial state") {
     val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Received: $msg") })
@@ -387,8 +398,13 @@ class ActorSpec extends FunSuite {
   // ==================== DispatchQueue Integration ====================
 
   test("Serial dispatch queue actor") {
-    val actor = serial[Int, String, Int](0, { case (msg, _) => Some(s"Serial: $msg") }).asInstanceOf[Actor[Int, String, Int] & Closeable]
-    
+    val actor =
+      ActorBuilder[Int, String, Int](0)
+        .withBehaviorPF { case (msg, _) => Some(s"Serial: $msg") }
+        .withSerialDispatch()
+        .build()
+        .asInstanceOf[Actor[Int, String, Int] & Closeable]
+
     val response = actor ? 42
     assertEquals(resultCF(response), "Serial: 42")
     close(actor)
@@ -397,7 +413,12 @@ class ActorSpec extends FunSuite {
   test("Serial dispatch queue with multiple behaviors") {
     val behavior1: PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
     val behavior2: PF[Int, String, Int] = { case (msg, _) => Some(s"Default: $msg") }
-    val actor = serial[Int, String, Int](0, List(behavior1, behavior2)).asInstanceOf[Actor[Int, String, Int] & Closeable]
+    val actor =
+      ActorBuilder[Int, String, Int](0)
+        .withBehaviorPFs(List(behavior1, behavior2))
+        .withSerialDispatch()
+        .build()
+        .asInstanceOf[Actor[Int, String, Int] & Closeable]
 
     waitForResult(actor.isInitializedSignal, true)
 
@@ -535,6 +556,7 @@ class ActorSpec extends FunSuite {
   test("Close via ? completes only after actor is closed") {
     val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Received: $msg") })
     import actor.SystemMsg
+
     import scala.util.Try
 
     val closeFuture = actor ? SystemMsg.Close
@@ -770,10 +792,15 @@ class ActorSpec extends FunSuite {
 
   test("onInit with serial dispatch queue") {
     val initCalled = Signal(false)
-    
-    val actor = Actor.serial[Int, String, Int](0, { case (msg, _) => Some(s"Processed: $msg") },
-      onInit = { _ => initCalled ! true }).asInstanceOf[ActorImpl[Int, String, Int]]
-    
+
+    val actor =
+      ActorBuilder[Int, String, Int](0)
+        .withBehaviorPF { case (msg, _) => Some(s"Processed: $msg") }
+        .withOnInit { _ => initCalled ! true }
+        .withSerialDispatch()
+        .build()
+        .asInstanceOf[Actor[Int, String, Int] & Closeable]
+
     waitFor(initCalled, true)
     close(actor)
   }
@@ -818,8 +845,13 @@ class ActorSpec extends FunSuite {
     val initCalled = Signal(false)
     val pf: Actor.PF[Int, String, Int] = { case (42, _) => Some("Special") }
     
-    val actor = Actor[Int, String, Int](0, List(pf), onInit = { _ => initCalled ! true }).asInstanceOf[Actor[Int, String,Int] & Closeable]
-    
+    val actor =
+      ActorBuilder[Int, String, Int](0)
+        .withBehaviorPFs(List(pf))
+        .withOnInit { _ => initCalled ! true }
+        .build()
+        .asInstanceOf[Actor[Int, String,Int] & Closeable]
+
     waitFor(initCalled, true)
     
     // Verify behavior works
@@ -845,9 +877,13 @@ class ActorSpec extends FunSuite {
   test("onInit with heartbeat strategy") {
     val initCalled = Signal(false)
     
-    val actor = Actor[Int, String, Int](0, { case (msg, _) => Some(s"Processed: $msg") },
-      HeartBeatStrategy.Linear(50),
-      onInit = { _ => initCalled ! true }).asInstanceOf[ActorImpl[Int, String, Int]]
+    val actor =
+      ActorBuilder[Int, String, Int](0)
+        .withBehaviorPF { case (msg, _) => Some(s"Processed: $msg") }
+        .withHeartbeat(HeartBeatStrategy.Linear(50))
+        .withOnInit { _ => initCalled ! true }
+        .build()
+        .asInstanceOf[Actor[Int, String, Int] & Closeable]
     
     waitFor(initCalled, true)
     close(actor)

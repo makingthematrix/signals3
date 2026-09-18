@@ -265,7 +265,14 @@ object ActorBuilder {
    * @return A new ActorBuilder instance
    */
   def apply[Msg, Rsp, State](): ActorBuilder[Msg, Rsp, State] = new ActorBuilder(IdGenerator.generate())
+
+  def apply[Msg, Rsp, State](id: String, state: State): ActorBuilder[Msg, Rsp, State] =
+    new ActorBuilder(id = id, state = Some(state))
   
+  inline def apply[Msg, Rsp, State](state: State): ActorBuilder[Msg, Rsp, State] =
+    apply(id = IdGenerator.generate(), state = state)
+
+
   // Pre-defined heartbeat strategies for convenience
 
   /**

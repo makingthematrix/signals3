@@ -196,7 +196,7 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		case (Close, p)               => if (p.isEmpty) close() else p.foreach(_.completeWith(shutdown().map(_ => Done)))
 		case (AddBehavior(id, pf), p) => addBehavior(id, pf); respond(p, Done)
 		case (RemoveBehavior(id), p)  => removeBehavior(id); respond(p, Done)
-		case (AddPF(pf), p)           => addBehavior(pf); respond(p, Done)
+		case (AddBehaviorPF(pf), p)           => addBehavior(pf); respond(p, Done)
 		case (data: Spawn, p)         => val rsp = spawn(data); respond(p, rsp)
 		case (ActorClosed(id), p)     => removeChild(id); respond(p, Done)
 		case _ => // @todo: log the unhandled messages

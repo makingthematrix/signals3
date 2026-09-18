@@ -35,10 +35,14 @@ class ActorIntegrationSpec extends FunSuite {
   }
 
   private def create[Msg, Rsp, State](state: State, pf: Actor.PF[Msg, Rsp, State]): Actor[Msg, Rsp, State] & Closeable & Pausable =
-    Actor(state, pf).asInstanceOf[Actor[Msg, Rsp, State] & Closeable & Pausable]
+    ActorBuilder(state).withBehaviorPF(pf).build().asInstanceOf[Actor[Msg, Rsp, State] & Closeable & Pausable]
 
   private def create[Msg, Rsp, State](state: State, pf: Actor.PF[Msg, Rsp, State], hbs: HeartBeatStrategy): Actor[Msg, Rsp, State] & Closeable & Pausable =
-    Actor[Msg, Rsp, State](state, pf, hbs).asInstanceOf[ActorImpl[Msg, Rsp, State]]
+    ActorBuilder(state)
+      .withBehaviorPF(pf)
+      .withHeartbeat(hbs)
+      .build()
+      .asInstanceOf[Actor[Msg, Rsp, State] & Closeable & Pausable]
   
   private def spawn[Msg, Rsp, State](parent: Actor[Msg, Rsp, State])(data: parent.SystemMsg.Spawn): Actor[Msg, Rsp, State] = {
     import parent.SystemMsg

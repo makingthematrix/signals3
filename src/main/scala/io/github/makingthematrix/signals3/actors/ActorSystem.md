@@ -96,6 +96,41 @@ that contains the id of the requested actor and the id of the server it's on. In
 turn into a call to `actorDict.transfer(actorId, msg)` - which will serialize `msg` and send it to that other server
 together with the id of the receiver.
 
+	// todo: Pausable, v
+	// todo: pausing and closing through special messages, v
+	// todo: private var state: State for keeping and modifying internal state, v
+	// todo: behaviors must have access to this actor to be able to mutate the state v
+	// todo: heartbeat should be a strategy: Linear(ms), Agitated(min, coeff, max), Reactive v
+	// todo: Scaladoc v
+	// todo: unit tests v
+	// todo: managing behaviors through messages v
+	// todo: divide the Actor class into an immutable trait used outside and a mutable class that extends it - the behaviors use the latter v
+	// todo: add the out stream that can be used by behaviors to send messages to v
+	// todo: change the behaviors list to a map - all behaviors that fit for a given message are executed, not only the oldest one v
+	// todo: change the name of finalBehavior to finalBehavior (the last behavior); the current one is confusing v
+	// todo: change the behaviors back to a list xD v
+	// todo: a way to request that a given message is handled by a behavior with the given id v
+	// todo: similarly, there should be an `onClose` function (but that's already implemented) v
+	// todo: onInit function that the actor can use, for example, to send out messages that it's alive v
+	// todo: remove finalBehavior; unprocessed messages are ignored v
+	// todo: serial actors can have fewer safe-guards (and in fact they should have)  v
+	// todo: ActorBuilder v
+	// todo: spawn sub-actors v
+	// todo: close sub-actors when the parent is closed v
+	// todo: ActorSystem where you can register new actors with unique ids v
+	// todo: ActorRef (local) retrieved from ActorSystem, used to send messages to other actors v
+	
+	// todo: RemoteActorRef and the ability to register actors from another app via https
+	// todo: RemoteActorRef should carry the ActorSystem id too to enable communication between different actor systems
+
+	// todo: HealthCheck system message, sent from the parent to the child; if the child doesn't respond in time, the message is repeated, and the the child is closed
+	// todo: consider to allow the children to use different types of messages ; and then: clusters? persistance?
+	// todo: maybe think about plugging in a logging functionality so that an unprocessed message can be logged as a warning
+	// todo: similarly about metrics
+	// todo: and about the max number of messages processed per heartbeat
+	// todo: make constants configurable through environment variables
+	// todo: actors should carry tags (strings) and the actor system ca get requests to connect an actor with any other actor that has a given tag
+
 ---
 
 ## 2. Actor Reference (ActorRef) Design
