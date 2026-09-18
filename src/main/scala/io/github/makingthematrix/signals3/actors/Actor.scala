@@ -237,7 +237,7 @@ object Actor {
 	val defBeat: HeartBeatStrategy = HeartBeatStrategy.Linear(100L)
 
 	/**
-		* Creates a new actor instance with the given initial state, final behavior, and heartbeat strategy.
+		* Creates a new actor instance with the given initial state, behavior, and heartbeat strategy.
 		* The actor is initialized immediately after creation. It's going to use the `ExecutionContext` passed to it
 		* as an implicit parameter.
 		*

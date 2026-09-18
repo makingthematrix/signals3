@@ -14,7 +14,7 @@ final class ActorBuilder[Msg, Rsp, State] (
   private val useSerialDispatch: Boolean = false,
   private val executionContext: Option[ExecutionContext] = None,
   private val parent: Option[Actor[Msg, Rsp, State]] = None,
-  private val system: Option[ActorSystem[Msg, Rsp, State]] = None                                        
+  private val system: Option[ActorSystem[Msg, Rsp, State]] = None
 ) {
 
   /**
@@ -228,27 +228,19 @@ final class ActorBuilder[Msg, Rsp, State] (
     
   def build()(using ec: ExecutionContext): Actor[Msg, Rsp, State] = { 
     assert(state.nonEmpty)
-    if (useSerialDispatch) buildActor(state.get, DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
-    else buildActor(state.get, executionContext.getOrElse(ec))
+    if (useSerialDispatch)
+      buildActor(state.get, DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
+    else
+      buildActor(state.get, executionContext.getOrElse(ec))
   }
 
   private def buildActor(state: State, ec: ExecutionContext): Actor[Msg, Rsp, State] = {
     val actor = new ActorImpl[Msg, Rsp, State](id, state, heartbeat, parent, system)(using ec)
     onInit.foreach(actor.onInit)
-    behaviors match {
-      case Nil         => () // no behaviors to add
-      case beh :: Nil  => actor.addBehavior(beh)
-      case _           => actor.addBehaviors(extractPFs(behaviors))
-    }
+    behaviors.foreach(actor.addBehavior)
     actor.initialize()
     actor
   }
-
-  /**
-   * Extracts the PF from a list of Beh tuples.
-   */
-  private def extractPFs(behaviors: List[Beh[Msg, Rsp, State]]): List[PF[Msg, Rsp, State]] =
-    behaviors.map { case (_, pf) => pf }
 }
 
 /**
@@ -268,11 +260,10 @@ object ActorBuilder {
 
   def apply[Msg, Rsp, State](id: String, state: State): ActorBuilder[Msg, Rsp, State] =
     new ActorBuilder(id = id, state = Some(state))
-  
+
   inline def apply[Msg, Rsp, State](state: State): ActorBuilder[Msg, Rsp, State] =
     apply(id = IdGenerator.generate(), state = state)
-
-
+  
   // Pre-defined heartbeat strategies for convenience
 
   /**
