@@ -3,31 +3,26 @@ package io.github.makingthematrix.signals3.actors
 import scala.annotation.static
 
 sealed trait ActorPath {
-	def asString: String
-	def name: String
-	def systemName: String
+	val actorId: String
+	val systemId: String
+	val asString: String = s"$systemId://$actorId"
 }
 
 object ActorPath {
 	@static private val LocalPattern = """local://(.+)""".r
-	@static private val RemotePattern = """([^/:]+)://([^:]+):(\d+)/(.+)""".r
+	@static private val RemotePattern = """([^/:]+)://(.+)""".r
 
-	// Local actor within the same JVM
+	// Local actor within the same actor system
 	final case class Local(actorId: String) extends ActorPath {
-		def asString: String = s"local://$actorId"
-		def name: String = actorId
-		def systemName: String = "local"
+		val systemId: String = "local"
 	}
 
 	// Remote actor in a different JVM/process
-	final case class Remote(systemName: String, host: String, port: Int, actorId: String) extends ActorPath {
-		def asString: String = s"$systemName://$host:$port/$actorId"
-		def name: String = actorId
-	}
+	final case class Remote(systemId: String, actorId: String) extends ActorPath
 	
 	def parse(path: String): Option[ActorPath] = path match {
 		case LocalPattern(actorId) => Some(Local(actorId))
-		case RemotePattern(system, host, port, id) => Some(Remote(system, host, port.toInt, id))
+		case RemotePattern(system, id) => Some(Remote(system, id))
 		case _ => None
 	}
 }

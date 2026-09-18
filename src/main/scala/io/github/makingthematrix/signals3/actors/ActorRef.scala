@@ -22,7 +22,7 @@ final case class LocalActorRef[Msg, Rsp, State] private[actors] (private val act
 }
 
 // Remote actor reference - proxies to remote actor
-/*final case class RemoteActorRef[Msg, Rsp] private[actors](path: ActorPath.Remote,
+final case class RemoteActorRef[Msg, Rsp] private[actors](path: ActorPath.Remote,
                                                           private val system: ActorSystem[Msg, Rsp, ?])
 	extends ActorRef[Msg, Rsp]{
 	override def !(msg: Msg): Unit = system ! (path, msg)
@@ -30,4 +30,4 @@ final case class LocalActorRef[Msg, Rsp, State] private[actors] (private val act
 	
 	override val isLocal: Boolean = false
 	override val isValid: Boolean = true // Remote validity is connection-dependent
-}*/
+}

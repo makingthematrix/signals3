@@ -124,7 +124,8 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		behMap -= id
 	}
 
-	override def getBehavior(id: String): Option[PF[Msg, Rsp, State]] = behMap.get(id)
+	override def getBehavior(id: String): Option[Beh[Msg, Rsp, State]] = 
+		behMap.collectFirst { case (behId, pf) if behId == id => behId -> pf }
 
 	/**
 		* Adds a behavior function to the actor and returns a unique identifier for it.
@@ -135,14 +136,19 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		* @param pf A partial function that represents the behavior logic.
 		* @return A unique identifier for the newly added behavior.
 		*/
-	private[actors] def addBehavior(pf: PF[Msg, Rsp, State]): String =
-		UUID.randomUUID().toString.tap { name => addBehavior(name -> pf) } // we assume uuids are unique
+	private[actors] def addBehaviorPF(pf: PF[Msg, Rsp, State]): String =
+		UUID.randomUUID().toString.tap { id => addBehavior(id -> pf) } // we assume uuids are unique
 
 	// adds all new behavior functions in front of the list of behaviors but maintains their own internal order
-	private[actors] def addBehaviors(pfs: Iterable[PF[Msg, Rsp, State]]): Unit = {
+	private[actors] def addBehaviorPFs(pfs: Iterable[PF[Msg, Rsp, State]]): Unit = {
 		val newBehs = pfs.map(pf => UUID.randomUUID().toString -> pf)
-		behaviors = newBehs.toList ::: behaviors
-		behMap ++= newBehs
+		addBehaviors(newBehs)
+
+	}
+	
+	private[actors] def addBehaviors(behs: Iterable[Beh[Msg, Rsp, State]]): Unit = {
+		behaviors = behs.toList ::: behaviors
+		behMap ++= behs.map(b => b.id -> b.pf)
 	}
 
 	override def ask(msg: SystemMsg): CloseableFuture[SystemMsg] =
@@ -196,7 +202,7 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		case (Close, p)               => if (p.isEmpty) close() else p.foreach(_.completeWith(shutdown().map(_ => Done)))
 		case (AddBehavior(id, pf), p) => addBehavior(id, pf); respond(p, Done)
 		case (RemoveBehavior(id), p)  => removeBehavior(id); respond(p, Done)
-		case (AddBehaviorPF(pf), p)           => addBehavior(pf); respond(p, Done)
+		case (AddBehaviorPF(pf), p)   => addBehaviorPF(pf); respond(p, Done)
 		case (data: Spawn, p)         => val rsp = spawn(data); respond(p, rsp)
 		case (ActorClosed(id), p)     => removeChild(id); respond(p, Done)
 		case _ => // @todo: log the unhandled messages
@@ -208,9 +214,8 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 
 	protected def spawn(data: SystemMsg.Spawn): SystemMsg =
 		if (children.contains(data.id)) SystemMsg.InvalidId else {
-			val b1 = ActorBuilder[Msg, Rsp, State]()
+			val b1 = ActorBuilder[Msg, Rsp, State](data.state.getOrElse(this.state))
 				.withIdIf(data.id.nonEmpty, data.id)
-				.withState(data.state.getOrElse(this.state))
 				.withBehaviorsIf(data.behaviors.nonEmpty, data.behaviors, this.behaviors)
 				.withHeartbeat(data.heartbeat.getOrElse(this.heartbeat))
 				.withParent(this)
@@ -233,18 +238,18 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		while (!isPaused && !isClosed && msgs.nonEmpty) {
 			val (msg, pOpt, bId) = msgs.dequeue()
 			val pfOpt =
-				if (bId.nonEmpty) getBehavior(bId)
+				if (bId.nonEmpty) getBehavior(bId).map(_.pf)
 				else behaviors.collectFirst { case (_, pf) if pf.isDefinedAt(msg, this) => pf }
 			val res = pfOpt match {
 				case Some(pf) if isSerial => Try(pf(msg, this))
-				case Some(pf) => Try(Await.result(Future {pf(msg, this)}, heartbeat.timeout))
-				case _ => Ignored[Rsp]
+				case Some(pf)             => Try(Await.result(Future {pf(msg, this)}, heartbeat.timeout))
+				case _                    => Ignored[Rsp]
 			}
 			pOpt.foreach(p => try {
 				res match {
 					case Success(Some(rsp)) => p.tryComplete(Try(rsp))
-					case Success(None) => p.tryComplete(NoResponse[Rsp])
-					case Failure(t) => p.tryComplete(Failure(t))
+					case Success(None)      => p.tryComplete(NoResponse[Rsp])
+					case Failure(t)         => p.tryComplete(Failure(t))
 				}
 			} catch {
 				case _: IllegalStateException => // Promise already completed
@@ -276,8 +281,7 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 
 	override def isInitializedSignal(using ExecutionContext): Signal[Boolean] =
 		DoneSignal().tap { signal =>
-			if (isInitialized) signal.done()
-			else onInit(_ => signal.done())
+			if (isInitialized) signal.done() else onInit(_ => signal.done())
 		}
 
 	/**

@@ -99,7 +99,7 @@ class ActorSystemSpec extends FunSuite {
     override protected def processSysEntry(msg: SysEntry): Unit = msg match {
       case (Ref(ref), p) =>
         receivedRef = Some(ref)
-        receivedName ! ref.path.name
+        receivedName ! ref.path.actorId
         respond(p, Done)
       case (InvalidId, p) =>
         receivedInvalid ! true
@@ -156,7 +156,7 @@ class ActorSystemSpec extends FunSuite {
     val sys = newSystem()
     val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
     val ref = awaitRef(sys, "a")
-    assertEquals(ref.path.name, "a")
+    assertEquals(ref.path.actorId, "a")
     close(a)
     close(sys)
   }
@@ -170,7 +170,7 @@ class ActorSystemSpec extends FunSuite {
       .build()
     val rsp = resultCF(sys ? Register(a))
     rsp match {
-      case Ref(ref) => assertEquals(ref.path.name, "manual")
+      case Ref(ref) => assertEquals(ref.path.actorId, "manual")
       case other => fail(s"Expected Ref, got $other")
     }
     close(a)
@@ -202,9 +202,9 @@ class ActorSystemSpec extends FunSuite {
     val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
     val b = newActor(sys, "b", { case (msg, _) => Some(s"B: $msg") })
     val c = newActor(sys, "c", { case (msg, _) => Some(s"C: $msg") })
-    assertEquals(awaitRef(sys, "a").path.name, "a")
-    assertEquals(awaitRef(sys, "b").path.name, "b")
-    assertEquals(awaitRef(sys, "c").path.name, "c")
+    assertEquals(awaitRef(sys, "a").path.actorId, "a")
+    assertEquals(awaitRef(sys, "b").path.actorId, "b")
+    assertEquals(awaitRef(sys, "c").path.actorId, "c")
     close(a); close(b); close(c)
     close(sys)
   }
@@ -218,7 +218,7 @@ class ActorSystemSpec extends FunSuite {
     import sys.SystemMsg.*
     val child = spawn(sys)(Spawn(id = "c"))
     val ref = awaitRef(sys, "c")
-    assertEquals(ref.path.name, "c")
+    assertEquals(ref.path.actorId, "c")
     close(child)
     close(sys)
   }
@@ -237,7 +237,7 @@ class ActorSystemSpec extends FunSuite {
     val sys = newSystem()
     val child = spawn(sys)(sys.SystemMsg.Spawn())
     val ref = awaitRef(sys, child.id)
-    assertEquals(ref.path.name, child.id)
+    assertEquals(ref.path.actorId, child.id)
     close(child)
     close(sys)
   }
@@ -264,7 +264,7 @@ class ActorSystemSpec extends FunSuite {
     val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
     val ref = awaitRef(sys, "a")
     assert(ref.isLocal)
-    assertEquals(ref.path.name, "a")
+    assertEquals(ref.path.actorId, "a")
     close(a)
     close(sys)
   }
@@ -346,7 +346,7 @@ class ActorSystemSpec extends FunSuite {
     close(c1)
     awaitInvalid(sys, "c1")
     val ref = awaitRef(sys, "c2")
-    assertEquals(ref.path.name, "c2")
+    assertEquals(ref.path.actorId, "c2")
     close(c2)
     close(sys)
   }
@@ -365,7 +365,7 @@ class ActorSystemSpec extends FunSuite {
     val rsp = resultCF(sys ? AskForRefAsync(capturer, "a"))
     assertEquals(rsp, Done)
     val ref = awaitCapturedRef(capturer)
-    assertEquals(ref.path.name, "a")
+    assertEquals(ref.path.actorId, "a")
     close(capturer)
     close(a)
     close(sys)
@@ -440,7 +440,7 @@ class ActorSystemSpec extends FunSuite {
     val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
     val ref = awaitRef(sys, "a")
     assert(ref.isLocal)
-    assertEquals(ref.path.name, "a")
+    assertEquals(ref.path.actorId, "a")
     assertEquals(ref.path, ActorPath.Local("a"))
     close(a)
     close(sys)

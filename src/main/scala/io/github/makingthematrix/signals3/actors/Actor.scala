@@ -55,9 +55,12 @@ trait Actor[Msg, Rsp, State] {
 		case NewChild(child: Actor[Msg, Rsp, State])
 		case ActorClosed(id: String)
 		case Register(actor: Actor[Msg, Rsp, State])
+		case Unregister(actorId: String)
 		case Ref(ref: ActorRef[Msg, Rsp])
 		case AskForRef(id: String)
 		case AskForRefAsync(sender: Actor[Msg, Rsp, State], id: String)
+		case RegisterSystem(system: RemoteSystem[Msg, Rsp])
+		case UnregisterSystem(systemId: String)
 	}
 	
 	def id: String
@@ -86,7 +89,7 @@ trait Actor[Msg, Rsp, State] {
 		* @param id The unique identifier of the behavior to retrieve.
 		* @return An `Option` containing the partial function defining the behavior, if found; otherwise, `None`.
 		*/
-	def getBehavior(id: String): Option[PF[Msg, Rsp, State]]
+	def getBehavior(id: String): Option[Beh[Msg, Rsp, State]]
 
 	/**
 		* Sends a system message to the actor, expecting a response in the form of a `CloseableFuture`.

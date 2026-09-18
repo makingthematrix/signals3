@@ -237,7 +237,7 @@ final class ActorBuilder[Msg, Rsp, State] (
   private def buildActor(state: State, ec: ExecutionContext): Actor[Msg, Rsp, State] = {
     val actor = new ActorImpl[Msg, Rsp, State](id, state, heartbeat, parent, system)(using ec)
     onInit.foreach(actor.onInit)
-    behaviors.foreach(actor.addBehavior)
+    actor.addBehaviors(behaviors)
     actor.initialize()
     actor
   }
@@ -263,7 +263,7 @@ object ActorBuilder {
 
   inline def apply[Msg, Rsp, State](state: State): ActorBuilder[Msg, Rsp, State] =
     apply(id = IdGenerator.generate(), state = state)
-  
+
   // Pre-defined heartbeat strategies for convenience
 
   /**
