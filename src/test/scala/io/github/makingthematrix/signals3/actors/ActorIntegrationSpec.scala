@@ -39,10 +39,7 @@ class ActorIntegrationSpec extends FunSuite {
 
   private def create[Msg, Rsp, State](state: State, pf: Actor.PF[Msg, Rsp, State], hbs: HeartBeatStrategy): Actor[Msg, Rsp, State] & Closeable & Pausable =
     Actor[Msg, Rsp, State](state, pf, hbs).asInstanceOf[ActorImpl[Msg, Rsp, State]]
-
-  private def create[Msg, Rsp, State](state: State, pf: Actor.PF[Msg, Rsp, State], onInit: MutableActor[Msg, Rsp, State] => Unit): Actor[Msg, Rsp, State] & Closeable & Pausable =
-    Actor[Msg, Rsp, State](state, pf, onInit).asInstanceOf[ActorImpl[Msg, Rsp, State]]
-
+  
   private def spawn[Msg, Rsp, State](parent: Actor[Msg, Rsp, State])(data: parent.SystemMsg.Spawn): Actor[Msg, Rsp, State] = {
     import parent.SystemMsg
     val rsp = Await.result(parent ? data, 5.seconds)

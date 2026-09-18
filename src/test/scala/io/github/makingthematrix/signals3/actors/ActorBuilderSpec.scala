@@ -30,7 +30,7 @@ class ActorBuilderSpec extends FunSuite {
     val actor = buildActor(
       ActorBuilder[Int, String, Int]()
         .withState(0)
-        .withBehavior {
+        .withBehaviorPF {
           case (msg, _) => Some(s"Processed: $msg")
         }
     )
@@ -45,7 +45,7 @@ class ActorBuilderSpec extends FunSuite {
     val actor = buildActor(
       ActorBuilder[Int, String, Int]()
         .withState(initialState)
-        .withBehavior {
+        .withBehaviorPF {
           case (msg, actor) => Some(s"State: ${actor.state}, Msg: $msg")
         }
     )
@@ -65,7 +65,7 @@ class ActorBuilderSpec extends FunSuite {
         .withBehavior("second", {
           case (2, _) => Some("Second behavior")
         })
-        .withBehavior {
+        .withBehaviorPF {
           case (msg, _) => Some(s"Default: $msg")
         }
     )
@@ -82,7 +82,7 @@ class ActorBuilderSpec extends FunSuite {
     val actor = buildActor(
       ActorBuilder[Int, String, Int]()
         .withState(0)
-        .withBehavior {
+        .withBehaviorPF {
           case (msg, _) => Some(s"Processed: $msg")
         }
         .withLinearHeartbeat(50)
@@ -97,7 +97,7 @@ class ActorBuilderSpec extends FunSuite {
     val actor = buildActor(
       ActorBuilder[Int, String, Int]()
         .withState(0)
-        .withBehavior {
+        .withBehaviorPF {
           case (msg, _) => Some(s"Processed: $msg")
         }
         .withAgitatedHeartbeat(50, 1.5, 500)
@@ -112,7 +112,7 @@ class ActorBuilderSpec extends FunSuite {
     val actor = buildActor(
       ActorBuilder[Int, String, Int]()
         .withState(0)
-        .withBehavior {
+        .withBehaviorPF {
           case (msg, _) => Some(s"Processed: $msg")
         }
         .withReactiveHeartbeat(100, 5)
@@ -127,7 +127,7 @@ class ActorBuilderSpec extends FunSuite {
     val actor = buildActor(
       ActorBuilder[Int, String, Int]()
         .withState(0)
-        .withBehavior {
+        .withBehaviorPF {
           case (msg, _) => Some(s"Processed: $msg")
         }
         .withSerialDispatch()
@@ -144,7 +144,7 @@ class ActorBuilderSpec extends FunSuite {
     val actor = buildActor(
       ActorBuilder[Int, String, Int]()
         .withState(0)
-        .withBehavior {
+        .withBehaviorPF {
           case (msg, _) => Some(s"Processed: $msg")
         }
         .withOnInit { _ =>
@@ -165,7 +165,7 @@ class ActorBuilderSpec extends FunSuite {
     val actor = buildActor(
       ActorBuilder[Int, String, Int]()
         .withState(0)
-        .withBehavior {
+        .withBehaviorPF {
           case (msg, actor) =>
             actor.state += msg
             Some(s"State: ${actor.state}")
@@ -210,7 +210,7 @@ class ActorBuilderSpec extends FunSuite {
     val actor1 = buildActor(
       ActorBuilder[Int, String, Int]()
         .withState(0)
-        .withBehavior {
+        .withBehaviorPF {
           case (msg, _) => Some(s"Processed: $msg")
         }
         .withHeartbeat(Linear100ms)
@@ -223,7 +223,7 @@ class ActorBuilderSpec extends FunSuite {
     val actor2 = buildActor(
       ActorBuilder[Int, String, Int]()
         .withState(0)
-        .withBehavior {
+        .withBehaviorPF {
           case (msg, _) => Some(s"Processed: $msg")
         }
         .withHeartbeat(Reactive100ms10)
@@ -243,7 +243,7 @@ class ActorBuilderSpec extends FunSuite {
         .withBehavior("special", {
           case (42, _) => Some("The answer!")
         })
-        .withBehavior {
+        .withBehaviorPF {
           case (msg, actor) => Some(s"Default: ${actor.state} - $msg")
         }
         .withAgitatedHeartbeat(50, 1.5, 500)
@@ -268,7 +268,7 @@ class ActorBuilderSpec extends FunSuite {
     val actor = buildActor(
       ActorBuilder[Int, String, Int]()
         .withState(0)
-        .withBehavior {
+        .withBehaviorPF {
           case (msg, _) => Some(s"Processed: $msg")
         }
         .withReactiveHeartbeat(50, 5)

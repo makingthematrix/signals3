@@ -25,9 +25,9 @@ object ActorPath {
 		def name: String = actorId
 	}
 	
-	def parse(path: String): ActorPath = path match {
-		case LocalPattern(actorId) => Local(actorId)
-		case RemotePattern(system, host, port, id) => Remote(system, host, port.toInt, id)
-		case _ => throw new IllegalArgumentException(s"Invalid actor path: $path")
+	def parse(path: String): Option[ActorPath] = path match {
+		case LocalPattern(actorId) => Some(Local(actorId))
+		case RemotePattern(system, host, port, id) => Some(Remote(system, host, port.toInt, id))
+		case _ => None
 	}
 }

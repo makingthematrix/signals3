@@ -56,6 +56,11 @@ trait Actor[Msg, Rsp, State] {
 		          )
 		case NewChild(child: Actor[Msg, Rsp, State])
 		case ActorClosed(id: String)
+		case Register(actor: Actor[Msg, Rsp, State])
+		case Ref(ref: ActorRef[Msg, Rsp])
+		case AskForRef(id: String)
+		case AskForRefAsync(sender: Actor[Msg, Rsp, State], id: String)
+		
 /*		case GetRef(ref: ActorRef[Msg, Rsp])
 		case Register(actor: Actor[Msg, Rsp, State])
 		case AskForRef(actor: Actor[Msg, Rsp, State], id: String)*/
@@ -184,6 +189,10 @@ trait Actor[Msg, Rsp, State] {
 	def isPausedSignal: Signal[Boolean]
 
 	def parent: Option[Actor[Msg, Rsp, State]]
+	
+	def system: Option[ActorSystem[Msg, Rsp, State]]
+	
+	def toRef: ActorRef[Msg, Rsp]
 }
 
 object Actor {
