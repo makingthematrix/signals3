@@ -13,7 +13,7 @@ final class ActorSystem[Msg, Rsp, State](override val id: String,
 	extends ActorImpl[Msg, Rsp, State](id, state, heartbeat) with RemoteSystem[Msg, Rsp] {
 	import SystemMsg.*
 	import ActorPath.*
-	
+
 	private var actorRefs: Map[String, ActorRef[Msg, Rsp]] = Map.empty
 	private var systems: Map[String, RemoteSystem[Msg, Rsp]] = Map.empty
 
@@ -22,37 +22,49 @@ final class ActorSystem[Msg, Rsp, State](override val id: String,
 			val ref = LocalActorRef(actor)
 			actorRefs += (actor.id -> ref)
 			respond(p, Ref(ref))
-		case (Unregister(id), p) =>
-			actorRefs -= id
+		case (Unregister(actorId), p) =>
+			actorRefs -= actorId
 			respond(p, Done)
-		case (ActorClosed(id), _) =>
-			actorRefs -= id
+		case (ActorClosed(actorId), _) =>
+			actorRefs -= actorId
 			super.processSysEntry(msg)
-		case (AskForRef(id), p) =>
-			respond(p, actorRefs.get(id).map(Ref(_)).getOrElse(InvalidId))
-		case (AskForRefAsync(sender, id), p) =>
-			val rsp = actorRefs.get(id).map(sender.SystemMsg.Ref(_)).getOrElse(sender.SystemMsg.InvalidId)
+		case (AskForLocalRef(actorId), p) =>
+			respond(p, actorRefs.get(actorId).map(Ref(_)).getOrElse(InvalidId))
+		case (AskForLocalRefAsync(sender, actorId), p) =>
+			val rsp = actorRefs.get(actorId)
+				.map(sender.SystemMsg.Ref(_))
+				.getOrElse(sender.SystemMsg.InvalidId)
 			sender ! rsp
 			respond(p, Done)
 		case (RegisterSystem(system), p) =>
 			systems += (system.id -> system)
 			respond(p, Done)
-		case (UnregisterSystem(id), p) =>
-			systems -= id
+		case (UnregisterSystem(systemId), p) =>
+			systems -= systemId
+			respond(p, Done)
+		case (AskForRemoteRef(actorId, systemId), p) =>
+			val rsp = systems.get(systemId)
+				.map { s => Ref(RemoteActorRef(ActorPath.Remote(systemId, actorId), s)) }
+				.getOrElse(InvalidId)
+			respond(p, rsp)
+		case (AskForRemoteRefAsync(sender, actorId, systemId), p) =>
+			val rsp = systems.get(systemId)
+				.map { s => sender.SystemMsg.Ref(RemoteActorRef(ActorPath.Remote(systemId, actorId), s)) }
+				.getOrElse(sender.SystemMsg.InvalidId)
+			sender ! rsp
 			respond(p, Done)
 		case _ =>
 			super.processSysEntry(msg)
 	}
 
 	override protected def spawn(data: SystemMsg.Spawn): SystemMsg =
-		if (children.contains(data.id)) SystemMsg.InvalidId else {
+		if (children.contains(data.actorId)) SystemMsg.InvalidId else {
 			val b1 = ActorBuilder[Msg, Rsp, State](data.state.getOrElse(this.state))
-				.withIdIf(data.id.nonEmpty, data.id)
+				.withIdIf(data.actorId.nonEmpty, data.actorId)
 				.withBehaviorsIf(data.behaviors.nonEmpty, data.behaviors, this.behaviors)
 				.withHeartbeat(data.heartbeat.getOrElse(this.heartbeat))
 				.withParent(this)
 				.withSystem(this)
-				.withSystemIf(system.nonEmpty, system.get)
 				.withOnInitIf(data.onInit.nonEmpty, data.onInit.get)
 			val b2 = data.executionContext.fold(b1)(b1.withParallelDispatch)
 			val b3 = if (data.useSerialDispatch) b2.withSerialDispatch() else b2
@@ -68,7 +80,7 @@ final class ActorSystem[Msg, Rsp, State](override val id: String,
 		case Remote(systemId, _)      if systems.contains(systemId)  => systems(systemId)  ! (path, msg)
 		case _ => // invalid system or actor id
 	}
-	
+
 	override def ask(path: ActorPath, msg: Msg): CloseableFuture[Rsp] = path match {
 		case Local(actorId)           if actorRefs.contains(actorId) => actorRefs(actorId) ? msg
 		case Remote("local", actorId) if actorRefs.contains(actorId) => actorRefs(actorId) ? msg
@@ -80,11 +92,13 @@ final class ActorSystem[Msg, Rsp, State](override val id: String,
 }
 
 object ActorSystem {
-	def apply[Msg, Rsp, State](id: String, state: State, heartbeat: HeartBeatStrategy)(using ExecutionContext): ActorSystem[Msg, Rsp, State] =
-		new ActorSystem(id, state, heartbeat).tap { s => 
+	def apply[Msg, Rsp, State](id: String, state: State, heartbeat: HeartBeatStrategy)(using ExecutionContext): ActorSystem[Msg, Rsp, State] = {
+		assert(id != "local")
+		new ActorSystem(id, state, heartbeat).tap { s =>
 			s.onInit { _ => s.actorRefs += (s.id -> LocalActorRef(s)) } // register yourself as a valid actor
-			s.initialize() 
+			s.initialize()
 		}
+	}
 
 	inline def apply[Msg, Rsp, State](state: State, heartbeat: HeartBeatStrategy)(using ExecutionContext): ActorSystem[Msg, Rsp, State] =
 		apply(IdGenerator.generate("system"), state, heartbeat)

@@ -21,7 +21,7 @@ object ActorPath {
 	final case class Remote(systemId: String, actorId: String) extends ActorPath
 	
 	def parse(path: String): Option[ActorPath] = path match {
-		case LocalPattern(actorId) => Some(Local(actorId))
+		case LocalPattern(actorId)     => Some(Local(actorId))
 		case RemotePattern(system, id) => Some(Remote(system, id))
 		case _ => None
 	}

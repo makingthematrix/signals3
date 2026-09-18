@@ -12,24 +12,7 @@ This document proposes a comprehensive design for implementing an **Actor System
 
 ---
 
-## Table of Contents
-
-1. [Core Design Principles](#1-core-design-principles)
-2. [Actor Reference (ActorRef) Design](#2-actor-reference-actorref-design)
-3. [Actor System Design](#3-actor-system-design)
-4. [Remote Actor System](#4-remote-actor-system)
-5. [Integration with Existing Actor API](#5-integration-with-existing-actor-api)
-6. [Usage Examples](#6-usage-examples)
-7. [Message Serialization](#7-message-serialization)
-8. [Error Handling and Resilience](#8-error-handling-and-resilience)
-9. [Clustering Support (Optional/Advanced)](#9-clustering-support-optionaladvanced)
-10. [Configuration](#10-configuration)
-11. [Implementation Considerations](#11-implementation-considerations)
-12. [Migration Path](#12-migration-path)
-
----
-
-## 1. Core Design Principles
+## Core Design Principles
 
 ### Location Transparency
 Actor references should work identically whether the target actor is:
@@ -132,594 +115,7 @@ together with the id of the receiver.
 	// todo: actors should carry tags (strings) and the actor system ca get requests to connect an actor with any other actor that has a given tag
 
 ---
-
-## 2. Actor Reference (ActorRef) Design
-
-### Type Hierarchy
-
-```scala
-// Base trait for all actor references
-trait ActorRef {
-  def path: ActorPath
-  def ! (msg: Any): Unit
-  def ? (msg: Any): CloseableFuture[Any]
-  def isLocal: Boolean
-  def isValid: Boolean
-}
-
-// Typed actor reference for type-safe messaging
-trait ActorRef[Msg, Rsp] extends ActorRef {
-  def ! (msg: Msg): Unit
-  def ? (msg: Msg): CloseableFuture[Rsp]
-  override def ! (msg: Any): Unit = this ! msg.asInstanceOf[Msg]
-  override def ? (msg: Any): CloseableFuture[Any] = this ? msg.asInstanceOf[Msg]
-}
-
-// Local actor reference - direct to Actor instance
-final class LocalActorRef[Msg, Rsp, State] private[actors] (
-  private val actor: Actor[Msg, Rsp, State]
-) extends ActorRef[Msg, Rsp] {
-  override def path: ActorPath = ActorPath.Local(actorId)
-  override def ! (msg: Msg): Unit = actor ! msg
-  override def ? (msg: Msg): CloseableFuture[Rsp] = actor ? msg
-  override def isLocal: Boolean = true
-  override def isValid: Boolean = !actor.isClosed
-}
-
-// Remote actor reference - proxies to remote actor
-final class RemoteActorRef[Msg, Rsp] private[actors] (
-  val path: ActorPath.Remote,
-  private val transport: ActorTransport
-) extends ActorRef[Msg, Rsp] {
-  override def ! (msg: Msg): Unit = transport.send(path, msg)
-  override def ? (msg: Msg): CloseableFuture[Rsp] = transport.sendWithResponse(path, msg)
-  override def isLocal: Boolean = false
-  override def isValid: Boolean = true // Remote validity is connection-dependent
-}
-```
-
-### Actor Path (Unique Identifier)
-
-```scala
-sealed trait ActorPath {
-  def asString: String
-  def name: String
-  def systemName: String
-}
-
-object ActorPath {
-  // Local actor within the same JVM
-  case class Local(actorId: String) extends ActorPath {
-    def asString: String = s"local://$actorId"
-    def name: String = actorId
-    def systemName: String = "local"
-  }
-
-  // Remote actor in a different JVM/process
-  case class Remote(systemName: String, host: String, port: Int, actorId: String) extends ActorPath {
-    def asString: String = s"$systemName://$host:$port/$actorId"
-    def name: String = actorId
-  }
-
-  // For parsing paths
-  def parse(path: String): ActorPath = {
-    val LocalPattern = """local://(.+)""".r
-    val RemotePattern = """([^/:]+)://([^:]+):(\d+)/(.+)""".r
-
-    path match {
-      case LocalPattern(actorId) => Local(actorId)
-      case RemotePattern(system, host, port, id) => Remote(system, host, port.toInt, id)
-      case _ => throw new IllegalArgumentException(s"Invalid actor path: $path")
-    }
-  }
-}
-```
-
----
-
-## 3. Actor System Design
-
-### Core Traits
-
-```scala
-trait ActorSystem {
-  def name: String
-  def host: String
-  def port: Int
-
-  // Actor registration and lookup
-  def register[Msg, Rsp, State](name: String, actor: Actor[Msg, Rsp, State]): ActorRef[Msg, Rsp]
-  def get[Msg, Rsp](path: ActorPath): Option[ActorRef[Msg, Rsp]]
-  def get[Msg, Rsp](name: String): Option[ActorRef[Msg, Rsp]]
-  def getUnsafe[Msg, Rsp](path: ActorPath): ActorRef[Msg, Rsp]
-
-  // Actor creation shortcuts
-  def actorOf[Msg, Rsp, State](name: String, state: State, behavior: Actor.PF[Msg, Rsp, State])
-                             (using ec: ExecutionContext): ActorRef[Msg, Rsp]
-
-  def actorOf[Msg, Rsp, State](name: String, state: State, behavior: Actor.Beh[Msg, Rsp, State])
-                             (using ec: ExecutionContext): ActorRef[Msg, Rsp]
-
-  // System lifecycle
-  def shutdown(): CloseableFuture[Unit]
-  def isShutdown: Boolean
-
-  // Cluster support (future)
-  def cluster: Option[ActorCluster]
-}
-```
-
-### Local-only Implementation
-
-```scala
-final class LocalActorSystem(val name: String = "default") extends ActorSystem {
-  private val actors = new ConcurrentHashMap[String, AnyRef]()
-  private val isShutdownFlag = new AtomicBoolean(false)
-
-  override def host: String = "localhost"
-  override def port: Int = 0
-  override def cluster: Option[ActorCluster] = None
-
-  override def register[Msg, Rsp, State](name: String, actor: Actor[Msg, Rsp, State]): ActorRef[Msg, Rsp] = {
-    require(!isShutdownFlag.get(), "Cannot register actors on shutdown system")
-    val path = ActorPath.Local(name)
-    actors.put(name, LocalActorRef(actor).asInstanceOf[AnyRef])
-    LocalActorRef(actor)
-  }
-
-  override def get[Msg, Rsp](path: ActorPath): Option[ActorRef[Msg, Rsp]] = path match {
-    case ActorPath.Local(name) => get[Msg, Rsp](name)
-    case _ => None // Remote paths not supported in local system
-  }
-
-  override def get[Msg, Rsp](name: String): Option[ActorRef[Msg, Rsp]] = {
-    actors.get(name).map(_.asInstanceOf[ActorRef[Msg, Rsp]])
-  }
-
-  override def getUnsafe[Msg, Rsp](path: ActorPath): ActorRef[Msg, Rsp] = {
-    get[Msg, Rsp](path).getOrElse(throw new IllegalArgumentException(s"Actor not found: $path"))
-  }
-
-  override def actorOf[Msg, Rsp, State](name: String, state: State, behavior: Actor.PF[Msg, Rsp, State])
-                                    (using ec: ExecutionContext): ActorRef[Msg, Rsp] = {
-    val actor = Actor(state, behavior)(using ec)
-    register(name, actor)
-  }
-
-  override def actorOf[Msg, Rsp, State](name: String, state: State, behavior: Actor.Beh[Msg, Rsp, State])
-                                    (using ec: ExecutionContext): ActorRef[Msg, Rsp] = {
-    val actor = Actor(state, behavior)(using ec)
-    register(name, actor)
-  }
-
-  override def shutdown(): CloseableFuture[Unit] = {
-    if (isShutdownFlag.compareAndSet(false, true)) {
-      // Close all registered actors
-      val closeFutures = actors.values().iterator().asScala.map {
-        case ref: LocalActorRef[_, _, _] => ref.actor.close()
-        case _ => ()
-      }
-      CloseableFuture.sequence(closeFutures.toSeq).map(_ => ())
-    } else {
-      CloseableFuture.successful(())
-    }
-  }
-
-  override def isShutdown: Boolean = isShutdownFlag.get()
-}
-```
-
----
-
-## 4. Remote Actor System
-
-```scala
-final class RemoteActorSystem(
-  val name: String,
-  val host: String,
-  val port: Int,
-  transport: ActorTransport
-) extends ActorSystem {
-  private val localSystem = new LocalActorSystem(name)
-  private val remoteConnections = new ConcurrentHashMap[String, ActorTransport]()
-  private val isShutdownFlag = new AtomicBoolean(false)
-
-  override def cluster: Option[ActorCluster] = None // Could be Some(cluster) for clustering support
-
-  override def register[Msg, Rsp, State](name: String, actor: Actor[Msg, Rsp, State]): ActorRef[Msg, Rsp] = {
-    localSystem.register(name, actor)
-  }
-
-  override def get[Msg, Rsp](path: ActorPath): Option[ActorRef[Msg, Rsp]] = path match {
-    case p: ActorPath.Local => localSystem.get[Msg, Rsp](p)
-    case p: ActorPath.Remote =>
-      // Check if we have a connection to this remote system
-      val key = s"${p.systemName}://${p.host}:${p.port}"
-      if (remoteConnections.containsKey(key)) {
-        Some(new RemoteActorRef[Msg, Rsp](p, remoteConnections.get(key)))
-      } else {
-        // Attempt to connect
-        transport.connect(key).value match {
-          case Some(Success(_)) =>
-            remoteConnections.put(key, transport)
-            Some(new RemoteActorRef[Msg, Rsp](p, transport))
-          case _ => None
-        }
-      }
-    case _ => None
-  }
-
-  // ... other methods delegate to localSystem or handle remote
-}
-```
-
----
-
-## 5. Integration with Existing Actor API
-
-### Extending Actor with System Awareness
-
-```scala
-trait Actor[Msg, Rsp, State] {
-  // Existing methods...
-
-  // New methods for actor system integration
-  def system: Option[ActorSystem] = None
-
-  def ref: ActorRef[Msg, Rsp] = system match {
-    case Some(sys) => sys.getUnsafe[Msg, Rsp](ActorPath.Local(this.toString))
-    case None => LocalActorRef(this)
-  }
-}
-
-// Extended ActorImpl with system support
-final private[actors] class ActorImpl[Msg, Rsp, State](
-  private var _state: State,
-  override val heartbeat: HeartBeatStrategy = Actor.defBeat,
-  private val _system: Option[ActorSystem] = None
-)(using ec: ExecutionContext) extends MutableActor[Msg, Rsp, State] with Closeable with Pausable {
-  // Existing implementation...
-
-  override def system: Option[ActorSystem] = _system
-
-  // When closed, also unregister from system if registered
-  override def closeAndCheck(): Boolean = {
-    _system.foreach { sys =>
-      // Find and remove this actor from the system
-      // (implementation would need to track registered actors)
-    }
-    super.closeAndCheck()
-  }
-}
-```
-
-### Factory Methods with System
-
-```scala
-object Actor {
-  // Existing methods...
-
-  // New factory methods with actor system
-  inline def apply[Msg, Rsp, State](
-    name: String,
-    state: State,
-    behavior: PF[Msg, Rsp, State],
-    system: ActorSystem
-  )(using ExecutionContext): ActorRef[Msg, Rsp] = {
-    val actor = new ActorImpl(state, defBeat, Some(system))(using ec).tap { a =>
-      a.addBehavior("default" -> behavior)
-      a.initialize()
-    }
-    system.register(name, actor)
-  }
-
-  // Builder integration
-  def builder[Msg, Rsp, State](system: ActorSystem): ActorBuilderWithSystem[Msg, Rsp, State] =
-    new ActorBuilderWithSystem(system)
-}
-
-// Extended builder with system support
-final class ActorBuilderWithSystem[Msg, Rsp, State](
-  system: ActorSystem,
-  state: State = null.asInstanceOf[State],
-  behaviors: List[Actor.Beh[Msg, Rsp, State]] = Nil,
-  heartbeat: Actor.HeartBeatStrategy = Actor.defBeat,
-  onInit: Option[MutableActor[Msg, Rsp, State] => Unit] = None,
-  useSerialDispatch: Boolean = false,
-  name: Option[String] = None
-) {
-  // Similar to ActorBuilder but builds with system registration
-
-  def withName(name: String): ActorBuilderWithSystem[Msg, Rsp, State] = {
-    this.copy(name = Some(name))
-  }
-
-  def build()(using ec: ExecutionContext): ActorRef[Msg, Rsp, State] = {
-    require(name.isDefined, "Actor name is required for system registration")
-    val actor = if (useSerialDispatch) buildSerial() else buildParallel(ec)
-    system.register(name.get, actor)
-  }
-}
-```
-
----
-
-## 6. Usage Examples
-
-### Basic Local System Usage
-
-```scala
-// Create a local actor system
-val system = LocalActorSystem("myApp")
-
-// Create actors through the system
-val counterRef: ActorRef[Int, String] = system.actorOf(
-  name = "counter",
-  state = 0,
-  behavior = { case (msg: Int, actor) =>
-    actor.state += msg
-    Some(s"Count: ${actor.state}")
-  }
-)
-
-// Send messages
-counterRef ! 5
-val response: CloseableFuture[String] = counterRef ? 3
-
-// Lookup actors
-val retrieved: ActorRef[Int, String] = system.getUnsafe("counter")
-retrieved ! 10
-
-// Shutdown system (closes all actors)
-system.shutdown()
-```
-
-### Remote Communication
-
-```scala
-// Server side
-val serverSystem = RemoteActorSystem(
-  name = "paymentService",
-  host = "0.0.0.0",
-  port = 2552,
-  transport = ActorTransport.tcp
-)
-
-// Create a payment processor actor
-serverSystem.actorOf(
-  name = "processor",
-  state = Map.empty[String, Double],
-  behavior = { case (msg: PaymentRequest, actor) =>
-    // Process payment
-    Some(PaymentResponse(true))
-  }
-)
-
-// Client side
-val clientSystem = RemoteActorSystem(
-  name = "clientApp",
-  host = "localhost",
-  port = 0, // No server mode
-  transport = ActorTransport.tcp
-)
-
-// Get reference to remote actor
-val processorRef = clientSystem.getUnsafe[PaymentRequest, PaymentResponse](
-  ActorPath.Remote("paymentService", "payment-server.example.com", 2552, "processor")
-)
-
-// Use it transparently
-val response: CloseableFuture[PaymentResponse] = processorRef ? PaymentRequest(100.0)
-```
-
-### Mixed Local and Remote
-
-```scala
-val system = RemoteActorSystem("analytics", "0.0.0.0", 8080)
-
-// Create local actors
-val collectorRef = system.actorOf("collector", state, collectorBehavior)
-val aggregatorRef = system.actorOf("aggregator", state, aggregatorBehavior)
-
-// Get reference to remote service
-val dbRef = system.getUnsafe[Query, Result](
-  ActorPath.Remote("database", "db.example.com", 5432, "queryService")
-)
-
-// Local actor can send messages to remote actor
-collectorRef ! StartCollection(dbRef)
-```
-
----
-
-## 7. Message Serialization
-
-```scala
-trait MessageSerializer {
-  def serialize(msg: Any): Array[Byte]
-  def deserialize(bytes: Array[Byte]): Any
-  def contentType: String
-}
-
-// JSON serializer using circe
-final class JsonSerializer extends MessageSerializer {
-  import io.circe._
-  import io.circe.syntax._
-  import io.circe.parser._
-
-  override def serialize(msg: Any): Array[Byte] = {
-    msg.asJson.noSpaces.getBytes(StandardCharsets.UTF_8)
-  }
-
-  override def deserialize(bytes: Array[Byte]): Any = {
-    val json = new String(bytes, StandardCharsets.UTF_8)
-    decode[Any](json).toTry.get
-  }
-
-  override def contentType: String = "application/json"
-}
-
-// Binary serializer using Java serialization
-final class JavaSerializer extends MessageSerializer {
-  override def serialize(msg: Any): Array[Byte] = {
-    val bos = new ByteArrayOutputStream()
-    val oos = new ObjectOutputStream(bos)
-    oos.writeObject(msg)
-    oos.close()
-    bos.toByteArray
-  }
-
-  override def deserialize(bytes: Array[Byte]): Any = {
-    val bis = new ByteArrayInputStream(bytes)
-    val ois = new ObjectInputStream(bis)
-    val obj = ois.readObject()
-    ois.close()
-    obj
-  }
-
-  override def contentType: String = "application/x-java-serialized-object"
-}
-```
-
----
-
-## 8. Error Handling and Resilience
-
-```scala
-sealed trait ActorSystemError extends Exception
-
-object ActorSystemError {
-  case class ActorNotFound(path: ActorPath) extends ActorSystemError
-  case class SystemShutdown(system: String) extends ActorSystemError
-  case class ConnectionFailed(path: ActorPath, cause: Throwable) extends ActorSystemError
-  case class SerializationError(msg: Any, cause: Throwable) extends ActorSystemError
-  case class Timeout(path: ActorPath) extends ActorSystemError
-}
-
-// Enhanced ActorRef with better error handling
-trait ActorRef[Msg, Rsp] {
-  def ! (msg: Msg): Unit
-  def ? (msg: Msg): CloseableFuture[Rsp]
-  def ? (msg: Msg, timeout: FiniteDuration): CloseableFuture[Rsp]
-  def isAvailable: Signal[Boolean]
-  def onFailure: Signal[ActorSystemError]
-}
-```
-
----
-
-## 9. Clustering Support (Optional/Advanced)
-
-```scala
-trait ActorCluster {
-  def join(seedNodes: Seq[String]): CloseableFuture[Unit]
-  def leave(): CloseableFuture[Unit]
-  def members: Signal[Set[ClusterMember]]
-  def memberStatus: Signal[ClusterStatus]
-
-  // Cluster-aware actor discovery
-  def select(path: String): ActorSelection
-}
-
-case class ClusterMember(
-  address: String,
-  host: String,
-  port: Int,
-  status: ClusterMemberStatus
-)
-
-sealed trait ClusterMemberStatus
-object ClusterMemberStatus {
-  case object Joining extends ClusterMemberStatus
-  case object Up extends ClusterMemberStatus
-  case object Leaving extends ClusterMemberStatus
-  case object Exiting extends ClusterMemberStatus
-  case object Down extends ClusterMemberStatus
-  case object Removed extends ClusterMemberStatus
-}
-
-sealed trait ClusterStatus
-object ClusterStatus {
-  case object Joining extends ClusterStatus
-  case object Active extends ClusterStatus
-  case object Leaving extends ClusterStatus
-  case object Exiting extends ClusterStatus
-}
-
-// Actor selection for cluster-wide messaging
-trait ActorSelection {
-  def ! (msg: Any): Unit
-  def ? (msg: Any): CloseableFuture[Any]
-  def tell(msg: Any): Unit
-  def ask(msg: Any): CloseableFuture[Any]
-}
-```
-
----
-
-## 10. Configuration
-
-```scala
-case class ActorSystemConfig(
-  name: String = "default",
-  host: String = "localhost",
-  port: Int = 0,
-  transport: TransportConfig = TransportConfig.Tcp,
-  serialization: SerializationConfig = SerializationConfig.Json,
-  heartbeat: HeartBeatStrategy = Actor.defBeat,
-  cluster: Option[ClusterConfig] = None
-)
-
-sealed trait TransportConfig
-object TransportConfig {
-  case object Tcp extends TransportConfig
-  case object Http extends TransportConfig
-  case class Custom(name: String, factory: () => ActorTransport) extends TransportConfig
-}
-
-sealed trait SerializationConfig
-object SerializationConfig {
-  case object Json extends SerializationConfig
-  case object Java extends SerializationConfig
-  case object Protobuf extends SerializationConfig
-  case class Custom(name: String, factory: () => MessageSerializer) extends SerializationConfig
-}
-
-case class ClusterConfig(
-  seedNodes: Seq[String] = Nil,
-  gossipInterval: FiniteDuration = 1.second,
-  failureDetection: FiniteDuration = 10.seconds
-)
-
-object ActorSystem {
-  def apply(config: ActorSystemConfig): ActorSystem = {
-    config.transport match {
-      case TransportConfig.Tcp =>
-        new RemoteActorSystem(
-          config.name,
-          config.host,
-          config.port,
-          ActorTransport.tcp
-        )
-      case TransportConfig.Http =>
-        new RemoteActorSystem(
-          config.name,
-          config.host,
-          config.port,
-          ActorTransport.http
-        )
-      case TransportConfig.Custom(_, factory) =>
-        new RemoteActorSystem(config.name, config.host, config.port, factory())
-    }
-  }
-
-  def local(name: String = "default"): ActorSystem = new LocalActorSystem(name)
-}
-```
-
----
-
-## 11. Implementation Considerations
+Implementation Considerations
 
 ### Thread Safety
 - Use `ConcurrentHashMap` for actor registries
@@ -744,7 +140,7 @@ object ActorSystem {
 
 ---
 
-## 12. Migration Path
+## Migration Path
 
 1. **Phase 1**: Implement LocalActorSystem and LocalActorRef
    - No remote support
@@ -798,3 +194,149 @@ src/main/scala/io/github/makingthematrix/signals3/actors/
 
 **Last Updated:** 2026-09-10  
 **Next Steps:** Awaiting review and feedback
+
+---
+
+## Review: Remote Communication — Second Pass
+
+**Vibe Session ID:** `8b4c27d5-5srq53hr`  
+**Date:** 2026-09-18  
+**Reviewer:** Mistral Vibe (automated analysis)
+
+This section records findings from a re-analysis of the remote-communication
+feature after the changes made in response to the first review. Items already
+addressed are listed first, followed by remaining issues.
+
+### What was addressed
+
+- **`RemoteActorRef` is no longer dead code.** It now has real producers:
+  `AskForRemoteRef` / `AskForRemoteRefAsync` (`ActorSystem.scala:45-55`) and
+  `Actor.toRef` (`ActorImpl.scala:319-320`). The feature is genuinely wired up.
+- **Decoupled from `ActorSystem`.** `RemoteActorRef` now holds
+  `RemoteSystem[Msg, Rsp]` (`ActorRef.scala:24`), so it can proxy to any future
+  `RemoteSystem` implementation, not just `ActorSystem`.
+- **`isValid` removed** from `ActorRef`. Better than leaving a lie — the trait no
+  longer claims to know validity it cannot compute.
+- **Case classes → `final class`.** Both refs are now `final class`, removing
+  spurious `equals` / `hashCode` / `copy` over mutable actor proxies.
+- **Dead `.withSystemIf` removed** from `ActorSystem.spawn`.
+- **Clearer naming.** `AskForRef` → `AskForLocalRef`; new `AskForRemoteRef`
+  family. `Spawn.id` → `Spawn.actorId`.
+- **Design doc trimmed**, removing the misleading host/port transport design that
+  did not match the implementation.
+
+### Remaining issues
+
+#### 1. The `toRef` registration race (most important new issue)
+
+`ActorImpl.toRef` (`ActorImpl.scala:319-320`) now returns a `RemoteActorRef` for
+any actor whose `system` is set:
+
+```scala
+override lazy val toRef: ActorRef[Msg, Rsp] =
+    system.map(s => RemoteActorRef(ActorPath.Remote(s.id, id), s)).getOrElse(toLocalRef)
+```
+
+This routes through `ActorSystem.bang`, which matches
+`Remote(\`id\`, actorId) if actorRefs.contains(actorId)`. But the actor only
+registers itself in `actorRefs` asynchronously, via `Register` enqueued during
+`initialize()` (`ActorImpl.scala:270`) and processed on the system's heartbeat.
+So:
+
+```scala
+val actor = builder.build()   // Register enqueued, not yet processed
+val ref = actor.toRef          // RemoteActorRef created, looks valid
+ref ! msg                      // bang: actorRefs.contains(actorId) is false -> case _ -> dropped
+```
+
+`toRef` hands you a usable-looking ref at the exact moment `build()` returns,
+before registration is guaranteed to have completed. The intended pattern for
+`AskForLocalRef` is to poll (`awaitRef` in tests), but `toRef` bypasses that wait
+entirely. This is the most natural way to use `toRef` and it silently drops
+messages. Either `toRef` should not exist before registration completes (block,
+or return an unregistered marker), or `bang` should enqueue-then-route instead
+of route-or-drop.
+
+#### 2. `AskForRemoteRef` returns a ref without verifying the actor exists
+
+`ActorSystem.scala:45-49`:
+
+```scala
+case (AskForRemoteRef(actorId, systemId), p) =>
+    val rsp = systems.get(systemId)
+        .map { s => Ref(RemoteActorRef(ActorPath.Remote(systemId, actorId), s)) }
+        .getOrElse(InvalidId)
+```
+
+It checks that the peer *system* is registered, but not that the peer has the
+actor. `AskForLocalRef` checks `actorRefs.get(actorId)`. The remote variant
+cannot (it has no access to the peer's registry), but the result is that
+`AskForRemoteRef` returns a `Ref` that looks like a successful lookup yet will
+silently drop `!` (or fail `?`) at the peer if the actor doesn't exist there.
+The name implies "ask if this actor exists remotely"; the behavior is "make a
+ref to a remote system+actorId whether or not the actor is there." Worth a name
+like `MakeRemoteRef` or a doc note that success means "system reachable," not
+"actor found."
+
+#### 3. `actorRefs` and `systems` are still unguarded `var Map`
+
+`ActorSystem.scala:17-18` — unchanged. Written from `processSysEntry` (on the
+system's processing future), read synchronously from `bang` / `ask` on arbitrary
+caller threads. No `@volatile` or `AtomicReference`. The immutable maps won't
+corrupt, but a writer thread's publication of a new map has no happens-before
+relationship with a reader thread — stale reads are possible. This is the
+underlying mechanism that makes the `toRef` race above nondeterministic rather
+than merely "happens before the first beat."
+
+#### 4. No loop detection in multi-hop forwarding
+
+`bang` / `ask` forward `Remote(systemId, _)` to `systems(systemId)`
+(`ActorSystem.scala:80, 88`), which re-resolves the same path on the peer. If A
+and B are cross-registered and an actor id is missing on both, `bang` recurses
+A -> B -> A -> B ... with no TTL or visited set. For `bang` this is unbounded
+stack recursion; for `ask` it is unbounded future chaining. The `toRef` change
+makes this easier to hit accidentally (a `RemoteActorRef` to a system that
+doesn't have the actor, forwarded to a system that doesn't have it either).
+
+#### 5. `AskForRemoteRefAsync` still reports `Done` on undelivered delivery
+
+`ActorSystem.scala:50-55` — same shape as the old `AskForLocalRefAsync`.
+`sender ! rsp` is fire-and-forget (a no-op if the sender is closed, per
+`ActorImpl.bang:168`), and `respond(p, Done)` is unconditional. The asker gets
+`Done` regardless of whether the `Ref` / `InvalidId` was actually delivered.
+Logging/acknowledgement is deferred, so this is only noted here.
+
+#### 6. The `"local"` guard is bypassable
+
+`assert(id != "local")` is in `ActorSystem.apply` (`ActorSystem.scala:96`) but
+not in the `new ActorSystem(...)` constructor, which is used directly in tests
+(`ActorSystemSpec.scala:141`) and is `public` (the class is `final`, not
+`private`). So the reserved-name collision is guarded on the factory path but
+not the constructor path. Moving the assert into the constructor body, or
+making the constructor `private[actors]`, would close this.
+
+#### 7. No tests for any remote feature
+
+Still zero tests for `RegisterSystem`, `AskForRemoteRef` /
+`AskForRemoteRefAsync`, cross-system `bang` / `ask`, `toRef` returning a
+`RemoteActorRef`, or `RemoteActorRef` in general. The feature is now real and
+reachable, but every path above is unexercised. Given the heartbeat-async
+registration model, the `toRef` race in particular will not surface without a
+test that sends immediately after `build()`.
+
+### Summary
+
+The changes fixed the structural problems flagged in the first review:
+`RemoteActorRef` is now a real, decoupled, non-dead-code class with actual
+producers. The `isValid` lie is gone. The case-class misuse is gone. The dead
+builder line is gone. Naming is clearer.
+
+What remains is concentrated in two areas. First, the async-registration /
+sync-routing mismatch — now more consequential because `toRef` hands out
+routing refs immediately after `build()`, before the async `Register` is
+guaranteed to have landed in `actorRefs`. Combined with the un-`@volatile`'d
+maps, this is a nondeterministic silent-drop bug reachable through the most
+natural usage of `toRef`. Second, `AskForRemoteRef` over-promises: it returns a
+ref on system-reachability, not actor-existence, and there is still no loop
+guard for multi-hop forwarding. Both are worth addressing before the feature
+gets used, even with logging and heterogeneous typing deferred.

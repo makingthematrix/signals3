@@ -49,7 +49,7 @@ class ActorIntegrationSpec extends FunSuite {
     val rsp = Await.result(parent ? data, 5.seconds)
     rsp match {
       case SystemMsg.NewChild(child) => child
-      case SystemMsg.InvalidId        => throw new AssertionError(s"Spawn with id '${data.id}' was rejected as InvalidId")
+      case SystemMsg.InvalidId        => throw new AssertionError(s"Spawn with id '${data.actorId}' was rejected as InvalidId")
       case other                      => throw new AssertionError(s"Unexpected spawn response: $other")
     }
   }
@@ -492,7 +492,7 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Spawn with explicit id sets child.id") {
     val parent = create[Int, String, Int](0, { case (msg, _) => Some(s"P: $msg") })
-    val child = spawn(parent)(parent.SystemMsg.Spawn(id = "my-child"))
+    val child = spawn(parent)(parent.SystemMsg.Spawn(actorId = "my-child"))
     assertEquals(child.id, "my-child")
     closeChild(child)
     close(parent)
@@ -500,8 +500,8 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Spawn with empty id auto-generates a unique id") {
     val parent = create[Int, String, Int](0, { case (msg, _) => Some(s"P: $msg") })
-    val c1 = spawn(parent)(parent.SystemMsg.Spawn(id = ""))
-    val c2 = spawn(parent)(parent.SystemMsg.Spawn(id = ""))
+    val c1 = spawn(parent)(parent.SystemMsg.Spawn(actorId = ""))
+    val c2 = spawn(parent)(parent.SystemMsg.Spawn(actorId = ""))
     assert(c1.id.nonEmpty)
     assert(c2.id.nonEmpty)
     assert(c1.id != c2.id)
@@ -616,8 +616,8 @@ class ActorIntegrationSpec extends FunSuite {
   test("Spawn with a duplicate explicit id is rejected with InvalidId") {
     val parent = create[Int, String, Int](0, { case (msg, _) => Some(s"P: $msg") })
     import parent.SystemMsg
-    val first = spawn(parent)(SystemMsg.Spawn(id = "dup"))
-    val secondRsp = Await.result(parent ? SystemMsg.Spawn(id = "dup"), 5.seconds)
+    val first = spawn(parent)(SystemMsg.Spawn(actorId = "dup"))
+    val secondRsp = Await.result(parent ? SystemMsg.Spawn(actorId = "dup"), 5.seconds)
     secondRsp match {
       case SystemMsg.InvalidId => // expected
       case other              => fail(s"Expected InvalidId, got $other")
@@ -630,10 +630,10 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("A freed id can be re-spawned after the child closes") {
     val parent = create[Int, String, Int](0, { case (msg, _) => Some(s"P: $msg") })
-    val c1 = spawn(parent)(parent.SystemMsg.Spawn(id = "x"))
+    val c1 = spawn(parent)(parent.SystemMsg.Spawn(actorId = "x"))
     closeChild(c1)
     // After close, the child sends ActorClosed to parent, which removes it; re-spawn should succeed
-    val c2 = spawn(parent)(parent.SystemMsg.Spawn(id = "x"))
+    val c2 = spawn(parent)(parent.SystemMsg.Spawn(actorId = "x"))
     assertEquals(c2.id, "x")
     assertEquals(resultCF(c2 ? 1), "P: 1")
     closeChild(c2)
@@ -684,10 +684,10 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Closing a child independently removes it from the parent's children map") {
     val parent = create[Int, String, Int](0, { case (msg, _) => Some(s"P: $msg") })
-    val c1 = spawn(parent)(parent.SystemMsg.Spawn(id = "x"))
+    val c1 = spawn(parent)(parent.SystemMsg.Spawn(actorId = "x"))
     closeChild(c1)
     // Re-spawn with the same id should succeed once the parent has processed ActorClosed
-    val c2 = spawn(parent)(parent.SystemMsg.Spawn(id = "x"))
+    val c2 = spawn(parent)(parent.SystemMsg.Spawn(actorId = "x"))
     assertEquals(c2.id, "x")
     closeChild(c2)
     close(parent)
@@ -812,7 +812,7 @@ class ActorIntegrationSpec extends FunSuite {
 
     val futures: Seq[Future[Unit]] = (0 until numThreads).map { _ =>
       Future {
-        val rsp = Await.result(parent ? SystemMsg.Spawn(id = "race"), 2.seconds)
+        val rsp = Await.result(parent ? SystemMsg.Spawn(actorId = "race"), 2.seconds)
         rsp match {
           case SystemMsg.NewChild(c) =>
             childRef.compareAndSet(None, Some(c))

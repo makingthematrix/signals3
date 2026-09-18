@@ -45,7 +45,7 @@ class ActorSystemSpec extends FunSuite {
     val rsp = Await.result(parent ? data, 5.seconds)
     rsp match {
       case SystemMsg.NewChild(child) => child
-      case SystemMsg.InvalidId        => throw new AssertionError(s"Spawn with id '${data.id}' was rejected as InvalidId")
+      case SystemMsg.InvalidId        => throw new AssertionError(s"Spawn with id '${data.actorId}' was rejected as InvalidId")
       case other                      => throw new AssertionError(s"Unexpected spawn response: $other")
     }
   }
@@ -55,7 +55,7 @@ class ActorSystemSpec extends FunSuite {
     val start = System.currentTimeMillis()
     while (System.currentTimeMillis() - start < 5000) {
       try {
-        Await.result(sys ? AskForRef(id), 1.second) match {
+        Await.result(sys ? AskForLocalRef(id), 1.second) match {
           case Ref(ref) => return ref
           case InvalidId => Thread.sleep(50)
           case other => throw new AssertionError(s"Unexpected response: $other")
@@ -72,7 +72,7 @@ class ActorSystemSpec extends FunSuite {
     val start = System.currentTimeMillis()
     while (System.currentTimeMillis() - start < 5000) {
       try {
-        Await.result(sys ? AskForRef(id), 1.second) match {
+        Await.result(sys ? AskForLocalRef(id), 1.second) match {
           case InvalidId => return
           case Ref(_) => Thread.sleep(50)
           case other => throw new AssertionError(s"Unexpected response: $other")
@@ -141,7 +141,7 @@ class ActorSystemSpec extends FunSuite {
   test("new ActorSystem without initialize does not process system messages") {
     val sys = new ActorSystem[Int, String, Int]("uninit", 0, Actor.defBeat)
     assert(!sys.isInitialized)
-    val rsp = sys ? sys.SystemMsg.AskForRef("any")
+    val rsp = sys ? sys.SystemMsg.AskForLocalRef("any")
     intercept[TimeoutException] {
       Await.result(rsp, 500.millis)
     }
@@ -216,7 +216,7 @@ class ActorSystemSpec extends FunSuite {
   test("Spawned child auto-registers on the system") {
     val sys = newSystem()
     import sys.SystemMsg.*
-    val child = spawn(sys)(Spawn(id = "c"))
+    val child = spawn(sys)(Spawn(actorId = "c"))
     val ref = awaitRef(sys, "c")
     assertEquals(ref.path.actorId, "c")
     close(child)
@@ -245,9 +245,9 @@ class ActorSystemSpec extends FunSuite {
   test("Spawned sibling children are all registered") {
     val sys = newSystem()
     import sys.SystemMsg.*
-    val c1 = spawn(sys)(Spawn(id = "c1"))
-    val c2 = spawn(sys)(Spawn(id = "c2"))
-    val c3 = spawn(sys)(Spawn(id = "c3"))
+    val c1 = spawn(sys)(Spawn(actorId = "c1"))
+    val c2 = spawn(sys)(Spawn(actorId = "c2"))
+    val c3 = spawn(sys)(Spawn(actorId = "c3"))
     awaitRef(sys, "c1")
     awaitRef(sys, "c2")
     awaitRef(sys, "c3")
@@ -272,7 +272,7 @@ class ActorSystemSpec extends FunSuite {
   test("AskForRef returns InvalidId for an unknown id") {
     val sys = newSystem()
     import sys.SystemMsg.*
-    val rsp = resultCF(sys ? AskForRef("nonexistent"))
+    val rsp = resultCF(sys ? AskForLocalRef("nonexistent"))
     assertEquals(rsp, InvalidId)
     close(sys)
   }
@@ -325,12 +325,12 @@ class ActorSystemSpec extends FunSuite {
   test("ActorClosed on system cascades to removeChild") {
     val sys = newSystem()
     import sys.SystemMsg.*
-    val child = spawn(sys)(Spawn(id = "c"))
+    val child = spawn(sys)(Spawn(actorId = "c"))
     awaitRef(sys, "c")
     close(child)
     awaitInvalid(sys, "c")
     // Children map cleaned: can re-spawn with same id
-    val child2 = spawn(sys)(Spawn(id = "c"))
+    val child2 = spawn(sys)(Spawn(actorId = "c"))
     assertEquals(child2.id, "c")
     close(child2)
     close(sys)
@@ -339,8 +339,8 @@ class ActorSystemSpec extends FunSuite {
   test("Closing a spawned child does not deregister its siblings") {
     val sys = newSystem()
     import sys.SystemMsg.*
-    val c1 = spawn(sys)(Spawn(id = "c1"))
-    val c2 = spawn(sys)(Spawn(id = "c2"))
+    val c1 = spawn(sys)(Spawn(actorId = "c1"))
+    val c2 = spawn(sys)(Spawn(actorId = "c2"))
     awaitRef(sys, "c1")
     awaitRef(sys, "c2")
     close(c1)
@@ -362,7 +362,7 @@ class ActorSystemSpec extends FunSuite {
     awaitRef(sys, "a")
     val capturer = newCapturer(sys)
     awaitRef(sys, "capturing")
-    val rsp = resultCF(sys ? AskForRefAsync(capturer, "a"))
+    val rsp = resultCF(sys ? AskForLocalRefAsync(capturer, "a"))
     assertEquals(rsp, Done)
     val ref = awaitCapturedRef(capturer)
     assertEquals(ref.path.actorId, "a")
@@ -376,7 +376,7 @@ class ActorSystemSpec extends FunSuite {
     import sys.SystemMsg.*
     val capturer = newCapturer(sys)
     awaitRef(sys, "capturing")
-    val rsp = resultCF(sys ? AskForRefAsync(capturer, "nonexistent"))
+    val rsp = resultCF(sys ? AskForLocalRefAsync(capturer, "nonexistent"))
     assertEquals(rsp, Done)
     assert(waitFor(capturer.receivedInvalid, true))
     close(capturer)
@@ -390,8 +390,8 @@ class ActorSystemSpec extends FunSuite {
     awaitRef(sys, "a")
     val capturer = newCapturer(sys)
     awaitRef(sys, "capturing")
-    assertEquals(resultCF(sys ? AskForRefAsync(capturer, "a")), Done)
-    assertEquals(resultCF(sys ? AskForRefAsync(capturer, "nonexistent")), Done)
+    assertEquals(resultCF(sys ? AskForLocalRefAsync(capturer, "a")), Done)
+    assertEquals(resultCF(sys ? AskForLocalRefAsync(capturer, "nonexistent")), Done)
     close(capturer)
     close(a)
     close(sys)
@@ -471,7 +471,7 @@ class ActorSystemSpec extends FunSuite {
     awaitRef(sys, "a")
     val capturer = newCapturer(sys)
     awaitRef(sys, "capturing")
-    resultCF(sys ? AskForRefAsync(capturer, "a"))
+    resultCF(sys ? AskForLocalRefAsync(capturer, "a"))
     val ref = awaitCapturedRef(capturer)
     assertEquals(resultCF(ref ? 42), "A: 42")
     close(capturer)
@@ -533,7 +533,7 @@ class ActorSystemSpec extends FunSuite {
     val futures: Seq[Future[Unit]] = (0 until numThreads).map { _ =>
       Future {
         (0 until spawnsPerThread).foreach { _ =>
-          val rsp = Await.result(sys ? Spawn(id = ""), 2.seconds)
+          val rsp = Await.result(sys ? Spawn(actorId = ""), 2.seconds)
           rsp match {
             case NewChild(c) => children.put(c.id, c)
             case other => throw new AssertionError(s"Unexpected response: $other")

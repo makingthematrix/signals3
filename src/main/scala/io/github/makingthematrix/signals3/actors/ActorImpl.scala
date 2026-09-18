@@ -200,7 +200,7 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		case (Pause, p)               => pause(); respond(p, Done)
 		case (Unpause, p)             => unpause(); respond(p, Done)
 		case (Close, p)               => if (p.isEmpty) close() else p.foreach(_.completeWith(shutdown().map(_ => Done)))
-		case (AddBehavior(id, pf), p) => addBehavior(id, pf); respond(p, Done)
+		case (AddBehavior(beh), p)    => addBehavior(beh); respond(p, Done)
 		case (RemoveBehavior(id), p)  => removeBehavior(id); respond(p, Done)
 		case (AddBehaviorPF(pf), p)   => addBehaviorPF(pf); respond(p, Done)
 		case (data: Spawn, p)         => val rsp = spawn(data); respond(p, rsp)
@@ -213,9 +213,9 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 	}
 
 	protected def spawn(data: SystemMsg.Spawn): SystemMsg =
-		if (children.contains(data.id)) SystemMsg.InvalidId else {
+		if (children.contains(data.actorId)) SystemMsg.InvalidId else {
 			val b1 = ActorBuilder[Msg, Rsp, State](data.state.getOrElse(this.state))
-				.withIdIf(data.id.nonEmpty, data.id)
+				.withIdIf(data.actorId.nonEmpty, data.actorId)
 				.withBehaviorsIf(data.behaviors.nonEmpty, data.behaviors, this.behaviors)
 				.withHeartbeat(data.heartbeat.getOrElse(this.heartbeat))
 				.withParent(this)
@@ -315,5 +315,7 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		_state = newState
 	}
 
-	override lazy val toRef: ActorRef[Msg, Rsp] = LocalActorRef(this)
+	override lazy val toLocalRef: ActorRef[Msg, Rsp] = LocalActorRef(this)
+	override lazy val toRef: ActorRef[Msg, Rsp] = 
+		system.map(s => RemoteActorRef(ActorPath.Remote(s.id, id), s)).getOrElse(toLocalRef)
 }

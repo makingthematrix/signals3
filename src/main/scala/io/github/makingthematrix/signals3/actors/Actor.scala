@@ -41,26 +41,28 @@ trait Actor[Msg, Rsp, State] {
 		*/
 	enum SystemMsg {
 		case Pause, Unpause, Close, Done, InvalidId
-		case AddBehavior(id: String, pf: PF[Msg, Rsp, State])
-		case RemoveBehavior(id: String)
+		case AddBehavior(beh: Beh[Msg, Rsp, State])
+		case RemoveBehavior(behId: String)
 		case AddBehaviorPF(pf: PF[Msg, Rsp, State]) // use instead of AddBehavior if you don't care about persistence of behaviors
-		case Spawn(id: String = "",
-			         state: Option[State] = None,
-			         behaviors: List[Actor.Beh[Msg, Rsp, State]] = Nil,
-			         heartbeat: Option[Actor.HeartBeatStrategy] = None,
-			         onInit: Option[MutableActor[Msg, Rsp, State] => Unit] = None,
-			         useSerialDispatch: Boolean = false,
-			         executionContext: Option[ExecutionContext] = None,
+		case Spawn(actorId: String = "",
+		           state: Option[State] = None,
+		           behaviors: List[Actor.Beh[Msg, Rsp, State]] = Nil,
+		           heartbeat: Option[Actor.HeartBeatStrategy] = None,
+		           onInit: Option[MutableActor[Msg, Rsp, State] => Unit] = None,
+		           useSerialDispatch: Boolean = false,
+		           executionContext: Option[ExecutionContext] = None,
 		          )
 		case NewChild(child: Actor[Msg, Rsp, State])
-		case ActorClosed(id: String)
+		case ActorClosed(actorId: String)
 		case Register(actor: Actor[Msg, Rsp, State])
 		case Unregister(actorId: String)
 		case Ref(ref: ActorRef[Msg, Rsp])
-		case AskForRef(id: String)
-		case AskForRefAsync(sender: Actor[Msg, Rsp, State], id: String)
+		case AskForLocalRef(actorId: String)
+		case AskForLocalRefAsync(sender: Actor[Msg, Rsp, State], actorId: String)
 		case RegisterSystem(system: RemoteSystem[Msg, Rsp])
 		case UnregisterSystem(systemId: String)
+		case AskForRemoteRef(actorId: String, systemId: String)
+		case AskForRemoteRefAsync(sender: Actor[Msg, Rsp, State], actorId: String, systemId: String)
 	}
 	
 	def id: String
@@ -188,6 +190,8 @@ trait Actor[Msg, Rsp, State] {
 	def parent: Option[Actor[Msg, Rsp, State]]
 
 	def system: Option[ActorSystem[Msg, Rsp, State]]
+
+	def toLocalRef: ActorRef[Msg, Rsp]
 
 	def toRef: ActorRef[Msg, Rsp]
 }
