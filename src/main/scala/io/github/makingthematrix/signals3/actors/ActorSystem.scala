@@ -2,15 +2,17 @@ package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.CloseableFuture
 import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy
+import io.github.makingthematrix.signals3.actors.RemoteSystem.RemoteSystemMsg
+import io.github.makingthematrix.signals3.actors.RemoteSystem.RemoteSystemMsg.SystemClosed
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.chaining.scalaUtilChainingOps
 
-final class ActorSystem[Msg, Rsp, State](override val id: String,
-                                         state: State,
-                                         override protected val heartbeat: HeartBeatStrategy)
-                                        (using ExecutionContext)
-	extends ActorImpl[Msg, Rsp, State](id, state, heartbeat) with RemoteSystem[Msg, Rsp] {
+final class ActorSystem[Msg, Rsp, State] private (
+  override val id: String,
+  state: State,
+  override protected val heartbeat: HeartBeatStrategy
+)(using ExecutionContext) extends ActorImpl[Msg, Rsp, State](id, state, heartbeat) with RemoteSystem[Msg, Rsp] {
 	import SystemMsg.*
 	import ActorPath.*
 
@@ -53,6 +55,10 @@ final class ActorSystem[Msg, Rsp, State](override val id: String,
 				.getOrElse(sender.SystemMsg.InvalidId)
 			sender ! rsp
 			respond(p, Done)
+		case (RemoteMsg(path, msg), None) =>
+			remoteBang(path, msg)
+		case (RemoteMsg(path, msg), Some(promise)) =>
+			remoteAsk(path, msg).onComplete { t => promise.tryComplete(t.map(RemoteRsp(_))) }
 		case _ =>
 			super.processSysEntry(msg)
 	}
@@ -73,7 +79,9 @@ final class ActorSystem[Msg, Rsp, State](override val id: String,
 			SystemMsg.NewChild(child)
 		}
 
-	override def bang(path: ActorPath, msg: Msg): Unit = path match {
+	override def bang(path: ActorPath, msg: Msg): Unit = this ! RemoteMsg(path, msg)
+
+	private def remoteBang(path: ActorPath, msg: Msg): Unit = path match {
 		case Local(actorId)           if actorRefs.contains(actorId) => actorRefs(actorId) ! msg
 		case Remote("local", actorId) if actorRefs.contains(actorId) => actorRefs(actorId) ! msg
 		case Remote(`id`, actorId)    if actorRefs.contains(actorId) => actorRefs(actorId) ! msg
@@ -81,7 +89,11 @@ final class ActorSystem[Msg, Rsp, State](override val id: String,
 		case _ => // invalid system or actor id
 	}
 
-	override def ask(path: ActorPath, msg: Msg): CloseableFuture[Rsp] = path match {
+	override def ask(path: ActorPath, msg: Msg): CloseableFuture[Rsp] = {
+		(this ? RemoteMsg(path, msg)).collect { case RemoteRsp(rsp) => rsp }
+	}
+
+	private def remoteAsk(path: ActorPath, msg: Msg): CloseableFuture[Rsp] = path match {
 		case Local(actorId)           if actorRefs.contains(actorId) => actorRefs(actorId) ? msg
 		case Remote("local", actorId) if actorRefs.contains(actorId) => actorRefs(actorId) ? msg
 		case Remote(`id`, actorId)    if actorRefs.contains(actorId) => actorRefs(actorId) ? msg
@@ -89,15 +101,39 @@ final class ActorSystem[Msg, Rsp, State](override val id: String,
 		case Local(actorId)                                          => CloseableFuture.failed(new IllegalArgumentException(s"Invalid actor id: $actorId"))
 		case Remote(systemId, _)                                     => CloseableFuture.failed(new IllegalArgumentException(s"Invalid system id: $systemId"))
 	}
+
+	override protected[actors] def initialize(): Unit = if (!isInitialized) {
+		systems += (id -> this)
+		actorRefs += (id -> LocalActorRef(this)) // register yourself as a valid actor
+		super.initialize()
+	}
+
+	override protected def shutdown(): Future[SystemMsg] = {
+		systems.collect { case (systemId, sys) if systemId != id => sys ! RemoteSystemMsg.SystemClosed(id) }
+		super.shutdown()
+	}
+
+	// @todo This is a clunky way to convert one type of messages into another; implement a more generic one
+	override def ask(msg: RemoteSystem.RemoteSystemMsg): CloseableFuture[RemoteSystemMsg] = msg match {
+		case SystemClosed(systemId) =>
+			val rsp: CloseableFuture[SystemMsg] = this ? UnregisterSystem(systemId)
+			rsp.map {
+				case Done => RemoteSystemMsg.Done
+				case _    => RemoteSystemMsg.InvalidId
+			}
+		case _ => CloseableFuture.successful(RemoteSystemMsg.Done)
+	}
+
+	override def bang(msg: RemoteSystem.RemoteSystemMsg): Unit = msg match {
+		case SystemClosed(systemId) => this ! UnregisterSystem(systemId)
+		case _ =>
+	}
 }
 
 object ActorSystem {
 	def apply[Msg, Rsp, State](id: String, state: State, heartbeat: HeartBeatStrategy)(using ExecutionContext): ActorSystem[Msg, Rsp, State] = {
 		assert(id != "local")
-		new ActorSystem(id, state, heartbeat).tap { s =>
-			s.onInit { _ => s.actorRefs += (s.id -> LocalActorRef(s)) } // register yourself as a valid actor
-			s.initialize()
-		}
+		new ActorSystem(id, state, heartbeat).tap { _.initialize() }
 	}
 
 	inline def apply[Msg, Rsp, State](state: State, heartbeat: HeartBeatStrategy)(using ExecutionContext): ActorSystem[Msg, Rsp, State] =

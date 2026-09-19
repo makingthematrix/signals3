@@ -10,6 +10,13 @@
 
 This document proposes a comprehensive design for implementing an **Actor System** with **Actor References** for the signals3 library. The design supports both local (single JVM) and distributed (multi-server) scenarios while maintaining full backward compatibility with the existing Actor implementation.
 
+## Issues that are not important or will be addressed in the future
+
+This is a list of issues that are raised often by the AI agent when asked for analyzing the ActorSystem code, but ones that are either non-issues (there is a reason why the code looks like that) or ones that will be fixed in a later step of development and for now can be ignored:
+1. `private var` collections, like `children`, `actorRefs` and `systems`: They are modified as a result of processing messages, and messages are processed in a single thread, therefore there are no possible race collisions, even though the collections are not annotated as `@volatile` or wrapped in `AtomicReference`.
+2. The unhandled messages: In a later stage of development, we will implement a logging mechanism and every unhandled message will be reported to the logger.
+3. It is known that a message might be lost, especially if sent by ! (`bang`) to a remote actor system. The sender should be prepared to for such a situation, e.g. by re-sending a message if a confirmation does not arrive in time. 
+
 ---
 
 ## Core Design Principles
@@ -197,146 +204,158 @@ src/main/scala/io/github/makingthematrix/signals3/actors/
 
 ---
 
-## Review: Remote Communication — Second Pass
+## Review: Remote Communication — Fourth Pass
 
 **Vibe Session ID:** `8b4c27d5-5srq53hr`  
-**Date:** 2026-09-18  
+**Date:** 2026-09-19  
 **Reviewer:** Mistral Vibe (automated analysis)
 
-This section records findings from a re-analysis of the remote-communication
-feature after the changes made in response to the first review. Items already
-addressed are listed first, followed by remaining issues.
+This section records findings from a re-analysis after the fixes for the
+`toRef` registration race (#1) and the peer-cleanup-on-shutdown issue (#3).
+Items already addressed across all passes are listed first, followed by
+remaining issues. The "Issues that are not important or will be addressed in
+the future" section (thread safety of `var` collections, unhandled messages,
+message loss) is respected throughout.
 
 ### What was addressed
 
 - **`RemoteActorRef` is no longer dead code.** It now has real producers:
-  `AskForRemoteRef` / `AskForRemoteRefAsync` (`ActorSystem.scala:45-55`) and
-  `Actor.toRef` (`ActorImpl.scala:319-320`). The feature is genuinely wired up.
+  `AskForRemoteRef` / `AskForRemoteRefAsync` and `Actor.toRef`.
 - **Decoupled from `ActorSystem`.** `RemoteActorRef` now holds
-  `RemoteSystem[Msg, Rsp]` (`ActorRef.scala:24`), so it can proxy to any future
-  `RemoteSystem` implementation, not just `ActorSystem`.
-- **`isValid` removed** from `ActorRef`. Better than leaving a lie — the trait no
-  longer claims to know validity it cannot compute.
-- **Case classes → `final class`.** Both refs are now `final class`, removing
-  spurious `equals` / `hashCode` / `copy` over mutable actor proxies.
+  `RemoteSystem[Msg, Rsp]`, so it can proxy to any future `RemoteSystem`
+  implementation.
+- **`isValid` removed** from `ActorRef`.
+- **Case classes → `final class`** for both refs.
 - **Dead `.withSystemIf` removed** from `ActorSystem.spawn`.
 - **Clearer naming.** `AskForRef` → `AskForLocalRef`; new `AskForRemoteRef`
   family. `Spawn.id` → `Spawn.actorId`.
-- **Design doc trimmed**, removing the misleading host/port transport design that
-  did not match the implementation.
+- **Design doc trimmed.**
+- **`"local"` guard is unbypassable.** The constructor is `private`, so only
+  `ActorSystem.apply` can construct one, and `apply` enforces
+  `assert(id != "local")`.
+- **System self-registration is synchronous.** `ActorSystem.initialize()`
+  writes to `systems` and `actorRefs` before calling `super.initialize()`, on
+  the constructing thread. The system is fully reachable the moment
+  `ActorSystem.apply` returns.
+- **`toRef` registration race fixed.** `bang`/`ask` no longer route directly on
+  the caller's thread. They enqueue a `RemoteMsg(path, msg)` system message to
+  the system's own `systemStream`, which is the same FIFO queue that `Register`
+  messages go through. When the system processes its queue, `Register`
+  messages (enqueued during child `initialize()`) are processed before any
+  `RemoteMsg` enqueued after `spawn` returned. By the time `remoteBang` /
+  `remoteAsk` reads `actorRefs`, the child is already registered. The race is
+  eliminated.
+- **Peer cleanup on shutdown.** `shutdown()` now sends `SystemClosed(id)` to
+  all peers before calling `super.shutdown()`. Each peer's
+  `bang(msg: RemoteSystemMsg)` matches `SystemClosed` and enqueues
+  `UnregisterSystem(systemId)`, which removes the shutting-down system from the
+  peer's `systems` map on its next heartbeat. Peers will no longer route to a
+  dead system.
 
 ### Remaining issues
 
-#### 1. The `toRef` registration race (most important new issue)
+#### 1. Local message delivery through `bang`/`ask` now pays a heartbeat cycle of latency
 
-`ActorImpl.toRef` (`ActorImpl.scala:319-320`) now returns a `RemoteActorRef` for
-any actor whose `system` is set:
+This is the most significant trade-off introduced by the `toRef` race fix.
+Previously, `bang(Local(actorId), msg)` called `actorRefs(actorId) ! msg`
+synchronously on the caller's thread — zero latency. Now every `bang` / `ask`
+through `RemoteSystem` (including `RemoteActorRef.!(msg)`, which is the output
+of `toRef`) enqueues a `RemoteMsg` and waits for the next heartbeat to process
+it. For a `Linear(100ms)` heartbeat, that is up to 100ms of added latency on
+every message, even to actors in the same JVM.
 
-```scala
-override lazy val toRef: ActorRef[Msg, Rsp] =
-    system.map(s => RemoteActorRef(ActorPath.Remote(s.id, id), s)).getOrElse(toLocalRef)
-```
+This is a design choice, not a bug — the correctness benefit is real. But it
+affects the library's core value proposition (lightweight, fast actors). If the
+race only matters for `toRef` on freshly spawned children, you could route
+through system messages only when the actor might not be registered yet, and
+keep direct routing for known-registered actors. Or, `RemoteActorRef` could
+hold a direct `LocalActorRef` when the target is local, bypassing the system
+message queue. Worth a thought before the feature gets used in
+latency-sensitive contexts.
 
-This routes through `ActorSystem.bang`, which matches
-`Remote(\`id\`, actorId) if actorRefs.contains(actorId)`. But the actor only
-registers itself in `actorRefs` asynchronously, via `Register` enqueued during
-`initialize()` (`ActorImpl.scala:270`) and processed on the system's heartbeat.
-So:
+#### 2. No loop detection — now an async infinite loop instead of stack overflow
 
-```scala
-val actor = builder.build()   // Register enqueued, not yet processed
-val ref = actor.toRef          // RemoteActorRef created, looks valid
-ref ! msg                      // bang: actorRefs.contains(actorId) is false -> case _ -> dropped
-```
+The `RemoteMsg` mediation fixes the `StackOverflowError` problem (multi-hop
+forwarding is now async, one heartbeat per hop), but it is still an infinite
+loop. If A and B are cross-registered and an actor id is missing on both,
+`RemoteMsg` bounces A -> B -> A -> B indefinitely, consuming CPU and
+generating messages forever. A TTL counter or a visited-set in
+`ActorPath.Remote` would bound this. The fix for the `toRef` race made this
+easier to trigger (any `RemoteActorRef` to a non-existent actor on a
+cross-registered pair of systems will do it).
 
-`toRef` hands you a usable-looking ref at the exact moment `build()` returns,
-before registration is guaranteed to have completed. The intended pattern for
-`AskForLocalRef` is to poll (`awaitRef` in tests), but `toRef` bypasses that wait
-entirely. This is the most natural way to use `toRef` and it silently drops
-messages. Either `toRef` should not exist before registration completes (block,
-or return an unregistered marker), or `bang` should enqueue-then-route instead
-of route-or-drop.
+#### 3. `RemoteMsg`/`RemoteRsp` in `SystemMsg` blurs system/user message separation
 
-#### 2. `AskForRemoteRef` returns a ref without verifying the actor exists
+`SystemMsg` was purely about lifecycle and management (Pause, Close, Register,
+Spawn, etc.). It now carries user-level `Msg` and `Rsp` types via
+`RemoteMsg(path: ActorPath, msg: Msg)` and `RemoteRsp(rsp: Rsp)` (`Actor.scala`).
+Every `Actor`'s `SystemMsg` enum now includes these cases, even though they are
+only meaningful for `ActorSystem`. Regular actors' `processSysEntry` falls
+through to `case _ => // @todo: log`, so a `RemoteMsg` sent to a regular actor
+is silently ignored — which is fine functionally, but the coupling is
+inelegant. If `RemoteMsg` / `RemoteRsp` lived in a separate `ActorSystem`-
+specific message type, the `SystemMsg` enum could stay focused on actor
+lifecycle.
 
-`ActorSystem.scala:45-49`:
+#### 4. `AskForRemoteRef` returns a ref without verifying the actor exists
 
-```scala
-case (AskForRemoteRef(actorId, systemId), p) =>
-    val rsp = systems.get(systemId)
-        .map { s => Ref(RemoteActorRef(ActorPath.Remote(systemId, actorId), s)) }
-        .getOrElse(InvalidId)
-```
+`ActorSystem.scala` — `AskForRemoteRef` checks that the peer *system* is
+registered, but not that the peer has the actor. `AskForLocalRef` checks
+`actorRefs.get(actorId)` and returns `InvalidId` if the actor is missing. The
+remote variant cannot (it has no access to the peer's registry), but the result
+is that `AskForRemoteRef` returns a `Ref` that looks like a successful lookup
+yet will silently drop `!` (or fail `?`) at the peer if the actor doesn't
+exist there. The name implies "ask if this actor exists remotely"; the behavior
+is "make a ref to a remote system+actorId whether or not the actor is there."
+Worth a name like `MakeRemoteRef` or a doc note that success means "system
+reachable," not "actor found."
 
-It checks that the peer *system* is registered, but not that the peer has the
-actor. `AskForLocalRef` checks `actorRefs.get(actorId)`. The remote variant
-cannot (it has no access to the peer's registry), but the result is that
-`AskForRemoteRef` returns a `Ref` that looks like a successful lookup yet will
-silently drop `!` (or fail `?`) at the peer if the actor doesn't exist there.
-The name implies "ask if this actor exists remotely"; the behavior is "make a
-ref to a remote system+actorId whether or not the actor is there." Worth a name
-like `MakeRemoteRef` or a doc note that success means "system reachable," not
-"actor found."
+There is also an inconsistency when `systemId == this.id`: the system
+self-registers in `systems`, so `AskForRemoteRef("nonexistent", this.id)`
+returns a `Ref`, while `AskForLocalRef("nonexistent")` returns `InvalidId` —
+same system, same actor, different answers depending on which API you call.
 
-#### 3. `actorRefs` and `systems` are still unguarded `var Map`
+#### 5. `shutdown()` sends `SystemClosed` to peers fire-and-forget, doesn't wait
 
-`ActorSystem.scala:17-18` — unchanged. Written from `processSysEntry` (on the
-system's processing future), read synchronously from `bang` / `ask` on arbitrary
-caller threads. No `@volatile` or `AtomicReference`. The immutable maps won't
-corrupt, but a writer thread's publication of a new map has no happens-before
-relationship with a reader thread — stale reads are possible. This is the
-underlying mechanism that makes the `toRef` race above nondeterministic rather
-than merely "happens before the first beat."
+`shutdown()` calls `sys ! RemoteSystemMsg.SystemClosed(id)` (bang, not ask) for
+each peer, then immediately calls `super.shutdown()`. A peer that is slow to
+process the `UnregisterSystem` will still try to route to the shutting-down
+system in the meantime. Per the "not important" list (message loss is
+expected), this is acceptable. Just noting that the cleanup is eventual, not
+immediate.
 
-#### 4. No loop detection in multi-hop forwarding
+#### 6. `ask` for `RemoteSystemMsg` — conversion acknowledged but lossy
 
-`bang` / `ask` forward `Remote(systemId, _)` to `systems(systemId)`
-(`ActorSystem.scala:80, 88`), which re-resolves the same path on the peer. If A
-and B are cross-registered and an actor id is missing on both, `bang` recurses
-A -> B -> A -> B ... with no TTL or visited set. For `bang` this is unbounded
-stack recursion; for `ask` it is unbounded future chaining. The `toRef` change
-makes this easier to hit accidentally (a `RemoteActorRef` to a system that
-doesn't have the actor, forwarded to a system that doesn't have it either).
+`ActorSystem.ask(msg: RemoteSystemMsg)` converts `SystemMsg.Done` to
+`RemoteSystemMsg.Done` and everything else to `RemoteSystemMsg.InvalidId`. The
+`@todo` comment flags this as clunky. The lossy part: `UnregisterSystem` always
+returns `Done` (it just does `systems -= systemId`), so the `InvalidId` branch
+is unreachable in practice. But if `UnregisterSystem` ever gains error
+semantics, the conversion would silently mask the specific error. Minor for
+now.
 
-#### 5. `AskForRemoteRefAsync` still reports `Done` on undelivered delivery
+#### 7. Unused `self =>` alias
 
-`ActorSystem.scala:50-55` — same shape as the old `AskForLocalRefAsync`.
-`sender ! rsp` is fire-and-forget (a no-op if the sender is closed, per
-`ActorImpl.bang:168`), and `respond(p, Done)` is unconditional. The asker gets
-`Done` regardless of whether the `Ref` / `InvalidId` was actually delivered.
-Logging/acknowledgement is deferred, so this is only noted here.
+`ActorSystem.scala` has `self =>` but it is never referenced. Remove or use
+it.
 
-#### 6. The `"local"` guard is bypassable
+#### 8. No tests for any remote feature
 
-`assert(id != "local")` is in `ActorSystem.apply` (`ActorSystem.scala:96`) but
-not in the `new ActorSystem(...)` constructor, which is used directly in tests
-(`ActorSystemSpec.scala:141`) and is `public` (the class is `final`, not
-`private`). So the reserved-name collision is guarded on the factory path but
-not the constructor path. Moving the assert into the constructor body, or
-making the constructor `private[actors]`, would close this.
-
-#### 7. No tests for any remote feature
-
-Still zero tests for `RegisterSystem`, `AskForRemoteRef` /
-`AskForRemoteRefAsync`, cross-system `bang` / `ask`, `toRef` returning a
-`RemoteActorRef`, or `RemoteActorRef` in general. The feature is now real and
-reachable, but every path above is unexercised. Given the heartbeat-async
-registration model, the `toRef` race in particular will not surface without a
-test that sends immediately after `build()`.
+Still zero tests for `RegisterSystem`, `UnregisterSystem`,
+`AskForRemoteRef` / `AskForRemoteRefAsync`, cross-system `bang` / `ask` through
+`RemoteMsg`, `SystemClosed` cleanup, `toRef` returning a `RemoteActorRef`, or
+the `RemoteMsg` / `RemoteRsp` round-trip. The `toRef` race fix and the
+`SystemClosed` cleanup are both testable with two systems and a few
+assertions. Given that these are the two most recent fixes and both involve
+subtle ordering, tests would provide the most value here.
 
 ### Summary
 
-The changes fixed the structural problems flagged in the first review:
-`RemoteActorRef` is now a real, decoupled, non-dead-code class with actual
-producers. The `isValid` lie is gone. The case-class misuse is gone. The dead
-builder line is gone. Naming is clearer.
-
-What remains is concentrated in two areas. First, the async-registration /
-sync-routing mismatch — now more consequential because `toRef` hands out
-routing refs immediately after `build()`, before the async `Register` is
-guaranteed to have landed in `actorRefs`. Combined with the un-`@volatile`'d
-maps, this is a nondeterministic silent-drop bug reachable through the most
-natural usage of `toRef`. Second, `AskForRemoteRef` over-promises: it returns a
-ref on system-reachability, not actor-existence, and there is still no loop
-guard for multi-hop forwarding. Both are worth addressing before the feature
-gets used, even with logging and heterogeneous typing deferred.
+The `toRef` registration race and the peer-cleanup-on-shutdown issue are both
+correctly fixed. The `RemoteMsg` mediation elegantly solves the registration
+race by serializing routing through the same FIFO queue as `Register`, and
+`SystemClosed` correctly notifies peers to clean up. The main cost is latency:
+all `RemoteSystem`-routed messages now wait one heartbeat, even local ones.
+The remaining issues are the missing loop guard (#2, now an async infinite
+loop rather than a crash), the `SystemMsg` / user-message coupling (#3), the
+`AskForRemoteRef` over-promise (#4), and the absence of tests (#8).

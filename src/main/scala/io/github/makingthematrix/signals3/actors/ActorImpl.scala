@@ -262,7 +262,7 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 	override def isInitialized: Boolean = initialized.get()
 
 	// Calls the onInit functions and nitializes the heartbeat of the actor
-	private[actors] def initialize(): Unit =
+	protected[actors] def initialize(): Unit =
 		if (!isInitialized) try {
 			_onInit.foreach(_(this))
 			_onInit = Nil
@@ -296,7 +296,7 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		*/
 	override def closeAndCheck(): Boolean = Try(Await.ready(shutdown(), heartbeat.timeout + 5.seconds)).isSuccess
 
-	private def shutdown(): Future[SystemMsg] = {
+	protected def shutdown(): Future[SystemMsg] = {
 		super.closeAndCheck()
 		children.values.foreach(child => child ! child.SystemMsg.Close)
 		in.close()

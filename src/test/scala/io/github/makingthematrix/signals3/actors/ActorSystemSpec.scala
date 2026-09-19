@@ -138,16 +138,6 @@ class ActorSystemSpec extends FunSuite {
     close(sys)
   }
 
-  test("new ActorSystem without initialize does not process system messages") {
-    val sys = new ActorSystem[Int, String, Int]("uninit", 0, Actor.defBeat)
-    assert(!sys.isInitialized)
-    val rsp = sys ? sys.SystemMsg.AskForLocalRef("any")
-    intercept[TimeoutException] {
-      Await.result(rsp, 500.millis)
-    }
-    close(sys)
-  }
-
   // ============================================================================
   // 2. Register
   // ============================================================================
@@ -421,17 +411,6 @@ class ActorSystemSpec extends FunSuite {
     ref ! 42
     waitFor(received, 1)
     close(a)
-    close(sys)
-  }
-
-  test("LocalActorRef.isValid reflects the actor's closed state") {
-    val sys = newSystem()
-    val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
-    val refOpen = LocalActorRef[Int, String, Int](a)
-    assert(refOpen.isValid)
-    close(a)
-    val refClosed = LocalActorRef[Int, String, Int](a)
-    assert(!refClosed.isValid)
     close(sys)
   }
 
