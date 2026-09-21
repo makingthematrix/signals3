@@ -62,7 +62,7 @@ trait Actor[Msg, Rsp, State] {
 		case RegisterSystem(system: RemoteSystem[Msg, Rsp])
 		case UnregisterSystem(systemId: String)
 	}
-	
+
 	def id: String
 
 	/** The input stream for handling incoming messages of type `Msg`.

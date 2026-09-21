@@ -500,8 +500,8 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Spawn with empty id auto-generates a unique id") {
     val parent = create[Int, String, Int](0, { case (msg, _) => Some(s"P: $msg") })
-    val c1 = spawn(parent)(parent.SystemMsg.Spawn(actorId = ""))
-    val c2 = spawn(parent)(parent.SystemMsg.Spawn(actorId = ""))
+    val c1 = spawn(parent)(parent.SystemMsg.Spawn())
+    val c2 = spawn(parent)(parent.SystemMsg.Spawn())
     assert(c1.id.nonEmpty)
     assert(c2.id.nonEmpty)
     assert(c1.id != c2.id)

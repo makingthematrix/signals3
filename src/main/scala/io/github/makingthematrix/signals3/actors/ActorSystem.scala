@@ -6,6 +6,7 @@ import io.github.makingthematrix.signals3.actors.RemoteSystem.RemoteSystemMsg
 import io.github.makingthematrix.signals3.actors.RemoteSystem.RemoteSystemMsg.SystemClosed
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.util.{Try, Success, Failure}
 import scala.util.chaining.scalaUtilChainingOps
 
 final class ActorSystem[Msg, Rsp, State] private (
@@ -16,8 +17,8 @@ final class ActorSystem[Msg, Rsp, State] private (
 	import SystemMsg.*
 	import ActorPath.*
 
-	private var actorRefs: Map[String, ActorRef[Msg, Rsp]] = Map.empty
-	private var systems: Map[String, RemoteSystem[Msg, Rsp]] = Map.empty
+	@volatile private var actorRefs: Map[String, ActorRef[Msg, Rsp]] = Map.empty
+	@volatile private var systems: Map[String, RemoteSystem[Msg, Rsp]] = Map.empty
 
 	override protected def processSysEntry(msg: SysEntry): Unit = msg match {
 		case (Register(actor), p) =>
@@ -45,16 +46,23 @@ final class ActorSystem[Msg, Rsp, State] private (
 			sender ! rsp
 			respond(p, Done)
 		case (AskForRef(actorId, systemId), p) =>
-			val rsp = systems.get(systemId)
-				.map { s => Ref(RemoteActorRef(ActorPath.Remote(systemId, actorId), s)) }
-				.getOrElse(InvalidId)
-			respond(p, rsp)
+			val rspCf = systems.get(systemId)
+				.map { _ ? RemoteSystemMsg.AskForRef(actorId) }
+				.map { _.collect {
+					case RemoteSystemMsg.Ref(ref) => Ref(ref.asInstanceOf[ActorRef[Msg, Rsp]])
+				}}.getOrElse(CloseableFuture.failed(new IllegalArgumentException(s"Invalid system id: $systemId")))
+			p.foreach(_.completeWith(rspCf.future))
 		case (AskForRefAsync(sender, actorId, systemId), p) =>
-			val rsp = systems.get(systemId)
-				.map { s => sender.SystemMsg.Ref(RemoteActorRef(ActorPath.Remote(systemId, actorId), s)) }
-				.getOrElse(sender.SystemMsg.InvalidId)
-			sender ! rsp
-			respond(p, Done)
+			systems.get(systemId)
+				.map { _ ? RemoteSystemMsg.AskForRef(actorId) }
+				.map { _.collect {
+					case RemoteSystemMsg.Ref(ref) => sender.SystemMsg.Ref(ref.asInstanceOf[ActorRef[Msg, Rsp]])
+				}}
+				.getOrElse(CloseableFuture.failed(new IllegalArgumentException(s"Invalid system id: $systemId")))
+				.onComplete {
+					case Success(rsp) => sender ! rsp; respond(p, Done)
+					case Failure(t)   => p.foreach(_.failure(t))
+				}
 		case _ =>
 			super.processSysEntry(msg)
 	}
@@ -76,30 +84,30 @@ final class ActorSystem[Msg, Rsp, State] private (
 		}
 
 	override def bang(msg: Msg, path: ActorPath, behId: String): Unit = path match {
-		case Direct => msgStream ! (msg, None, behId)
-		case _ if path.actorId == id => msgStream ! (msg, None, behId)
-		case Local(actorId)           if actorRefs.contains(actorId) => actorRefs(actorId) ! (msg, behId)
-		case Remote("local", actorId) if actorRefs.contains(actorId) => actorRefs(actorId) ! (msg, behId)
-		case Remote(`id`, actorId)    if actorRefs.contains(actorId) => actorRefs(actorId) ! (msg, behId)
-		case Remote(systemId, _)      if systems.contains(systemId)  => systems(systemId)  ! (msg, path, behId)
+		case Direct                                               => msgStream          ! (msg, None, behId)
+		case Local(`id`)                                          => msgStream          ! (msg, None, behId)
+		case Remote("", `id`)                                     => msgStream          ! (msg, None, behId)
+		case Remote(`id`, `id`)                                   => msgStream          ! (msg, None, behId)
+		case Local(actorId)        if actorRefs.contains(actorId) => actorRefs(actorId) ! (msg, behId)
+		case Remote("", actorId)   if actorRefs.contains(actorId) => actorRefs(actorId) ! (msg, behId)
+		case Remote(`id`, actorId) if actorRefs.contains(actorId) => actorRefs(actorId) ! (msg, behId)
+		case Remote(systemId, _)   if systemId != id && systems.contains(systemId)  => systems(systemId)  ! (msg, path, behId)
 		case _ => // invalid system or actor id
 	}
-
-/*	override def ask(msg: Msg, path: ActorPath, behId: String): CloseableFuture[Rsp] = {
-		(this ? RemoteMsg(path, msg)).collect { case RemoteRsp(rsp) => rsp }
-	}*/
 
 	override def ask(msg: Msg, path: ActorPath, behId: String): CloseableFuture[Rsp] = {
 		inline def sendToStream() = CloseableFuture.from(Promise[Rsp]().tap { p => msgStream ! (msg, Some(p), behId) })
 		path match {
-			case Direct => sendToStream()
-			case _ if path.actorId == id => sendToStream()
-			case Local(actorId)           if actorRefs.contains(actorId) => actorRefs(actorId) ? (msg, behId)
-			case Remote("local", actorId) if actorRefs.contains(actorId) => actorRefs(actorId) ? (msg, behId)
-			case Remote(`id`, actorId)    if actorRefs.contains(actorId) => actorRefs(actorId) ? (msg, behId)
-			case Remote(systemId, _)      if systems.contains(systemId)  => systems(systemId)  ? (msg, path, behId)
-			case Local(actorId)                                          => CloseableFuture.failed(new IllegalArgumentException(s"Invalid actor id: $actorId"))
-			case Remote(systemId, _)                                     => CloseableFuture.failed(new IllegalArgumentException(s"Invalid system id: $systemId"))
+			case Direct                                               => sendToStream()
+			case Local(`id`)                                          => sendToStream()
+			case Remote("", `id`)                                     => sendToStream()
+			case Remote(`id`, `id`)                                   => sendToStream()
+			case Local(actorId)        if actorRefs.contains(actorId) => actorRefs(actorId) ? (msg, behId)
+			case Remote("", actorId)   if actorRefs.contains(actorId) => actorRefs(actorId) ? (msg, behId)
+			case Remote(`id`, actorId) if actorRefs.contains(actorId) => actorRefs(actorId) ? (msg, behId)
+			case Remote(systemId, _)   if systemId != id && systems.contains(systemId)  => systems(systemId) ? (msg, path, behId)
+			case Local(actorId)                                       => CloseableFuture.failed(new IllegalArgumentException(s"Invalid actor id: $actorId"))
+			case Remote(systemId, _)                                  => CloseableFuture.failed(new IllegalArgumentException(s"Invalid system id: $systemId"))
 		}
 	}
 
@@ -117,12 +125,15 @@ final class ActorSystem[Msg, Rsp, State] private (
 	// @todo This is a clunky way to convert one type of messages into another; implement a more generic one
 	override def ask(msg: RemoteSystem.RemoteSystemMsg): CloseableFuture[RemoteSystemMsg] = msg match {
 		case SystemClosed(systemId) =>
-			val rsp: CloseableFuture[SystemMsg] = this ? UnregisterSystem(systemId)
-			rsp.map {
+			(this ? UnregisterSystem(systemId)).collect {
 				case Done => RemoteSystemMsg.Done
-				case _    => RemoteSystemMsg.InvalidId
 			}
-		case _ => CloseableFuture.successful(RemoteSystemMsg.Done)
+		case RemoteSystemMsg.AskForRef(actorId) =>
+			(this ? AskForRef(actorId)).flatMap {
+				case Ref(ref) => CloseableFuture.successful(RemoteSystemMsg.Ref(RemoteActorRef(ActorPath.Remote(id, actorId), this)))
+				case _        => CloseableFuture.failed(new IllegalArgumentException(s"Invalid actor id: $actorId"))
+			}
+		case _ => CloseableFuture.failed(new IllegalArgumentException(s"Unhandled message: $msg"))
 	}
 
 	override def bang(msg: RemoteSystem.RemoteSystemMsg): Unit = msg match {

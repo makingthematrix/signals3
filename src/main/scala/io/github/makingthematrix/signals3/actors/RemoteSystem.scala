@@ -22,7 +22,9 @@ trait RemoteSystem[Msg, Rsp]{
 
 object RemoteSystem {
 	enum RemoteSystemMsg {
-		case Done, InvalidId
+		case Done
 		case SystemClosed(systemId: String)
+		case AskForRef(actorId: String)
+		case Ref[Msg, Rsp](ref: ActorRef[Msg, Rsp])
 	}
 }

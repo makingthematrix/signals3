@@ -159,11 +159,14 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		} else ActorIsClosed[SystemMsg]
 
 	override def ask(msg: Msg, path: ActorPath, behId: String): CloseableFuture[Rsp] = if (!isClosed) {
-		inline def sendToStream() = CloseableFuture.from(Promise[Rsp]().tap { p => msgStream ! (msg, Some(p), behId) })	
+		import ActorPath.*
+		inline def sendToStream() = CloseableFuture.from(Promise[Rsp]().tap { p => msgStream ! (msg, Some(p), behId) })
 		path match {
-			case ActorPath.Direct => sendToStream()
-			case _ if path.actorId == id => sendToStream()
-			case _: ActorPath.Remote if system.nonEmpty => system.get.ask(msg, path, behId)
+			case Direct                                          => sendToStream()
+			case Local(`id`)                                     => sendToStream()
+			case Remote("", `id`)                                => sendToStream()
+			case Remote(sId, `id`) if system.exists(_.id == sId) => sendToStream()
+			case _ if system.nonEmpty                            => system.get.ask(msg, path, behId)
 			case _ => CloseableFuture.failed(new IllegalArgumentException(s"wrong path: $path"))
 		}
 	} else ActorIsClosed[Rsp]
@@ -171,11 +174,14 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 	override def bang(msg: SystemMsg): Unit = if (!isClosed) {systemStream ! (msg, None)}
 
 	override def bang(msg: Msg, path: ActorPath, behId: String): Unit = if (!isClosed) {
+		import ActorPath.*
 		path match {
-			case ActorPath.Direct => msgStream ! (msg, None, behId)
-			case _ if path.actorId == id => msgStream ! (msg, None, behId)
-			case _: ActorPath.Remote if system.nonEmpty => system.get.bang(msg, path, behId)
-			case _ => CloseableFuture.failed(new IllegalArgumentException(s"wrong path: $path"))
+			case Direct                                          => msgStream ! (msg, None, behId)
+			case Local(`id`)                                     => msgStream ! (msg, None, behId)
+			case Remote("", `id`)                                => msgStream ! (msg, None, behId)
+			case Remote(sId, `id`) if system.exists(_.id == sId) => msgStream ! (msg, None, behId)
+			case _ if system.nonEmpty                            => system.get.bang(msg, path, behId)
+			case _ => // wrong path
 		}
 	}
 
