@@ -55,7 +55,7 @@ class ActorSystemSpec extends FunSuite {
     val start = System.currentTimeMillis()
     while (System.currentTimeMillis() - start < 5000) {
       try {
-        Await.result(sys ? AskForLocalRef(id), 1.second) match {
+        Await.result(sys ? AskForRef(id), 1.second) match {
           case Ref(ref) => return ref
           case InvalidId => Thread.sleep(50)
           case other => throw new AssertionError(s"Unexpected response: $other")
@@ -72,7 +72,7 @@ class ActorSystemSpec extends FunSuite {
     val start = System.currentTimeMillis()
     while (System.currentTimeMillis() - start < 5000) {
       try {
-        Await.result(sys ? AskForLocalRef(id), 1.second) match {
+        Await.result(sys ? AskForRef(id), 1.second) match {
           case InvalidId => return
           case Ref(_) => Thread.sleep(50)
           case other => throw new AssertionError(s"Unexpected response: $other")
@@ -262,7 +262,7 @@ class ActorSystemSpec extends FunSuite {
   test("AskForRef returns InvalidId for an unknown id") {
     val sys = newSystem()
     import sys.SystemMsg.*
-    val rsp = resultCF(sys ? AskForLocalRef("nonexistent"))
+    val rsp = resultCF(sys ? AskForRef("nonexistent"))
     assertEquals(rsp, InvalidId)
     close(sys)
   }
@@ -352,7 +352,7 @@ class ActorSystemSpec extends FunSuite {
     awaitRef(sys, "a")
     val capturer = newCapturer(sys)
     awaitRef(sys, "capturing")
-    val rsp = resultCF(sys ? AskForLocalRefAsync(capturer, "a"))
+    val rsp = resultCF(sys ? AskForRefAsync(capturer, "a"))
     assertEquals(rsp, Done)
     val ref = awaitCapturedRef(capturer)
     assertEquals(ref.path.actorId, "a")
@@ -366,7 +366,7 @@ class ActorSystemSpec extends FunSuite {
     import sys.SystemMsg.*
     val capturer = newCapturer(sys)
     awaitRef(sys, "capturing")
-    val rsp = resultCF(sys ? AskForLocalRefAsync(capturer, "nonexistent"))
+    val rsp = resultCF(sys ? AskForRefAsync(capturer, "nonexistent"))
     assertEquals(rsp, Done)
     assert(waitFor(capturer.receivedInvalid, true))
     close(capturer)
@@ -380,8 +380,8 @@ class ActorSystemSpec extends FunSuite {
     awaitRef(sys, "a")
     val capturer = newCapturer(sys)
     awaitRef(sys, "capturing")
-    assertEquals(resultCF(sys ? AskForLocalRefAsync(capturer, "a")), Done)
-    assertEquals(resultCF(sys ? AskForLocalRefAsync(capturer, "nonexistent")), Done)
+    assertEquals(resultCF(sys ? AskForRefAsync(capturer, "a")), Done)
+    assertEquals(resultCF(sys ? AskForRefAsync(capturer, "nonexistent")), Done)
     close(capturer)
     close(a)
     close(sys)
@@ -450,7 +450,7 @@ class ActorSystemSpec extends FunSuite {
     awaitRef(sys, "a")
     val capturer = newCapturer(sys)
     awaitRef(sys, "capturing")
-    resultCF(sys ? AskForLocalRefAsync(capturer, "a"))
+    resultCF(sys ? AskForRefAsync(capturer, "a"))
     val ref = awaitCapturedRef(capturer)
     assertEquals(resultCF(ref ? 42), "A: 42")
     close(capturer)

@@ -4,7 +4,7 @@ import io.github.makingthematrix.signals3.actors.Actor.*
 import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy.{Agitated, Linear, Reactive}
 import io.github.makingthematrix.signals3.generators.GeneratorStream
 import io.github.makingthematrix.signals3.priv.DoneSignal
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, CloseableSourceStream, Pausable, SerialDispatchQueue, Signal, Stream}
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, CloseableSourceStream, Pausable, SerialDispatchQueue, Signal, SourceStream, Stream}
 
 import java.util.UUID
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
@@ -38,11 +38,11 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 	// a mutable queue of messages incoming from other actors and other sources; see the ! operator.
 	private val msgs = new AtomicReference[MQueue[MsgEntry]](MQueue.empty)
 	// a stream that serves as a single entry for the msgs list to prevent concurrent modification; see the "!" operator.
-	private val msgStream = Stream[MsgEntry]()
+	protected val msgStream: SourceStream[MsgEntry] = Stream[MsgEntry]()
 	// a mutable queue of system messages incoming from the controller; see the ! operator.
 	private val systemMsgs = new AtomicReference[MQueue[SysEntry]](MQueue.empty)
 	// a stream that serves as a single entry for the systemMsgs list to prevent concurrent modification; see the "! operator.
-	private val systemStream = Stream[SysEntry]()
+	protected val systemStream: SourceStream[SysEntry] = Stream[SysEntry]()
 	// a variable list of behaviors; a behavior is a partial function that tries to process an incoming message; see the processMessages method.
 	protected var behaviors: List[Beh[Msg, Rsp, State]] = List[Beh[Msg, Rsp, State]]()
 	private val behMap = mutable.HashMap[String, PF[Msg, Rsp, State]]()
@@ -158,16 +158,26 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 			CloseableFuture.from(p)
 		} else ActorIsClosed[SystemMsg]
 
-	override def ask(behId: String, msg: Msg): CloseableFuture[Rsp] =
-		if (!isClosed) {
-			val p = Promise[Rsp]()
-			msgStream ! (msg, Some(p), behId)
-			CloseableFuture.from(p)
-		} else ActorIsClosed[Rsp]
+	override def ask(msg: Msg, path: ActorPath, behId: String): CloseableFuture[Rsp] = if (!isClosed) {
+		inline def sendToStream() = CloseableFuture.from(Promise[Rsp]().tap { p => msgStream ! (msg, Some(p), behId) })	
+		path match {
+			case ActorPath.Direct => sendToStream()
+			case _ if path.actorId == id => sendToStream()
+			case _: ActorPath.Remote if system.nonEmpty => system.get.ask(msg, path, behId)
+			case _ => CloseableFuture.failed(new IllegalArgumentException(s"wrong path: $path"))
+		}
+	} else ActorIsClosed[Rsp]
 
 	override def bang(msg: SystemMsg): Unit = if (!isClosed) {systemStream ! (msg, None)}
 
-	override def bang(behId: String, msg: Msg): Unit = if (!isClosed) {msgStream ! (msg, None, behId)}
+	override def bang(msg: Msg, path: ActorPath, behId: String): Unit = if (!isClosed) {
+		path match {
+			case ActorPath.Direct => msgStream ! (msg, None, behId)
+			case _ if path.actorId == id => msgStream ! (msg, None, behId)
+			case _: ActorPath.Remote if system.nonEmpty => system.get.bang(msg, path, behId)
+			case _ => CloseableFuture.failed(new IllegalArgumentException(s"wrong path: $path"))
+		}
+	}
 
 	private val isProcessing = AtomicBoolean(false)
 
@@ -314,8 +324,4 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 	override def state_=(newState: State): Unit = {
 		_state = newState
 	}
-
-	override lazy val toLocalRef: ActorRef[Msg, Rsp] = LocalActorRef(this)
-	override lazy val toRef: ActorRef[Msg, Rsp] = 
-		system.map(s => RemoteActorRef(ActorPath.Remote(s.id, id), s)).getOrElse(toLocalRef)
 }

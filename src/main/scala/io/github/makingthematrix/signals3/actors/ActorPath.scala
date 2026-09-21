@@ -14,13 +14,19 @@ object ActorPath {
 
 	// Local actor within the same actor system
 	final case class Local(actorId: String) extends ActorPath {
-		val systemId: String = "local"
+		val systemId: String = ""
 	}
 
 	// Remote actor in a different JVM/process
 	final case class Remote(systemId: String, actorId: String) extends ActorPath
 	
+	case object Direct extends ActorPath {
+		val actorId: String = ""
+		val systemId: String = ""
+	}
+	
 	def parse(path: String): Option[ActorPath] = path match {
+		case "" => Some(Direct)
 		case LocalPattern(actorId)     => Some(Local(actorId))
 		case RemotePattern(system, id) => Some(Remote(system, id))
 		case _ => None

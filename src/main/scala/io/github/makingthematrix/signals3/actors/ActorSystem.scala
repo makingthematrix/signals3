@@ -5,7 +5,7 @@ import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy
 import io.github.makingthematrix.signals3.actors.RemoteSystem.RemoteSystemMsg
 import io.github.makingthematrix.signals3.actors.RemoteSystem.RemoteSystemMsg.SystemClosed
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.chaining.scalaUtilChainingOps
 
 final class ActorSystem[Msg, Rsp, State] private (
@@ -30,35 +30,31 @@ final class ActorSystem[Msg, Rsp, State] private (
 		case (ActorClosed(actorId), _) =>
 			actorRefs -= actorId
 			super.processSysEntry(msg)
-		case (AskForLocalRef(actorId), p) =>
-			respond(p, actorRefs.get(actorId).map(Ref(_)).getOrElse(InvalidId))
-		case (AskForLocalRefAsync(sender, actorId), p) =>
-			val rsp = actorRefs.get(actorId)
-				.map(sender.SystemMsg.Ref(_))
-				.getOrElse(sender.SystemMsg.InvalidId)
-			sender ! rsp
-			respond(p, Done)
 		case (RegisterSystem(system), p) =>
 			systems += (system.id -> system)
 			respond(p, Done)
 		case (UnregisterSystem(systemId), p) =>
 			systems -= systemId
 			respond(p, Done)
-		case (AskForRemoteRef(actorId, systemId), p) =>
+		case (AskForRef(actorId, systemId), p) if systemId == "" || systemId == id =>
+			respond(p, actorRefs.get(actorId).map(Ref(_)).getOrElse(InvalidId))
+		case (AskForRefAsync(sender, actorId, systemId), p) if systemId == "" || systemId == id =>
+			val rsp = actorRefs.get(actorId)
+				.map(sender.SystemMsg.Ref(_))
+				.getOrElse(sender.SystemMsg.InvalidId)
+			sender ! rsp
+			respond(p, Done)
+		case (AskForRef(actorId, systemId), p) =>
 			val rsp = systems.get(systemId)
 				.map { s => Ref(RemoteActorRef(ActorPath.Remote(systemId, actorId), s)) }
 				.getOrElse(InvalidId)
 			respond(p, rsp)
-		case (AskForRemoteRefAsync(sender, actorId, systemId), p) =>
+		case (AskForRefAsync(sender, actorId, systemId), p) =>
 			val rsp = systems.get(systemId)
 				.map { s => sender.SystemMsg.Ref(RemoteActorRef(ActorPath.Remote(systemId, actorId), s)) }
 				.getOrElse(sender.SystemMsg.InvalidId)
 			sender ! rsp
 			respond(p, Done)
-		case (RemoteMsg(path, msg), None) =>
-			remoteBang(path, msg)
-		case (RemoteMsg(path, msg), Some(promise)) =>
-			remoteAsk(path, msg).onComplete { t => promise.tryComplete(t.map(RemoteRsp(_))) }
 		case _ =>
 			super.processSysEntry(msg)
 	}
@@ -79,27 +75,32 @@ final class ActorSystem[Msg, Rsp, State] private (
 			SystemMsg.NewChild(child)
 		}
 
-	override def bang(path: ActorPath, msg: Msg): Unit = this ! RemoteMsg(path, msg)
-
-	private def remoteBang(path: ActorPath, msg: Msg): Unit = path match {
-		case Local(actorId)           if actorRefs.contains(actorId) => actorRefs(actorId) ! msg
-		case Remote("local", actorId) if actorRefs.contains(actorId) => actorRefs(actorId) ! msg
-		case Remote(`id`, actorId)    if actorRefs.contains(actorId) => actorRefs(actorId) ! msg
-		case Remote(systemId, _)      if systems.contains(systemId)  => systems(systemId)  ! (path, msg)
+	override def bang(msg: Msg, path: ActorPath, behId: String): Unit = path match {
+		case Direct => msgStream ! (msg, None, behId)
+		case _ if path.actorId == id => msgStream ! (msg, None, behId)
+		case Local(actorId)           if actorRefs.contains(actorId) => actorRefs(actorId) ! (msg, behId)
+		case Remote("local", actorId) if actorRefs.contains(actorId) => actorRefs(actorId) ! (msg, behId)
+		case Remote(`id`, actorId)    if actorRefs.contains(actorId) => actorRefs(actorId) ! (msg, behId)
+		case Remote(systemId, _)      if systems.contains(systemId)  => systems(systemId)  ! (msg, path, behId)
 		case _ => // invalid system or actor id
 	}
 
-	override def ask(path: ActorPath, msg: Msg): CloseableFuture[Rsp] = {
+/*	override def ask(msg: Msg, path: ActorPath, behId: String): CloseableFuture[Rsp] = {
 		(this ? RemoteMsg(path, msg)).collect { case RemoteRsp(rsp) => rsp }
-	}
+	}*/
 
-	private def remoteAsk(path: ActorPath, msg: Msg): CloseableFuture[Rsp] = path match {
-		case Local(actorId)           if actorRefs.contains(actorId) => actorRefs(actorId) ? msg
-		case Remote("local", actorId) if actorRefs.contains(actorId) => actorRefs(actorId) ? msg
-		case Remote(`id`, actorId)    if actorRefs.contains(actorId) => actorRefs(actorId) ? msg
-		case Remote(systemId, _)      if systems.contains(systemId)  => systems(systemId)  ? (path, msg)
-		case Local(actorId)                                          => CloseableFuture.failed(new IllegalArgumentException(s"Invalid actor id: $actorId"))
-		case Remote(systemId, _)                                     => CloseableFuture.failed(new IllegalArgumentException(s"Invalid system id: $systemId"))
+	override def ask(msg: Msg, path: ActorPath, behId: String): CloseableFuture[Rsp] = {
+		inline def sendToStream() = CloseableFuture.from(Promise[Rsp]().tap { p => msgStream ! (msg, Some(p), behId) })
+		path match {
+			case Direct => sendToStream()
+			case _ if path.actorId == id => sendToStream()
+			case Local(actorId)           if actorRefs.contains(actorId) => actorRefs(actorId) ? (msg, behId)
+			case Remote("local", actorId) if actorRefs.contains(actorId) => actorRefs(actorId) ? (msg, behId)
+			case Remote(`id`, actorId)    if actorRefs.contains(actorId) => actorRefs(actorId) ? (msg, behId)
+			case Remote(systemId, _)      if systems.contains(systemId)  => systems(systemId)  ? (msg, path, behId)
+			case Local(actorId)                                          => CloseableFuture.failed(new IllegalArgumentException(s"Invalid actor id: $actorId"))
+			case Remote(systemId, _)                                     => CloseableFuture.failed(new IllegalArgumentException(s"Invalid system id: $systemId"))
+		}
 	}
 
 	override protected[actors] def initialize(): Unit = if (!isInitialized) {
@@ -132,7 +133,7 @@ final class ActorSystem[Msg, Rsp, State] private (
 
 object ActorSystem {
 	def apply[Msg, Rsp, State](id: String, state: State, heartbeat: HeartBeatStrategy)(using ExecutionContext): ActorSystem[Msg, Rsp, State] = {
-		assert(id != "local")
+		assert(id != "")
 		new ActorSystem(id, state, heartbeat).tap { _.initialize() }
 	}
 

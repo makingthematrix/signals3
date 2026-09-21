@@ -7,14 +7,14 @@ trait RemoteSystem[Msg, Rsp]{
 	
 	val id: String
 
-	def bang(path: ActorPath, msg: Msg): Unit
-	inline def !(tuple: (path: ActorPath, msg: Msg)): Unit = bang(tuple.path, tuple.msg)
+	def bang(msg: Msg, path: ActorPath, behId: String): Unit
+	inline def !(tuple: (msg: Msg, path: ActorPath, behId: String)): Unit = bang(tuple.msg, tuple.path, tuple.behId)
 	
 	def bang(msg: RemoteSystemMsg): Unit
 	inline def !(msg: RemoteSystemMsg): Unit = bang(msg)
 
-	def ask(path: ActorPath, msg: Msg): CloseableFuture[Rsp]
-	inline def ?(tuple: (path: ActorPath, msg: Msg)): CloseableFuture[Rsp] = ask(tuple.path, tuple.msg)
+	def ask(msg: Msg, path: ActorPath, behId: String): CloseableFuture[Rsp]
+	inline def ?(tuple: (msg: Msg, path: ActorPath, behId: String)): CloseableFuture[Rsp] = ask(tuple.msg, tuple.path, tuple.behId)
 
 	def ask(msg: RemoteSystemMsg): CloseableFuture[RemoteSystemMsg]
 	inline def ?(msg: RemoteSystemMsg): CloseableFuture[RemoteSystemMsg] = ask(msg)

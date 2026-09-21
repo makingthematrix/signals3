@@ -57,14 +57,10 @@ trait Actor[Msg, Rsp, State] {
 		case Register(actor: Actor[Msg, Rsp, State])
 		case Unregister(actorId: String)
 		case Ref(ref: ActorRef[Msg, Rsp])
-		case AskForLocalRef(actorId: String)
-		case AskForLocalRefAsync(sender: Actor[Msg, Rsp, State], actorId: String)
+		case AskForRef(actorId: String, systemId: String = "")
+		case AskForRefAsync(sender: Actor[Msg, Rsp, State], actorId: String, systemId: String = "")
 		case RegisterSystem(system: RemoteSystem[Msg, Rsp])
 		case UnregisterSystem(systemId: String)
-		case AskForRemoteRef(actorId: String, systemId: String)
-		case AskForRemoteRefAsync(sender: Actor[Msg, Rsp, State], actorId: String, systemId: String)
-		case RemoteMsg(path: ActorPath, msg: Msg)
-		case RemoteRsp(rsp: Rsp)
 	}
 	
 	def id: String
@@ -121,7 +117,8 @@ trait Actor[Msg, Rsp, State] {
 		* @param msg the message to send to the actor.
 		* @return a `CloseableFuture` containing the response from the actor.
 		*/
-	def ask(behId: String, msg: Msg): CloseableFuture[Rsp]
+	def ask(msg: Msg, actorPath: ActorPath, behId: String): CloseableFuture[Rsp]
+	inline def ask(behId: String, msg: Msg): CloseableFuture[Rsp] = ask(msg, ActorPath.Direct, behId)
 	inline def ask(t: (String, Msg)): CloseableFuture[Rsp] = ask(t._1, t._2)
 	inline def ?(t: (String, Msg)): CloseableFuture[Rsp] = ask(t)
 	inline def ask(msg: Msg): CloseableFuture[Rsp] = ask("", msg)
@@ -151,7 +148,8 @@ trait Actor[Msg, Rsp, State] {
 		* @param behId An optional parameter for forcing the identified behavior to process the message. Leave out for regular processing.
 		* @param msg The message to be sent to the actor.
 		*/
-	def bang(behId: String, msg: Msg): Unit
+	def bang(msg: Msg, actorPath: ActorPath, behId: String): Unit
+	inline def bang(behId: String, msg: Msg): Unit = bang(msg, ActorPath.Direct, behId)
 	inline def bang(t: (String, Msg)): Unit = bang(t._1, t._2)
 	inline def !(t: (String, Msg)): Unit = bang(t)
 	inline def bang(msg: Msg): Unit = bang("", msg)
@@ -192,10 +190,6 @@ trait Actor[Msg, Rsp, State] {
 	def parent: Option[Actor[Msg, Rsp, State]]
 
 	def system: Option[ActorSystem[Msg, Rsp, State]]
-
-	def toLocalRef: ActorRef[Msg, Rsp]
-
-	def toRef: ActorRef[Msg, Rsp]
 }
 
 object Actor {
