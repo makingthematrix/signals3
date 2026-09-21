@@ -5,7 +5,8 @@ import scala.annotation.static
 sealed trait ActorPath {
 	val actorId: String
 	val systemId: String
-	val asString: String = s"$systemId://$actorId"
+	// a def, not a val: evaluating it in the trait constructor would see the subclass vals as null
+	def asString: String = s"$systemId://$actorId"
 }
 
 object ActorPath {

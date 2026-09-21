@@ -267,6 +267,21 @@ class ActorSystemSpec extends FunSuite {
     close(sys)
   }
 
+  test("AskForRef with the system's own id behaves as a local lookup") {
+    val sys = newSystem()
+    import sys.SystemMsg.*
+    val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
+    Await.result(sys ? AskForRef("a", sys.id), 5.seconds) match {
+      case Ref(ref) =>
+        assert(ref.isLocal)
+        assertEquals(ref.path, ActorPath.Local("a"))
+      case other => fail(s"Expected Ref, got $other")
+    }
+    assertEquals(resultCF(sys ? AskForRef("nonexistent", sys.id)), InvalidId)
+    close(a)
+    close(sys)
+  }
+
   test("AskForRef returns InvalidId after the actor is closed") {
     val sys = newSystem()
     val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
