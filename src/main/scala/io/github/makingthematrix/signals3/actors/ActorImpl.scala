@@ -136,15 +136,12 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		* @param pf A partial function that represents the behavior logic.
 		* @return A unique identifier for the newly added behavior.
 		*/
-	private[actors] def addBehaviorPF(pf: PF[Msg, Rsp, State]): String =
+	inline private[actors] def addBehaviorPF(pf: PF[Msg, Rsp, State]): String =
 		UUID.randomUUID().toString.tap { id => addBehavior(id -> pf) } // we assume uuids are unique
 
 	// adds all new behavior functions in front of the list of behaviors but maintains their own internal order
-	private[actors] def addBehaviorPFs(pfs: Iterable[PF[Msg, Rsp, State]]): Unit = {
-		val newBehs = pfs.map(pf => UUID.randomUUID().toString -> pf)
-		addBehaviors(newBehs)
-
-	}
+	inline private[actors] def addBehaviorPFs(pfs: Iterable[PF[Msg, Rsp, State]]): Unit = 
+		addBehaviors(pfs.map(pf => UUID.randomUUID().toString -> pf))
 	
 	private[actors] def addBehaviors(behs: Iterable[Beh[Msg, Rsp, State]]): Unit = {
 		behaviors = behs.toList ::: behaviors
@@ -167,7 +164,7 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 			case Remote("", `id`)                                => sendToStream()
 			case Remote(sId, `id`) if system.exists(_.id == sId) => sendToStream()
 			case _ if system.nonEmpty                            => system.get.ask(msg, path, behId)
-			case _ => CloseableFuture.failed(new IllegalArgumentException(s"wrong path: $path"))
+			case _                                               => Actor.wrongPath(path)
 		}
 	} else ActorIsClosed[Rsp]
 
@@ -203,6 +200,9 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 
 	inline protected def respond(pOpt: Option[Promise[SystemMsg]], rsp: SystemMsg): Unit =
 		pOpt.foreach(p => Try(p.tryComplete(Success(rsp))))
+
+	inline protected def respond(pOpt: Option[Promise[SystemMsg]], rsp: CloseableFuture[SystemMsg]): Unit =
+		pOpt.foreach(p => Try(p.completeWith(rsp.future)))
 
 	// Processes system messages; should NOT be called directly - always from `processMessages`
 	private def processSystemMessages(): Unit = {

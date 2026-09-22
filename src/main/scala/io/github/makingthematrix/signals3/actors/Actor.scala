@@ -1,7 +1,8 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.actors.Actor.*
-import io.github.makingthematrix.signals3.{CloseableFuture, Signal, SourceStream, Stream}
+import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy.Linear
+import io.github.makingthematrix.signals3.{CloseableFuture, DispatchQueue, Signal, SourceStream, Stream}
 
 import scala.annotation.static
 import scala.concurrent.ExecutionContext
@@ -212,6 +213,15 @@ object Actor {
 	inline def Ignored[Rsp]: Success[Option[Rsp]] = ignored.asInstanceOf[Success[Option[Rsp]]]
 
 	inline def ActorIsClosed[Rsp](using ExecutionContext): CloseableFuture[Rsp] = CloseableFuture.failed[Rsp](actorIsClosed)
+	
+	inline def invalidActorId[Rsp](actorId: String)(using ExecutionContext): CloseableFuture[Rsp] =
+		CloseableFuture.failed(new IllegalArgumentException(s"Invalid actor id: $actorId"))
+
+	inline def unhandledMsg[Msg, Rsp](msg: Msg)(using ExecutionContext): CloseableFuture[Rsp] =
+		CloseableFuture.failed(new IllegalArgumentException(s"Unhandled message: $msg"))
+
+	inline def wrongPath[Rsp](path: ActorPath)(using ExecutionContext): CloseableFuture[Rsp] =
+		CloseableFuture.failed(new IllegalArgumentException(s"wrong path: $path"))
 
 	// The type of a custom behavior: a partial function that takes a message and an actor and returns an optional response.
 	type PF[Msg, Rsp, State] = PartialFunction[(Msg, MutableActor[Msg, Rsp, State]), Option[Rsp]]
@@ -253,9 +263,24 @@ object Actor {
 		* @return An initialized actor instance.
 		*/
 	def apply[Msg, Rsp, State](state: State, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy)
-	                          (using ExecutionContext): ActorImpl[Msg, Rsp, State] =
+	                          (using ExecutionContext): Actor[Msg, Rsp, State] =
 		new ActorImpl(IdGenerator.generate(), state, beat).tap { actor =>
 			actor.addBehavior(behavior)
 			actor.initialize()
 		}
+		
+	inline def serial[Msg, Rsp, State](state: State, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy): Actor[Msg, Rsp, State] =
+		apply(state, behavior, beat)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
+
+	inline def apply[Msg, Rsp](behavior: Beh[Msg, Rsp, Unit], beat: HeartBeatStrategy)
+	                          (using ExecutionContext): Actor[Msg, Rsp, Unit] =
+		apply((), behavior, beat)
+
+	inline def serial[Msg, Rsp](behavior: Beh[Msg, Rsp, Unit], beat: HeartBeatStrategy): Actor[Msg, Rsp, Unit] =
+		serial((), behavior, beat)
+
+	inline def apply[Msg, Rsp](behavior: Beh[Msg, Rsp, Unit])(using ExecutionContext): Actor[Msg, Rsp, Unit] =
+		apply((), behavior, defBeat)
+
+	inline def serial[Msg, Rsp](behavior: Beh[Msg, Rsp, Unit]): Actor[Msg, Rsp, Unit] = serial((), behavior, defBeat)
 }

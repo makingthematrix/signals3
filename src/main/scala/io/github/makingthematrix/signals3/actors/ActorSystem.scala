@@ -50,7 +50,7 @@ final class ActorSystem[Msg, Rsp, State] private (
 				.map { _ ? RemoteSystemMsg.AskForRef(actorId) }
 				.map { _.collect {
 					case RemoteSystemMsg.Ref(ref) => Ref(ref.asInstanceOf[ActorRef[Msg, Rsp]])
-				}}.getOrElse(CloseableFuture.failed(new IllegalArgumentException(s"Invalid system id: $systemId")))
+				}}.getOrElse(ActorSystem.invalidSystemId(systemId))
 			p.foreach(_.completeWith(rspCf.future))
 		case (AskForRefAsync(sender, actorId, systemId), p) =>
 			systems.get(systemId)
@@ -58,7 +58,7 @@ final class ActorSystem[Msg, Rsp, State] private (
 				.map { _.collect {
 					case RemoteSystemMsg.Ref(ref) => sender.SystemMsg.Ref(ref.asInstanceOf[ActorRef[Msg, Rsp]])
 				}}
-				.getOrElse(CloseableFuture.failed(new IllegalArgumentException(s"Invalid system id: $systemId")))
+				.getOrElse(ActorSystem.invalidSystemId(systemId))
 				.onComplete {
 					case Success(rsp) => sender ! rsp; respond(p, Done)
 					case Failure(t)   => p.foreach(_.failure(t))
@@ -106,8 +106,8 @@ final class ActorSystem[Msg, Rsp, State] private (
 			case Remote("", actorId)   if actorRefs.contains(actorId) => actorRefs(actorId) ? (msg, behId)
 			case Remote(`id`, actorId) if actorRefs.contains(actorId) => actorRefs(actorId) ? (msg, behId)
 			case Remote(systemId, _)   if systemId != id && systems.contains(systemId)  => systems(systemId) ? (msg, path, behId)
-			case Local(actorId)                                       => CloseableFuture.failed(new IllegalArgumentException(s"Invalid actor id: $actorId"))
-			case Remote(systemId, _)                                  => CloseableFuture.failed(new IllegalArgumentException(s"Invalid system id: $systemId"))
+			case Local(actorId)                                       => Actor.invalidActorId(actorId)
+			case Remote(systemId, _)                                  => ActorSystem.invalidSystemId(systemId)
 		}
 	}
 
@@ -125,15 +125,13 @@ final class ActorSystem[Msg, Rsp, State] private (
 	// @todo This is a clunky way to convert one type of messages into another; implement a more generic one
 	override def ask(msg: RemoteSystem.RemoteSystemMsg): CloseableFuture[RemoteSystemMsg] = msg match {
 		case SystemClosed(systemId) =>
-			(this ? UnregisterSystem(systemId)).collect {
-				case Done => RemoteSystemMsg.Done
-			}
+			(this ? UnregisterSystem(systemId)).collect { case Done => RemoteSystemMsg.Done }
 		case RemoteSystemMsg.AskForRef(actorId) =>
 			(this ? AskForRef(actorId)).flatMap {
 				case Ref(ref) => CloseableFuture.successful(RemoteSystemMsg.Ref(RemoteActorRef(ActorPath.Remote(id, actorId), this)))
-				case _        => CloseableFuture.failed(new IllegalArgumentException(s"Invalid actor id: $actorId"))
+				case _        => Actor.invalidActorId(actorId)
 			}
-		case _ => CloseableFuture.failed(new IllegalArgumentException(s"Unhandled message: $msg"))
+		case _ => Actor.unhandledMsg(msg)
 	}
 
 	override def bang(msg: RemoteSystem.RemoteSystemMsg): Unit = msg match {
@@ -143,6 +141,9 @@ final class ActorSystem[Msg, Rsp, State] private (
 }
 
 object ActorSystem {
+	inline def invalidSystemId[Rsp](systemId: String)(using ExecutionContext): CloseableFuture[Rsp] =
+		CloseableFuture.failed(new IllegalArgumentException(s"Invalid system id: $systemId"))
+
 	def apply[Msg, Rsp, State](id: String, state: State, heartbeat: HeartBeatStrategy)(using ExecutionContext): ActorSystem[Msg, Rsp, State] = {
 		assert(id != "")
 		new ActorSystem(id, state, heartbeat).tap { _.initialize() }

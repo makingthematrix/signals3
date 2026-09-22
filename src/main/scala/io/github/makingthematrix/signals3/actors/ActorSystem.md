@@ -15,7 +15,7 @@ This document proposes a comprehensive design for implementing an **Actor System
 This is a list of issues that are raised often by the AI agent when asked for analyzing the ActorSystem code, but ones that are either non-issues (there is a reason why the code looks like that) or ones that will be fixed in a later step of development and for now can be ignored:
 1. `private var` collections, like `children`, `actorRefs` and `systems`: They are modified as a result of processing messages, and messages are processed in a single thread, therefore there are no possible race collisions, even though the collections are not annotated as `@volatile` or wrapped in `AtomicReference`.
 2. The unhandled messages: In a later stage of development, we will implement a logging mechanism and every unhandled message will be reported to the logger.
-3. It is known that a message might be lost, especially if sent by ! (`bang`) to a remote actor system. The sender should be prepared to for such a situation, e.g. by re-sending a message if a confirmation does not arrive in time. 
+3. It is known that a message might be lost, especially if sent by ! (`bang`) to a remote actor system. The sender should be prepared for such a situation, e.g. by re-sending a message if a confirmation does not arrive in time. 
 
 ---
 
@@ -109,9 +109,13 @@ together with the id of the receiver.
 	// todo: close sub-actors when the parent is closed v
 	// todo: ActorSystem where you can register new actors with unique ids v
 	// todo: ActorRef (local) retrieved from ActorSystem, used to send messages to other actors v
+	// todo: RemoteActorRef should carry the ActorSystem id too to enable communication between different actor systems v
 	
-	// todo: RemoteActorRef and the ability to register actors from another app via https
-	// todo: RemoteActorRef should carry the ActorSystem id too to enable communication between different actor systems
+	// todo: the ability to register actors from another actor system
+    // todo: Check if subclasses of Msg work or do we need some type parameter magic with <: and :
+    // todo: Make use of `into` and `Conversion[From, To]` to enable conversions between msgs
+    // todo: Make use of `ClassTag` in ActorRef (see the inject project) so that the actor refs' type parameters are not lost in collections
+	// todo: actors should carry tags (strings) and the actor system ca get requests to connect an actor with any other actor that has a given tag
 
 	// todo: HealthCheck system message, sent from the parent to the child; if the child doesn't respond in time, the message is repeated, and the the child is closed
 	// todo: consider to allow the children to use different types of messages ; and then: clusters? persistance?
@@ -119,7 +123,6 @@ together with the id of the receiver.
 	// todo: similarly about metrics
 	// todo: and about the max number of messages processed per heartbeat
 	// todo: make constants configurable through environment variables
-	// todo: actors should carry tags (strings) and the actor system ca get requests to connect an actor with any other actor that has a given tag
 
 ---
 Implementation Considerations
