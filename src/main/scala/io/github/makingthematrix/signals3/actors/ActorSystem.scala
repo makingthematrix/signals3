@@ -9,11 +9,11 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Try, Success, Failure}
 import scala.util.chaining.scalaUtilChainingOps
 
-final class ActorSystem[Msg, Rsp, State] private (
+final class ActorSystem[Msg, Rsp, State] private(
   override val id: String,
   state: State,
   override protected val heartbeat: HeartBeatStrategy
-)(using ExecutionContext) extends ActorImpl[Msg, Rsp, State](id, state, heartbeat) with RemoteSystem[Msg, Rsp] {
+)(using ExecutionContext) extends BaseActor[Msg, Rsp, State](id, state, heartbeat) with RemoteSystem[Msg, Rsp] {
 	import SystemMsg.*
 	import ActorPath.*
 

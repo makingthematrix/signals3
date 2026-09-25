@@ -88,8 +88,8 @@ class ActorSystemSpec extends FunSuite {
   // CapturingActor for AskForRefAsync tests
   // ============================================================================
 
-  private class CapturingActor(sys: ActorSystem[Int, String, Int])(using ec: ExecutionContext)
-    extends ActorImpl[Int, String, Int]("capturing", 0, Actor.defBeat, None, Some(sys)) {
+  private class CapturingBaseActor(sys: ActorSystem[Int, String, Int])(using ec: ExecutionContext)
+    extends BaseActor[Int, String, Int]("capturing", 0, Actor.defBeat, None, Some(sys)) {
     import SystemMsg.*
 
     val receivedName = SourceSignal("")
@@ -109,13 +109,13 @@ class ActorSystemSpec extends FunSuite {
     }
   }
 
-  private def newCapturer(sys: ActorSystem[Int, String, Int]): CapturingActor = {
-    val c = CapturingActor(sys)
+  private def newCapturer(sys: ActorSystem[Int, String, Int]): CapturingBaseActor = {
+    val c = CapturingBaseActor(sys)
     c.initialize()
     c
   }
 
-  private def awaitCapturedRef(capturer: CapturingActor): ActorRef[Int, String] = {
+  private def awaitCapturedRef(capturer: CapturingBaseActor): ActorRef[Int, String] = {
     val start = System.currentTimeMillis()
     while (System.currentTimeMillis() - start < 5000) {
       capturer.receivedRef match {

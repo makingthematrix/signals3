@@ -22,7 +22,7 @@ import scala.util.{Failure, Success, Try}
 	* @tparam Rsp   The type of responses returned by this actor.
 	* @tparam State The type representing the internal state of the actor.
 	*/
-private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
+private[actors] class BaseActor[Msg, Rsp, State](override val id: String,
                                                  protected var _state: State,
                                                  override protected val heartbeat: HeartBeatStrategy = Actor.defBeat,
                                                  override val parent: Option[Actor[Msg, Rsp, State]] = None,
@@ -58,9 +58,9 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 
 	inline private def enqueue(entry: SysEntry): Unit = systemMsgs.updateAndGet(_ :+ entry)
 
-	inline private def dequeueMsgs(): MQueue[MsgEntry] = msgs.getAndSet(MQueue.empty)
+	inline private def flushMsgEntries(): MQueue[MsgEntry] = msgs.getAndSet(MQueue.empty)
 
-	inline private def dequeueSystemMsgs(): MQueue[SysEntry] = systemMsgs.getAndSet(MQueue.empty)
+	inline private def flushSystemEntries(): MQueue[SysEntry] = systemMsgs.getAndSet(MQueue.empty)
 
 	// a method used every consecutive beat to calculate the time for the next beat
 	private def interval(): FiniteDuration = heartbeat match {
@@ -201,13 +201,10 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 	inline protected def respond(pOpt: Option[Promise[SystemMsg]], rsp: SystemMsg): Unit =
 		pOpt.foreach(p => Try(p.tryComplete(Success(rsp))))
 
-	inline protected def respond(pOpt: Option[Promise[SystemMsg]], rsp: CloseableFuture[SystemMsg]): Unit =
-		pOpt.foreach(p => Try(p.completeWith(rsp.future)))
-
 	// Processes system messages; should NOT be called directly - always from `processMessages`
 	private def processSystemMessages(): Unit = {
-		val systemMsgs = dequeueSystemMsgs()
-		while (systemMsgs.nonEmpty) processSysEntry(systemMsgs.dequeue())
+		val entries = flushSystemEntries()
+		while (entries.nonEmpty) processSysEntry(entries.dequeue())
 	}
 
 	import SystemMsg.*
@@ -250,9 +247,9 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 	// processed before regular ones, so at the beginning of the next processing the lsit will be changed and that new list
 	// will be used for that processing of regular messages.
 	private def processRegularMessages(): Unit = {
-		val msgs = dequeueMsgs()
-		while (!isPaused && !isClosed && msgs.nonEmpty) {
-			val (msg, pOpt, bId) = msgs.dequeue()
+		val entries = flushMsgEntries()
+		while (!isPaused && !isClosed && entries.nonEmpty) {
+			val (msg, pOpt, bId) = entries.dequeue()
 			val pfOpt =
 				if (bId.nonEmpty) getBehavior(bId).map(_.pf)
 				else behaviors.collectFirst { case (_, pf) if pf.isDefinedAt(msg, this) => pf }
@@ -318,8 +315,8 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		in.close()
 		out.close()
 		beat.closeAndCheck()
-		dequeueMsgs().collect { case (_, Some(p), _) => p }.foreach(_.tryFailure(actorIsClosed))
-		dequeueSystemMsgs().collect { case (_, Some(p)) => p }.foreach(_.tryFailure(actorIsClosed))
+		flushMsgEntries().collect { case (_, Some(p), _) => p }.foreach(_.tryFailure(actorIsClosed))
+		flushSystemEntries().collect { case (_, Some(p)) => p }.foreach(_.tryFailure(actorIsClosed))
 		parent.foreach(p => p ! p.SystemMsg.ActorClosed(id))
 		system.foreach(s => s ! s.SystemMsg.ActorClosed(id))
 		beat.isClosedSignal.onTrue.map(_ => SystemMsg.ActorClosed(id))

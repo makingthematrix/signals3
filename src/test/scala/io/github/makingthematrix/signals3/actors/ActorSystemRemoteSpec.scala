@@ -40,7 +40,7 @@ class ActorSystemRemoteSpec extends FunSuite {
   }
 
   private def newActorOn(sys: ActorSystem[Int, String, Int], id: String,
-                        pf: Actor.PF[Int, String, Int]): Actor[Int, String, Int] =
+                         pf: Actor.PF[Int, String, Int]): Actor[Int, String, Int] =
     ActorBuilder[Int, String, Int]()
       .withId(id).withState(0).withBehavior("default", pf).withSystem(sys).build()
 
@@ -72,8 +72,8 @@ class ActorSystemRemoteSpec extends FunSuite {
   }
 
   /** An actor that captures the Ref delivered by AskForRefAsync in a system message. */
-  private class CapturingActor(sys: ActorSystem[Int, String, Int])(using ec: scala.concurrent.ExecutionContext)
-    extends ActorImpl[Int, String, Int]("capturing", 0, Actor.defBeat, None, Some(sys)) {
+  private class CapturingBaseActor(sys: ActorSystem[Int, String, Int])(using ec: scala.concurrent.ExecutionContext)
+    extends BaseActor[Int, String, Int]("capturing", 0, Actor.defBeat, None, Some(sys)) {
     import SystemMsg.*
     @volatile var receivedRef: Option[ActorRef[Int, String]] = None
     override protected def processSysEntry(msg: SysEntry): Unit = msg match {
@@ -196,7 +196,7 @@ class ActorSystemRemoteSpec extends FunSuite {
 
   test("AskForRefAsync with an unknown system id completes the asker with a failure instead of hanging") {
     val (a, b) = crossRegistered()
-    val capturer = new CapturingActor(a)
+    val capturer = new CapturingBaseActor(a)
     capturer.initialize()
     try {
       val cf = a ? a.SystemMsg.AskForRefAsync(capturer, "someActor", "UNKNOWN")
@@ -301,7 +301,7 @@ class ActorSystemRemoteSpec extends FunSuite {
     val (a, b) = crossRegistered()
     val behavior: Actor.PF[Int, String, Int] = { case (msg, _) => Some(s"B: $msg") }
     val actorOnB = newActorOn(b, "onB2", behavior)
-    val capturer = new CapturingActor(a)
+    val capturer = new CapturingBaseActor(a)
     capturer.initialize()
     try {
       awaitRef(a, "capturing")

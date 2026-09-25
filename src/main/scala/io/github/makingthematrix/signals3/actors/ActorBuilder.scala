@@ -235,7 +235,7 @@ final class ActorBuilder[Msg, Rsp, State] (
   }
 
   private def buildActor(state: State, ec: ExecutionContext): Actor[Msg, Rsp, State] = {
-    val actor = new ActorImpl[Msg, Rsp, State](id, state, heartbeat, parent, system)(using ec)
+    val actor = new BaseActor[Msg, Rsp, State](id, state, heartbeat, parent, system)(using ec)
     onInit.foreach(actor.onInit)
     actor.addBehaviors(behaviors)
     actor.initialize()

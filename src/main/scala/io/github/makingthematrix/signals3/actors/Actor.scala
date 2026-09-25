@@ -128,7 +128,7 @@ trait Actor[Msg, Rsp, State] {
 	/**
 		* Sends a system message to the actor.
 		*
-		* System messages are defined in [[ActorImpl.SystemMsg]]. They are processed asynchronously, just like regular messages
+		* System messages are defined in [[BaseActor.SystemMsg]]. They are processed asynchronously, just like regular messages
 		* but they are not affected by the actor being paused (since  a system message might be used to unpause or close
 		* a paused actor). No response will be returned to the sender.
 		*
@@ -264,7 +264,7 @@ object Actor {
 		*/
 	def apply[Msg, Rsp, State](state: State, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy)
 	                          (using ExecutionContext): Actor[Msg, Rsp, State] =
-		new ActorImpl(IdGenerator.generate(), state, beat).tap { actor =>
+		new BaseActor(IdGenerator.generate(), state, beat).tap { actor =>
 			actor.addBehavior(behavior)
 			actor.initialize()
 		}
