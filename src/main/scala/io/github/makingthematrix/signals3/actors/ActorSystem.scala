@@ -38,20 +38,24 @@ final class ActorSystem[Msg, Rsp, State] private(
 			systems -= systemId
 			respond(p, Done)
 		case (AskForRef(actorId, systemId), p) if systemId == "" || systemId == id =>
-			respond(p, actorRefs.get(actorId).map(Ref(_)).getOrElse(InvalidId))
+			val rsp = actorRefs.get(actorId).map(Ref(_)).getOrElse(InvalidId)
+			if (rsp != InvalidId) respond(p, rsp) else respond(p, Actor.invalidActorId(actorId).future)
 		case (AskForRefAsync(sender, actorId, systemId), p) if systemId == "" || systemId == id =>
 			val rsp = actorRefs.get(actorId)
 				.map(sender.SystemMsg.Ref(_))
 				.getOrElse(sender.SystemMsg.InvalidId)
 			sender ! rsp
-			respond(p, Done)
+			if (rsp != sender.SystemMsg.InvalidId) respond(p, Done) else respond(p, Actor.invalidActorId(actorId).future)
 		case (AskForRef(actorId, systemId), p) =>
-			val rspCf = systems.get(systemId)
-				.map { _ ? RemoteSystemMsg.AskForRef(actorId) }
-				.map { _.collect {
-					case RemoteSystemMsg.Ref(ref) => Ref(ref.asInstanceOf[ActorRef[Msg, Rsp]])
-				}}.getOrElse(ActorSystem.invalidSystemId(systemId))
-			p.foreach(_.completeWith(rspCf.future))
+			systems.get(systemId) match {
+				case None => respond(p, ActorSystem.invalidSystemId(systemId).future)
+				case Some(system) =>
+					val cf = (system ? RemoteSystemMsg.AskForRef(actorId))
+						.collect {
+							case RemoteSystemMsg.Ref(ref) => Ref(ref.asInstanceOf[ActorRef[Msg, Rsp]])
+						}
+					respond(p, cf.future)
+			}
 		case (AskForRefAsync(sender, actorId, systemId), p) =>
 			systems.get(systemId)
 				.map { _ ? RemoteSystemMsg.AskForRef(actorId) }

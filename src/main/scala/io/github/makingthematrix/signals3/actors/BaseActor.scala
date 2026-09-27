@@ -200,6 +200,9 @@ private[actors] class BaseActor[Msg, Rsp, State](override val id: String,
 
 	inline protected def respond(pOpt: Option[Promise[SystemMsg]], rsp: SystemMsg): Unit =
 		pOpt.foreach(p => Try(p.tryComplete(Success(rsp))))
+		
+	inline protected def respond(pOpt: Option[Promise[SystemMsg]], rsp: Future[SystemMsg]): Unit =
+		pOpt.foreach(_.completeWith(rsp))
 
 	// Processes system messages; should NOT be called directly - always from `processMessages`
 	private def processSystemMessages(): Unit = {
@@ -212,11 +215,13 @@ private[actors] class BaseActor[Msg, Rsp, State](override val id: String,
 	protected def processSysEntry(msg: SysEntry): Unit = msg match {
 		case (Pause, p)               => pause(); respond(p, Done)
 		case (Unpause, p)             => unpause(); respond(p, Done)
-		case (Close, p)               => if (p.isEmpty) close() else p.foreach(_.completeWith(shutdown().map(_ => Done)))
+		case (Close, p)               => if (p.isEmpty) close() else respond(p, shutdown().map(_ => Done))
 		case (AddBehavior(beh), p)    => addBehavior(beh); respond(p, Done)
 		case (RemoveBehavior(id), p)  => removeBehavior(id); respond(p, Done)
 		case (AddBehaviorPF(pf), p)   => addBehaviorPF(pf); respond(p, Done)
-		case (data: Spawn, p)         => val rsp = spawn(data); respond(p, rsp)
+		case (data: Spawn, p)         => 
+			val rsp = spawn(data)
+			if (rsp != SystemMsg.InvalidId) respond(p, rsp) else respond(p, Actor.invalidActorId(data.actorId).future)
 		case (ActorClosed(id), p)     => removeChild(id); respond(p, Done)
 		case _ => // @todo: log the unhandled messages
 	}
