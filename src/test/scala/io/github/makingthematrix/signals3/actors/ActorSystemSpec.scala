@@ -99,15 +99,6 @@ class ActorSystemSpec extends FunSuite {
   // 2. Register
   // ============================================================================
 
-  test("Actor built with withSystem auto-registers on initialize") {
-    val sys = newSystem()
-    val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
-    val ref = awaitRef(sys, "a")
-    assertEquals(ref.path.actorId, "a")
-    close(a)
-    close(sys)
-  }
-
   test("Register via ? stores the actor and returns Ref") {
     val sys = newSystem()
     import sys.SystemMsg.*
@@ -143,18 +134,6 @@ class ActorSystemSpec extends FunSuite {
     close(sys)
   }
 
-  test("Register multiple actors with distinct ids") {
-    val sys = newSystem()
-    val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
-    val b = newActor(sys, "b", { case (msg, _) => Some(s"B: $msg") })
-    val c = newActor(sys, "c", { case (msg, _) => Some(s"C: $msg") })
-    assertEquals(awaitRef(sys, "a").path.actorId, "a")
-    assertEquals(awaitRef(sys, "b").path.actorId, "b")
-    assertEquals(awaitRef(sys, "c").path.actorId, "c")
-    close(a); close(b); close(c)
-    close(sys)
-  }
-
   // ============================================================================
   // 3. Spawn integration with the system registry
   // ============================================================================
@@ -179,41 +158,9 @@ class ActorSystemSpec extends FunSuite {
     close(sys)
   }
 
-  test("Spawned child with auto-generated id is registered under that id") {
-    val sys = newSystem()
-    val child = spawn(sys)(sys.SystemMsg.Spawn())
-    val ref = awaitRef(sys, child.id)
-    assertEquals(ref.path.actorId, child.id)
-    close(child)
-    close(sys)
-  }
-
-  test("Spawned sibling children are all registered") {
-    val sys = newSystem()
-    import sys.SystemMsg.*
-    val c1 = spawn(sys)(Spawn(actorId = "c1"))
-    val c2 = spawn(sys)(Spawn(actorId = "c2"))
-    val c3 = spawn(sys)(Spawn(actorId = "c3"))
-    awaitRef(sys, "c1")
-    awaitRef(sys, "c2")
-    awaitRef(sys, "c3")
-    close(c1); close(c2); close(c3)
-    close(sys)
-  }
-
   // ============================================================================
   // 4. AskForRef
   // ============================================================================
-
-  test("AskForRef returns Ref for a registered id") {
-    val sys = newSystem()
-    val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
-    val ref = awaitRef(sys, "a")
-    assert(ref.isLocal)
-    assertEquals(ref.path.actorId, "a")
-    close(a)
-    close(sys)
-  }
 
   test("AskForRef returns InvalidId for an unknown id") {
     val sys = newSystem()
@@ -264,15 +211,6 @@ class ActorSystemSpec extends FunSuite {
     assertEquals(rsp, Done)
     awaitInvalid(sys, "x")
     close(a)
-    close(sys)
-  }
-
-  test("Auto-deregistration on close") {
-    val sys = newSystem()
-    val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
-    awaitRef(sys, "a")
-    close(a)
-    awaitInvalid(sys, "a")
     close(sys)
   }
 

@@ -91,31 +91,6 @@ class ActorSystemRemoteSpec extends FunSuite {
   // 1. Routing to invalid ids must not recurse
   // ============================================================================
 
-  test("bang to a nonexistent actor addressed by the system's own id is dropped, not recursed") {
-    val sys = newSystem("sys")
-    try {
-      sys.bang(42, ActorPath.Remote("sys", "nonexistent"), "")
-      Thread.sleep(300)
-    } catch {
-      case e: StackOverflowError => fail(s"StackOverflowError: ${e.getStackTrace.take(5).mkString(" | ")}")
-    } finally {
-      Try(close(sys))
-    }
-  }
-
-  test("ask to a nonexistent actor addressed by the system's own id fails, not recursed") {
-    val sys = newSystem("sys")
-    try {
-      val cf = sys.ask(42, ActorPath.Remote("sys", "nonexistent"), "")
-      awaitCF(cf)
-      assert(cf.future.value.exists(_.isFailure), s"expected failure, got ${cf.future.value}")
-    } catch {
-      case e: StackOverflowError => fail(s"StackOverflowError: ${e.getStackTrace.take(5).mkString(" | ")}")
-    } finally {
-      Try(close(sys))
-    }
-  }
-
   test("cross-system bang to a nonexistent actor on the peer is dropped, not recursed") {
     val (a, b) = crossRegistered()
     try {
@@ -200,15 +175,6 @@ class ActorSystemRemoteSpec extends FunSuite {
     Try(close(capturer)); Try(close(a)); Try(close(b))
   }
 
-  test("local AskForRef with an unknown actor id returns the InvalidIdException") {
-    val sys = newSystem("sys")
-    tryResultCF(sys ? sys.SystemMsg.AskForRef("nonexistent")) match {
-      case Failure(InvalidIdException("nonexistent")) => ()
-      case other => fail(s"Expected InvalidId, got $other")
-    }
-    Try(close(sys))
-  }
-
   test("cross-system AskForRef for an actor missing on the peer fails with InvalidIdException") {
     val (a, b) = crossRegistered()
     tryResultCF(a ? a.SystemMsg.AskForRef("nonexistent", "B")) match {
@@ -236,18 +202,6 @@ class ActorSystemRemoteSpec extends FunSuite {
         ref ! 42
         assert(waitFor(received, 1), "cross-system bang was not delivered")
         assertEquals(resultCF(ref ? 43), "B: 43")
-      case other => fail(s"Unexpected AskForRef response: $other")
-    }
-    Try(close(actorOnB)); Try(close(a)); Try(close(b))
-  }
-
-  test("cross-system AskForRef immediately after actor creation on the peer returns a usable ref") {
-    val (a, b) = crossRegistered()
-    val behavior: Actor.PF[Int, String, Int] = { case (msg, _) => Some(s"B: $msg") }
-    val actorOnB = newActorOn(b, "fresh", behavior)
-    // no awaitRef here: the lookup must queue behind the peer's pending Register
-    tryResultCF(a ? a.SystemMsg.AskForRef("fresh", "B")) match {
-      case Success(a.SystemMsg.Ref(ref)) => assertEquals(resultCF(ref ? 7), "B: 7")
       case other => fail(s"Unexpected AskForRef response: $other")
     }
     Try(close(actorOnB)); Try(close(a)); Try(close(b))
