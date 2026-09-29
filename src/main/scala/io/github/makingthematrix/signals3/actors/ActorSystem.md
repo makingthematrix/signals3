@@ -296,3 +296,7 @@ verify actor existence race-free, and the remote surface is covered by tests
 consistency work — finishing the invalid-id semantics sweep (#1, #2), deciding
 how reliable path-based sends must be (#3) — plus lifecycle hardening (#4, #5)
 before a real network transport is built on top of `RemoteSystem`.
+
+---
+
+This lecture will be a bit unusual. The Actor model rests on deceptively simple foundations. Foundations that can be spelled out in a matter of minutes. But we can then spend weeks and months building on top of them: enriching them, deriving conclusions, and combining those conclusions to produce new value. That is what I would like to do: take you on a journey of implementing an Actor model from scratch. I assume you know Scala syntax and are familiar with event streams, so we will start from there. During those ninety minutes, we will discuss all the important (and some not-so-important) building blocks of a mature Actor system. It is not a lot of time, I admit, so there will be no live coding; instead, expect plenty of infographics and some Scala code on the slides.

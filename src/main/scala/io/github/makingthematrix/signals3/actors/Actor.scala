@@ -128,7 +128,7 @@ trait Actor[Msg, Rsp, State] {
 	/**
 		* Sends a system message to the actor.
 		*
-		* System messages are defined in [[BaseActor.SystemMsg]]. They are processed asynchronously, just like regular messages
+		* System messages are defined in [[ActorImpl.SystemMsg]]. They are processed asynchronously, just like regular messages
 		* but they are not affected by the actor being paused (since  a system message might be used to unpause or close
 		* a paused actor). No response will be returned to the sender.
 		*
@@ -204,24 +204,30 @@ object Actor {
 		*
 		* @return A `Failure` instance wrapping an `IllegalStateException`: "no response".
 		*/
-	inline def NoResponse[Rsp]: Failure[Rsp] = noResponse.asInstanceOf[Failure[Rsp]]
+	inline def FailToRespond[Rsp]: Failure[Rsp] = noResponse.asInstanceOf[Failure[Rsp]]
 
 	/**
 		* A special type of response, indicating the incoming message was ignored. It's not necessarily an error.
 		* @return A `Success` instance wrapping `None`
 		*/
-	inline def Ignored[Rsp]: Success[Option[Rsp]] = ignored.asInstanceOf[Success[Option[Rsp]]]
+	inline def NoResponse[Rsp]: Success[Option[Rsp]] = ignored.asInstanceOf[Success[Option[Rsp]]]
 
 	inline def ActorIsClosed[Rsp](using ExecutionContext): CloseableFuture[Rsp] = CloseableFuture.failed[Rsp](actorIsClosed)
 	
+	final case class InvalidIdException(actorId: String) extends IllegalArgumentException(s"Invalid actor id: $actorId")
+	
 	inline def invalidActorId[Rsp](actorId: String)(using ExecutionContext): CloseableFuture[Rsp] =
-		CloseableFuture.failed(new IllegalArgumentException(s"Invalid actor id: $actorId"))
+		CloseableFuture.failed(InvalidIdException(actorId))
 
+	final case class UnhandledMsgException(msg: String) extends IllegalArgumentException(s"Unhandled message: $msg")
+	
 	inline def unhandledMsg[Msg, Rsp](msg: Msg)(using ExecutionContext): CloseableFuture[Rsp] =
-		CloseableFuture.failed(new IllegalArgumentException(s"Unhandled message: $msg"))
+		CloseableFuture.failed(UnhandledMsgException(msg.toString))
 
+	final case class WrongPathException(path: ActorPath) extends IllegalArgumentException(s"Wrong path: $path")
+	
 	inline def wrongPath[Rsp](path: ActorPath)(using ExecutionContext): CloseableFuture[Rsp] =
-		CloseableFuture.failed(new IllegalArgumentException(s"wrong path: $path"))
+		CloseableFuture.failed(WrongPathException(path))
 
 	// The type of a custom behavior: a partial function that takes a message and an actor and returns an optional response.
 	type PF[Msg, Rsp, State] = PartialFunction[(Msg, MutableActor[Msg, Rsp, State]), Option[Rsp]]
@@ -264,7 +270,7 @@ object Actor {
 		*/
 	def apply[Msg, Rsp, State](state: State, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy)
 	                          (using ExecutionContext): Actor[Msg, Rsp, State] =
-		new BaseActor(IdGenerator.generate(), state, beat).tap { actor =>
+		new ActorImpl(IdGenerator.generate(), state, beat).tap { actor =>
 			actor.addBehavior(behavior)
 			actor.initialize()
 		}

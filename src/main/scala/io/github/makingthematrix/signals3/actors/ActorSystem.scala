@@ -6,14 +6,14 @@ import io.github.makingthematrix.signals3.actors.RemoteSystem.RemoteSystemMsg
 import io.github.makingthematrix.signals3.actors.RemoteSystem.RemoteSystemMsg.SystemClosed
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
-import scala.util.{Try, Success, Failure}
+import scala.util.{Success, Failure}
 import scala.util.chaining.scalaUtilChainingOps
 
 final class ActorSystem[Msg, Rsp, State] private(
   override val id: String,
   state: State,
   override protected val heartbeat: HeartBeatStrategy
-)(using ExecutionContext) extends BaseActor[Msg, Rsp, State](id, state, heartbeat) with RemoteSystem[Msg, Rsp] {
+)(using ExecutionContext) extends ActorImpl[Msg, Rsp, State](id, state, heartbeat) with RemoteSystem[Msg, Rsp] {
 	import SystemMsg.*
 	import ActorPath.*
 
@@ -145,8 +145,10 @@ final class ActorSystem[Msg, Rsp, State] private(
 }
 
 object ActorSystem {
+	final case class InvalidSystemIdException(systemId: String) extends IllegalArgumentException(s"Invalid system id: $systemId")
+	
 	inline def invalidSystemId[Rsp](systemId: String)(using ExecutionContext): CloseableFuture[Rsp] =
-		CloseableFuture.failed(new IllegalArgumentException(s"Invalid system id: $systemId"))
+		CloseableFuture.failed(InvalidSystemIdException(systemId))
 
 	def apply[Msg, Rsp, State](id: String, state: State, heartbeat: HeartBeatStrategy)(using ExecutionContext): ActorSystem[Msg, Rsp, State] = {
 		assert(id != "")

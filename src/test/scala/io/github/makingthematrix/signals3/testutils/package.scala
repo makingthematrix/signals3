@@ -46,6 +46,8 @@ package object testutils {
     catch {
       case t: Throwable => Failure(t)
     }
+
+  inline def tryResultCF[A](cf: CloseableFuture[A])(using d: FiniteDuration = DefaultTimeout): Try[A] = tryResult(cf.future)
   
   def waitFor[V](signal: Signal[V], expected: V)(using ec: ExecutionContext, duration: FiniteDuration): Boolean =
     waitForResult(signal, expected, duration)(using ec)

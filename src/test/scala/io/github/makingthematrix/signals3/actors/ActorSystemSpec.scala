@@ -2,10 +2,12 @@ package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.testutils.*
 import io.github.makingthematrix.signals3.*
+import io.github.makingthematrix.signals3.actors.Actor.InvalidIdException
 import munit.FunSuite
 
 import scala.concurrent.duration.*
-import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
+import scala.concurrent.{Await, Future, TimeoutException}
+import scala.util.{Try, Success, Failure}
 
 /**
  * Unit tests for ActorSystem functionality: registration, lookup, deregistration,
@@ -55,9 +57,9 @@ class ActorSystemSpec extends FunSuite {
     val start = System.currentTimeMillis()
     while (System.currentTimeMillis() - start < 5000) {
       try {
-        Await.result(sys ? AskForRef(id), 1.second) match {
-          case Ref(ref) => return ref
-          case InvalidId => Thread.sleep(50)
+        tryResultCF(sys ? AskForRef(id)) match {
+          case Success(Ref(ref)) => return ref
+          case Failure(InvalidIdException(`id`)) => Thread.sleep(50)
           case other => throw new AssertionError(s"Unexpected response: $other")
         }
       } catch {
@@ -72,9 +74,9 @@ class ActorSystemSpec extends FunSuite {
     val start = System.currentTimeMillis()
     while (System.currentTimeMillis() - start < 5000) {
       try {
-        Await.result(sys ? AskForRef(id), 1.second) match {
-          case InvalidId => return
-          case Ref(_) => Thread.sleep(50)
+        tryResultCF[sys.SystemMsg](sys ? AskForRef(id)) match {
+          case Failure(InvalidIdException(_)) => return
+          case Success(Ref(_)) => Thread.sleep(50)
           case other => throw new AssertionError(s"Unexpected response: $other")
         }
       } catch {
@@ -82,48 +84,6 @@ class ActorSystemSpec extends FunSuite {
       }
     }
     fail(s"Actor '$id' was still registered after 5 seconds")
-  }
-
-  // ============================================================================
-  // CapturingActor for AskForRefAsync tests
-  // ============================================================================
-
-  private class CapturingBaseActor(sys: ActorSystem[Int, String, Int])(using ec: ExecutionContext)
-    extends BaseActor[Int, String, Int]("capturing", 0, Actor.defBeat, None, Some(sys)) {
-    import SystemMsg.*
-
-    val receivedName = SourceSignal("")
-    @volatile var receivedRef: Option[ActorRef[Int, String]] = None
-    val receivedInvalid = SourceSignal(false)
-
-    override protected def processSysEntry(msg: SysEntry): Unit = msg match {
-      case (Ref(ref), p) =>
-        receivedRef = Some(ref)
-        receivedName ! ref.path.actorId
-        respond(p, Done)
-      case (InvalidId, p) =>
-        receivedInvalid ! true
-        respond(p, Done)
-      case other =>
-        super.processSysEntry(other)
-    }
-  }
-
-  private def newCapturer(sys: ActorSystem[Int, String, Int]): CapturingBaseActor = {
-    val c = CapturingBaseActor(sys)
-    c.initialize()
-    c
-  }
-
-  private def awaitCapturedRef(capturer: CapturingBaseActor): ActorRef[Int, String] = {
-    val start = System.currentTimeMillis()
-    while (System.currentTimeMillis() - start < 5000) {
-      capturer.receivedRef match {
-        case Some(ref) => return ref
-        case None => Thread.sleep(50)
-      }
-    }
-    fail("CapturingActor did not receive a Ref within 5 seconds")
   }
 
   // ============================================================================
@@ -262,8 +222,8 @@ class ActorSystemSpec extends FunSuite {
   test("AskForRef returns InvalidId for an unknown id") {
     val sys = newSystem()
     import sys.SystemMsg.*
-    val rsp = resultCF(sys ? AskForRef("nonexistent"))
-    assertEquals(rsp, InvalidId)
+    val rsp = tryResultCF[sys.SystemMsg](sys ? AskForRef("nonexistent"))
+    assertEquals(rsp, Failure(InvalidIdException("nonexistent")))
     close(sys)
   }
 
@@ -271,13 +231,13 @@ class ActorSystemSpec extends FunSuite {
     val sys = newSystem()
     import sys.SystemMsg.*
     val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
-    Await.result(sys ? AskForRef("a", sys.id), 5.seconds) match {
-      case Ref(ref) =>
+    tryResultCF(sys ? AskForRef("a", sys.id)) match {
+      case Success(Ref(ref)) =>
         assert(ref.isLocal)
         assertEquals(ref.path, ActorPath.Local("a"))
       case other => fail(s"Expected Ref, got $other")
     }
-    assertEquals(resultCF(sys ? AskForRef("nonexistent", sys.id)), InvalidId)
+    assertEquals(tryResultCF(sys ? AskForRef("nonexistent", sys.id)), Failure(InvalidIdException("nonexistent")))
     close(a)
     close(sys)
   }
@@ -357,52 +317,6 @@ class ActorSystemSpec extends FunSuite {
   }
 
   // ============================================================================
-  // 6. AskForRefAsync
-  // ============================================================================
-
-  test("AskForRefAsync delivers Ref to the sender actor") {
-    val sys = newSystem()
-    import sys.SystemMsg.*
-    val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
-    awaitRef(sys, "a")
-    val capturer = newCapturer(sys)
-    awaitRef(sys, "capturing")
-    val rsp = resultCF(sys ? AskForRefAsync(capturer, "a"))
-    assertEquals(rsp, Done)
-    val ref = awaitCapturedRef(capturer)
-    assertEquals(ref.path.actorId, "a")
-    close(capturer)
-    close(a)
-    close(sys)
-  }
-
-  test("AskForRefAsync delivers InvalidId to the sender when not found") {
-    val sys = newSystem()
-    import sys.SystemMsg.*
-    val capturer = newCapturer(sys)
-    awaitRef(sys, "capturing")
-    val rsp = resultCF(sys ? AskForRefAsync(capturer, "nonexistent"))
-    assertEquals(rsp, Done)
-    assert(waitFor(capturer.receivedInvalid, true))
-    close(capturer)
-    close(sys)
-  }
-
-  test("AskForRefAsync response to the asker is always Done") {
-    val sys = newSystem()
-    import sys.SystemMsg.*
-    val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
-    awaitRef(sys, "a")
-    val capturer = newCapturer(sys)
-    awaitRef(sys, "capturing")
-    assertEquals(resultCF(sys ? AskForRefAsync(capturer, "a")), Done)
-    assertEquals(resultCF(sys ? AskForRefAsync(capturer, "nonexistent")), Done)
-    close(capturer)
-    close(a)
-    close(sys)
-  }
-
-  // ============================================================================
   // 7. ActorRef / Ref
   // ============================================================================
 
@@ -455,21 +369,6 @@ class ActorSystemSpec extends FunSuite {
     val bRef = awaitRef(sys, "b")
     assertEquals(resultCF(bRef ? 20), "B: 20")
     close(a); close(b)
-    close(sys)
-  }
-
-  test("Two actors communicate via AskForRefAsync") {
-    val sys = newSystem()
-    import sys.SystemMsg.*
-    val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
-    awaitRef(sys, "a")
-    val capturer = newCapturer(sys)
-    awaitRef(sys, "capturing")
-    resultCF(sys ? AskForRefAsync(capturer, "a"))
-    val ref = awaitCapturedRef(capturer)
-    assertEquals(resultCF(ref ? 42), "A: 42")
-    close(capturer)
-    close(a)
     close(sys)
   }
 
@@ -527,7 +426,7 @@ class ActorSystemSpec extends FunSuite {
     val futures: Seq[Future[Unit]] = (0 until numThreads).map { _ =>
       Future {
         (0 until spawnsPerThread).foreach { _ =>
-          val rsp = Await.result(sys ? Spawn(actorId = ""), 2.seconds)
+          val rsp = Await.result(sys ? Spawn(), 2.seconds)
           rsp match {
             case NewChild(c) => children.put(c.id, c)
             case other => throw new AssertionError(s"Unexpected response: $other")

@@ -2,11 +2,12 @@ package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.testutils.*
 import io.github.makingthematrix.signals3.*
-import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy
+import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, InvalidIdException}
 import munit.FunSuite
 
 import scala.concurrent.duration.*
 import scala.concurrent.{Await, Future}
+import scala.util.{Failure, Success, Try}
 
 /**
  * Integration tests for Actor focusing on thread safety and concurrent behavior modifications.
@@ -46,11 +47,11 @@ class ActorIntegrationSpec extends FunSuite {
   
   private def spawn[Msg, Rsp, State](parent: Actor[Msg, Rsp, State])(data: parent.SystemMsg.Spawn): Actor[Msg, Rsp, State] = {
     import parent.SystemMsg
-    val rsp = Await.result(parent ? data, 5.seconds)
-    rsp match {
-      case SystemMsg.NewChild(child) => child
-      case SystemMsg.InvalidId        => throw new AssertionError(s"Spawn with id '${data.actorId}' was rejected as InvalidId")
-      case other                      => throw new AssertionError(s"Unexpected spawn response: $other")
+    import Actor.InvalidIdException
+    tryResultCF(parent ? data) match {
+      case Success(SystemMsg.NewChild(child)) => child
+      case Failure(InvalidIdException(_)) => throw new AssertionError(s"Spawn with id '${data.actorId}' was rejected as InvalidId")
+      case other => throw new AssertionError(s"Unexpected spawn response: $other")
     }
   }
 
@@ -617,9 +618,8 @@ class ActorIntegrationSpec extends FunSuite {
     val parent = create[Int, String, Int](0, { case (msg, _) => Some(s"P: $msg") })
     import parent.SystemMsg
     val first = spawn(parent)(SystemMsg.Spawn(actorId = "dup"))
-    val secondRsp = Await.result(parent ? SystemMsg.Spawn(actorId = "dup"), 5.seconds)
-    secondRsp match {
-      case SystemMsg.InvalidId => // expected
+    tryResultCF(parent ? SystemMsg.Spawn(actorId = "dup")) match {
+      case Failure(InvalidIdException("dup")) => // expected
       case other              => fail(s"Expected InvalidId, got $other")
     }
     assert(!first.isClosed, "First child should not be closed by the rejected spawn")
@@ -812,12 +812,11 @@ class ActorIntegrationSpec extends FunSuite {
 
     val futures: Seq[Future[Unit]] = (0 until numThreads).map { _ =>
       Future {
-        val rsp = Await.result(parent ? SystemMsg.Spawn(actorId = "race"), 2.seconds)
-        rsp match {
-          case SystemMsg.NewChild(c) =>
+        tryResultCF(parent ? SystemMsg.Spawn(actorId = "race")) match {
+          case Success(SystemMsg.NewChild(c)) =>
             childRef.compareAndSet(None, Some(c))
             newChildCount.mutate(_ + 1)
-          case SystemMsg.InvalidId =>
+          case Failure(InvalidIdException(_)) =>
             invalidIdCount.mutate(_ + 1)
           case other =>
             throw new AssertionError(s"Unexpected response: $other")
