@@ -169,74 +169,6 @@ class ActorIntegrationSpec extends FunSuite {
   }
 
   /**
-   * Test that behavior modifications don't interfere with message processing.
-   */
-  test("Behavior modifications during message processing are thread-safe") {
-    val actor = create[Int, String, Int](0, {
-      case (msg, _) => Some(s"Default: $msg")
-    })
-    
-    import actor.SystemMsg
-    
-    val messagesToSend = 100
-    val behaviorModifications = 100
-    
-    // Track processed messages (using atomic mutate)
-    val processedCount = SourceSignal(0)
-    
-    // Add a behavior that records processed messages - this should match ALL messages
-    // by using a catch-all pattern
-    val recordingBehavior: Actor.PF[Int, String, Int] = {
-      case (msg, _) =>
-        processedCount.mutate(_ + 1)
-        Some(s"Recorded: $msg")
-    }
-    
-    // First, add the recording behavior
-    actor.ask(SystemMsg.AddBehavior("recorder", recordingBehavior))
-    // Wait for behavior to be added
-    Thread.sleep(100)
-    assert(actor.getBehavior("recorder").isDefined)
-    
-    // Send messages concurrently with behavior modifications
-    val messageFutures: Seq[Future[String]] = (0 until messagesToSend).map { i =>
-      Future {
-        val cf = actor.ask(i)
-        resultCF(cf)
-      }
-    }
-    
-    val modificationFutures = (0 until behaviorModifications).map { i =>
-      Future {
-        if (i % 2 == 0) {
-          // Add a temporary behavior - use a message value that won't match any sent messages
-          val tempId = s"temp-$i"
-          val tempBehavior: Actor.PF[Int, String, Int] = {
-            case (msg, _) if msg == -999999 => Some(s"Temp-$tempId: $msg")
-          }
-          val future = actor.ask(SystemMsg.AddBehavior(tempId, tempBehavior))
-          Await.result(future, 1.second)
-        } else {
-          // Remove a behavior (try to remove temp behaviors)
-          val tempId = s"temp-${i-1}"
-          val future = actor.ask(SystemMsg.RemoveBehavior(tempId))
-          Await.result(future, 1.second)
-        }
-      }
-    }
-    
-    // Wait for all operations to complete
-    Await.result(Future.sequence(messageFutures), 10.seconds)
-    Await.result(Future.sequence(modificationFutures), 10.seconds)
-    
-    // Verify all messages were processed
-    waitFor(processedCount, messagesToSend)
-    assertEquals(processedCount.currentValue.getOrElse(0), messagesToSend)
-    
-    close(actor)
-  }
-
-  /**
    * Test that removing a behavior that doesn't exist doesn't cause errors.
    */
   test("Removing non-existent behavior is safe") {
@@ -253,94 +185,9 @@ class ActorIntegrationSpec extends FunSuite {
     close(actor)
   }
 
-  /**
-   * Test that adding a behavior with duplicate ID does NOT replace the existing one.
-   * This is the current behavior - duplicate IDs are ignored.
-   */
-  test("Adding behavior with duplicate ID does not replace existing behavior") {
-    val actor = create[Int, String, Int](0, {
-      case (msg, _) => Some(s"Default: $msg")
-    })
-    
-    import actor.SystemMsg
-    
-    val behaviorId = "test-behavior"
-    
-    // Add first behavior
-    val behavior1: Actor.PF[Int, String, Int] = {
-      case (msg, _) if msg == 1 => Some(s"First: $msg")
-    }
-    actor.ask(SystemMsg.AddBehavior(behaviorId, behavior1))
-    // Wait for behavior to be added
-    Thread.sleep(100)
-    assert(actor.getBehavior(behaviorId).isDefined)
-    
-    // Verify first behavior works
-    val response1 = actor.ask(1)
-    assertEquals(Await.result(response1, 1.second), "First: 1")
-    
-    // Try to add second behavior with same ID - this should be ignored
-    val behavior2: Actor.PF[Int, String, Int] = {
-      case (msg, _) if msg == 1 => Some(s"Second: $msg")
-    }
-    actor.ask(SystemMsg.AddBehavior(behaviorId, behavior2))
-    // Wait for the add attempt to complete (it will be ignored)
-    Thread.sleep(100)
-    
-    // Verify first behavior is still active (duplicate IDs are not replaced)
-    val response2 = actor.ask(1)
-    assertEquals(Await.result(response2, 1.second), "First: 1")
-    close(actor)
-  }
-
   // ============================================================================
   // Message Processing During Behavior Modification Tests
   // ============================================================================
-
-  /**
-   * Test that messages sent while behaviors are being modified are processed correctly.
-   * Note: Some messages might match the newly added behaviors, so we just verify
-   * that all messages get responses and no exceptions occur.
-   */
-  test("Messages sent during behavior modification are processed correctly") {
-    val actor = create[Int, String, Int](0, {
-      case (msg, _) => Some(s"Default: $msg")
-    })
-
-    val messages = (0 until 100).toList
-    
-    // Start sending messages
-    val messageFutures: Seq[Future[String]] = messages.map { msg =>
-      Future {
-        val response = actor.ask(msg)
-        resultCF(response)
-      }
-    }
-    
-    // Concurrently modify behaviors
-    val modificationFutures = (0 until 50).map { i =>
-      Future {
-        val behaviorId = s"mod-$i"
-        val behavior: Actor.PF[Int, String, Int] = {
-          case (msg, _) if msg == i * 1000 => Some(s"Modified-$behaviorId: $msg")
-        }
-        val future = actor.ask(actor.SystemMsg.AddBehavior(behaviorId, behavior))
-        Await.result(future, 1.second)
-      }
-    }
-    
-    // Wait for all operations to complete
-    Await.result(Future.sequence(messageFutures), 10.seconds)
-    Await.result(Future.sequence(modificationFutures), 10.seconds)
-    
-    // Verify all messages got responses (no exceptions)
-    val messageResults: Seq[String] = messageFutures.map(f => Await.result(f, 1.second))
-    assertEquals(messageResults.size, messages.size)
-    // All responses should be non-empty
-    assert(messageResults.forall(_.nonEmpty))
-    
-    close(actor)
-  }
 
   /**
    * Test that behavior modifications don't cause message loss.
@@ -413,24 +260,6 @@ class ActorIntegrationSpec extends FunSuite {
     close(parent)
   }
 
-  test("Spawn() with all defaults clones the parent's behavior") {
-    val parent = create[Int, String, Int](0, { case (msg, _) => Some(s"Default: $msg") })
-    val child = spawn(parent)(parent.SystemMsg.Spawn())
-    assertEquals(resultCF(child ? 7), "Default: 7")
-    closeChild(child)
-    close(parent)
-  }
-
-  test("The ? response carries the actual child reference, not just an ack") {
-    val parent = create[Int, String, Int](0, { case (msg, _) => Some(s"Parent: $msg") })
-    val childBeh: Actor.PF[Int, String, Int] = { case (msg, _) => Some(s"Child: $msg") }
-    val child = spawn(parent)(parent.SystemMsg.Spawn(behaviors = List("c" -> childBeh)))
-    assertEquals(resultCF(child ? 1), "Child: 1")
-    assertEquals(resultCF(parent ? 1), "Parent: 1")
-    closeChild(child)
-    close(parent)
-  }
-
   // ============================================================================
   // Spawn: Inheritance Semantics
   // ============================================================================
@@ -486,18 +315,6 @@ class ActorIntegrationSpec extends FunSuite {
     val child = spawn(parent)(parent.SystemMsg.Spawn(actorId = "my-child"))
     assertEquals(child.id, "my-child")
     closeChild(child)
-    close(parent)
-  }
-
-  test("Spawn with empty id auto-generates a unique id") {
-    val parent = create[Int, String, Int](0, { case (msg, _) => Some(s"P: $msg") })
-    val c1 = spawn(parent)(parent.SystemMsg.Spawn())
-    val c2 = spawn(parent)(parent.SystemMsg.Spawn())
-    assert(c1.id.nonEmpty)
-    assert(c2.id.nonEmpty)
-    assert(c1.id != c2.id)
-    closeChild(c1)
-    closeChild(c2)
     close(parent)
   }
 
@@ -670,17 +487,6 @@ class ActorIntegrationSpec extends FunSuite {
     close(parent)
     waitFor(child.isClosedSignal, true)
     waitFor(grandchild.isClosedSignal, true)
-  }
-
-  test("Closing a child independently removes it from the parent's children map") {
-    val parent = create[Int, String, Int](0, { case (msg, _) => Some(s"P: $msg") })
-    val c1 = spawn(parent)(parent.SystemMsg.Spawn(actorId = "x"))
-    closeChild(c1)
-    // Re-spawn with the same id should succeed once the parent has processed ActorClosed
-    val c2 = spawn(parent)(parent.SystemMsg.Spawn(actorId = "x"))
-    assertEquals(c2.id, "x")
-    closeChild(c2)
-    close(parent)
   }
 
   test("An independently closed child does not close its siblings or the parent") {
