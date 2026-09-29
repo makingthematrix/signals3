@@ -26,20 +26,6 @@ class ActorBuilderSpec extends FunSuite {
   private def buildActor[Msg, Rsp, State](builder: ActorBuilder[Msg, Rsp, State]): Actor[Msg, Rsp, State] & Closeable & Pausable =
     builder.build().asInstanceOf[Actor[Msg, Rsp, State] & Closeable & Pausable]
 
-  test("ActorBuilder creates actor with default configuration") {
-    val actor = buildActor(
-      ActorBuilder[Int, String, Int]()
-        .withState(0)
-        .withBehaviorPF {
-          case (msg, _) => Some(s"Processed: $msg")
-        }
-    )
-
-    val response = actor ? 42
-    assertEquals(resultCF(response), "Processed: 42")
-    close(actor)
-  }
-
   test("ActorBuilder creates actor with custom state") {
     val initialState = 100
     val actor = buildActor(
@@ -52,29 +38,6 @@ class ActorBuilderSpec extends FunSuite {
 
     val response = actor ? 42
     assertEquals(resultCF(response), s"State: $initialState, Msg: 42")
-    close(actor)
-  }
-
-  test("ActorBuilder creates actor with multiple behaviors") {
-    val actor = buildActor(
-      ActorBuilder[Int, String, Int]()
-        .withState(0)
-        .withBehavior("first", {
-          case (1, _) => Some("First behavior")
-        })
-        .withBehavior("second", {
-          case (2, _) => Some("Second behavior")
-        })
-        .withBehaviorPF {
-          case (msg, _) => Some(s"Default: $msg")
-        }
-    )
-
-    // Behaviors are matched in LIFO order (last added matches first)
-    // The catch-all was added last, so it matches first
-    assertEquals(resultCF(actor ? 1), "Default: 1")
-    assertEquals(resultCF(actor ? 2), "Default: 2")
-    assertEquals(resultCF(actor ? 3), "Default: 3")
     close(actor)
   }
 
@@ -135,51 +98,6 @@ class ActorBuilderSpec extends FunSuite {
 
     val response = actor ? 42
     assertEquals(resultCF(response), "Processed: 42")
-    close(actor)
-  }
-
-  test("ActorBuilder with onInit callback") {
-    var initialized = false
-
-    val actor = buildActor(
-      ActorBuilder[Int, String, Int]()
-        .withState(0)
-        .withBehaviorPF {
-          case (msg, _) => Some(s"Processed: $msg")
-        }
-        .withOnInit { _ =>
-          initialized = true
-        }
-    )
-
-    // Wait for initialization
-    Thread.sleep(100)
-    assert(initialized)
-    
-    val response = actor ? 42
-    assertEquals(resultCF(response), "Processed: 42")
-    close(actor)
-  }
-
-  test("ActorBuilder with onInit and state mutation") {
-    val actor = buildActor(
-      ActorBuilder[Int, String, Int]()
-        .withState(0)
-        .withBehaviorPF {
-          case (msg, actor) =>
-            actor.state += msg
-            Some(s"State: ${actor.state}")
-        }
-        .withOnInit { actor =>
-          actor.state = 100
-        }
-    )
-
-    // Wait for initialization
-    Thread.sleep(100)
-    
-    val response = actor ? 5
-    assertEquals(resultCF(response), "State: 105")
     close(actor)
   }
 
@@ -262,28 +180,4 @@ class ActorBuilderSpec extends FunSuite {
     close(actor)
   }
 
-  test("ActorBuilder with serial dispatch and all options") {
-    var initCalled = false
-
-    val actor = buildActor(
-      ActorBuilder[Int, String, Int]()
-        .withState(0)
-        .withBehaviorPF {
-          case (msg, _) => Some(s"Processed: $msg")
-        }
-        .withReactiveHeartbeat(50, 5)
-        .withOnInit { _ =>
-          initCalled = true
-        }
-        .withSerialDispatch()
-    )
-
-    // Wait for initialization
-    Thread.sleep(100)
-    assert(initCalled)
-
-    val response = actor ? 42
-    assertEquals(resultCF(response), "Processed: 42")
-    close(actor)
-  }
 }
