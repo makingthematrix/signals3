@@ -42,15 +42,12 @@ class ActorSystemSpec extends FunSuite {
     waitFor(actor.isClosedSignal, true)
   }
 
-  private def spawn(parent: Actor[Int, String, Int])(data: parent.SystemMsg.Spawn): Actor[Int, String, Int] = {
-    import parent.SystemMsg
-    val rsp = Await.result(parent ? data, 5.seconds)
-    rsp match {
-      case SystemMsg.NewChild(child) => child
-      case SystemMsg.InvalidId        => throw new AssertionError(s"Spawn with id '${data.actorId}' was rejected as InvalidId")
-      case other                      => throw new AssertionError(s"Unexpected spawn response: $other")
+  private def spawn(parent: Actor[Int, String, Int])(data: parent.SystemMsg.Spawn): Actor[Int, String, Int] =
+    tryResultCF(parent ? data) match {
+      case Success(parent.SystemMsg.NewChild(child))             => child
+      case Failure(InvalidIdException(id)) if id == data.actorId => fail(s"Spawn with id $id was rejected as invalid")
+      case other                                                 => fail(s"Unexpected spawn response: $other")
     }
-  }
 
   private def awaitRef(sys: ActorSystem[Int, String, Int], id: String): ActorRef[Int, String] = {
     import sys.SystemMsg.*
@@ -58,9 +55,9 @@ class ActorSystemSpec extends FunSuite {
     while (System.currentTimeMillis() - start < 5000) {
       try {
         tryResultCF(sys ? AskForRef(id)) match {
-          case Success(Ref(ref)) => return ref
+          case Success(Ref(ref))                 => return ref
           case Failure(InvalidIdException(`id`)) => Thread.sleep(50)
-          case other => throw new AssertionError(s"Unexpected response: $other")
+          case other                             => fail(s"Unexpected response: $other")
         }
       } catch {
         case _: TimeoutException => Thread.sleep(50)
@@ -75,7 +72,7 @@ class ActorSystemSpec extends FunSuite {
     while (System.currentTimeMillis() - start < 5000) {
       try {
         tryResultCF[sys.SystemMsg](sys ? AskForRef(id)) match {
-          case Failure(InvalidIdException(_)) => return
+          case Failure(InvalidIdException(`id`)) => return
           case Success(Ref(_)) => Thread.sleep(50)
           case other => throw new AssertionError(s"Unexpected response: $other")
         }
@@ -118,8 +115,7 @@ class ActorSystemSpec extends FunSuite {
       .withId("manual").withState(0)
       .withBehavior("default", { case (msg, _) => Some(s"M: $msg") })
       .build()
-    val rsp = resultCF(sys ? Register(a))
-    rsp match {
+    resultCF(sys ? Register(a)) match {
       case Ref(ref) => assertEquals(ref.path.actorId, "manual")
       case other => fail(s"Expected Ref, got $other")
     }
@@ -222,7 +218,7 @@ class ActorSystemSpec extends FunSuite {
   test("AskForRef returns InvalidId for an unknown id") {
     val sys = newSystem()
     import sys.SystemMsg.*
-    val rsp = tryResultCF[sys.SystemMsg](sys ? AskForRef("nonexistent"))
+    val rsp = tryResultCF(sys ? AskForRef("nonexistent"))
     assertEquals(rsp, Failure(InvalidIdException("nonexistent")))
     close(sys)
   }
@@ -231,8 +227,9 @@ class ActorSystemSpec extends FunSuite {
     val sys = newSystem()
     import sys.SystemMsg.*
     val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
-    tryResultCF(sys ? AskForRef("a", sys.id)) match {
-      case Success(Ref(ref)) =>
+    awaitRef(sys, "a")
+    resultCF(sys ? AskForRef("a", sys.id)) match {
+      case Ref(ref) =>
         assert(ref.isLocal)
         assertEquals(ref.path, ActorPath.Local("a"))
       case other => fail(s"Expected Ref, got $other")
@@ -426,8 +423,7 @@ class ActorSystemSpec extends FunSuite {
     val futures: Seq[Future[Unit]] = (0 until numThreads).map { _ =>
       Future {
         (0 until spawnsPerThread).foreach { _ =>
-          val rsp = Await.result(sys ? Spawn(), 2.seconds)
-          rsp match {
+          resultCF(sys ? Spawn()) match {
             case NewChild(c) => children.put(c.id, c)
             case other => throw new AssertionError(s"Unexpected response: $other")
           }
