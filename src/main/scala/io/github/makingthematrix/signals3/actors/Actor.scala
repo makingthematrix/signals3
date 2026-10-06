@@ -51,7 +51,7 @@ trait Actor[Msg, Rsp, State] {
 		           heartbeat: Option[Actor.HeartBeatStrategy] = None,
 		           onInit: Option[MutableActor[Msg, Rsp, State] => Unit] = None,
 		           useSerialDispatch: Boolean = false,
-		           executionContext: Option[ExecutionContext] = None,
+		           executionContext: Option[ExecutionContext] = None
 		          )
 		case NewChild(child: Actor[Msg, Rsp, State])
 		case ActorClosed(actorId: String)

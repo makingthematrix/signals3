@@ -146,7 +146,7 @@ final class ActorSystem[Msg, Rsp, State] private(
 
 object ActorSystem {
 	final case class InvalidSystemIdException(systemId: String) extends IllegalArgumentException(s"Invalid system id: $systemId")
-	
+
 	inline def invalidSystemId[Rsp](systemId: String)(using ExecutionContext): CloseableFuture[Rsp] =
 		CloseableFuture.failed(InvalidSystemIdException(systemId))
 

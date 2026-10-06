@@ -225,10 +225,10 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		case (ActorClosed(id), p)     => removeChild(id); respond(p, Done)
 		case _ => // @todo: log the unhandled messages
 	}
-	
+
 	private def processMsgEntry(entry: MsgEntry): Unit = {
 		val (msg, pOpt, bId) = entry
-		val res = if (bId.nonEmpty) onMessage(msg, bId) else onMessage(msg)
+		val res = if (bId.nonEmpty) onMessage(msg, bId) else Try(onMessage(msg)).flatten
 		pOpt.foreach(p => try {
 			res match {
 				case Success(Some(rsp)) => p.tryComplete(Try(rsp))
@@ -239,7 +239,7 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 			case _: IllegalStateException => // Promise already completed
 		})
 	}
-	
+
 	private def onMessage(msg: Msg, bId: String): Try[Option[Rsp]] = {
 		val pfOpt =
 			if (bId.nonEmpty) getBehavior(bId).map(_.pf)
@@ -250,7 +250,7 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 			case _                    => NoResponse[Rsp]
 		}
 	}
-	
+
 	protected def onMessage(msg: Msg): Try[Option[Rsp]] = onMessage(msg, "")
 
 	private def removeChild(id: String): Unit = {
@@ -287,7 +287,7 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 
 	override def isInitialized: Boolean = initialized.get()
 
-	// Calls the onInit functions and nitializes the heartbeat of the actor
+	// Calls the onInit functions and initializes the heartbeat of the actor
 	protected[actors] def initialize(): Unit =
 		if (!isInitialized) try {
 			_onInit.foreach(_(this))
