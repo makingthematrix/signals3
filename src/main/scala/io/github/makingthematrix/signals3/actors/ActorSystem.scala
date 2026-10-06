@@ -1,12 +1,13 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.CloseableFuture
-import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy
+import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, invalidActorId, unhandledMsg}
+import io.github.makingthematrix.signals3.actors.ActorSystem.invalidSystemId
 import io.github.makingthematrix.signals3.actors.RemoteSystem.RemoteSystemMsg
 import io.github.makingthematrix.signals3.actors.RemoteSystem.RemoteSystemMsg.SystemClosed
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
-import scala.util.{Success, Failure}
+import scala.util.{Failure, Success}
 import scala.util.chaining.scalaUtilChainingOps
 
 final class ActorSystem[Msg, Rsp, State] private(
@@ -40,7 +41,7 @@ final class ActorSystem[Msg, Rsp, State] private(
 		case (AskForRef(actorId, systemId), p) if systemId == "" || systemId == id =>
 			actorRefs.get(actorId) match {
 				case Some(ref) => respond(p, Ref(ref))
-				case None => respond(p, Actor.invalidActorId(actorId).future)
+				case None => respond(p, invalidActorId(actorId).future)
 			}
 		case (AskForRefAsync(sender, actorId, systemId), p) if systemId == "" || systemId == id =>
 			actorRefs.get(actorId) match {
@@ -49,28 +50,30 @@ final class ActorSystem[Msg, Rsp, State] private(
 					respond(p, Done)
 				case None =>
 					// Don't send InvalidId to sender - just fail the promise consistently
-					respond(p, Actor.invalidActorId(actorId).future)
+					respond(p, invalidActorId(actorId).future)
 			}
 		case (AskForRef(actorId, systemId), p) =>
 			systems.get(systemId) match {
-				case None => respond(p, ActorSystem.invalidSystemId(systemId).future)
+				case None => respond(p, invalidSystemId(systemId).future)
 				case Some(system) =>
 					respond(p, (system ? RemoteSystemMsg.AskForRef(actorId)).flatMap {
 						case RemoteSystemMsg.Ref(ref) => CloseableFuture.successful(Ref(ref.asInstanceOf[ActorRef[Msg, Rsp]]))
-						case _ => Actor.invalidActorId(actorId) // Handle unexpected responses
+						case _ => invalidActorId(actorId) // Handle unexpected responses
 					}.future)
 			}
 		case (AskForRefAsync(sender, actorId, systemId), p) =>
 			systems.get(systemId) match {
 				case None =>
-					respond(p, ActorSystem.invalidSystemId(systemId).future)
+					respond(p, invalidSystemId(systemId).future)
 				case Some(system) =>
 					(system ? RemoteSystemMsg.AskForRef(actorId)).onComplete {
 						case Success(RemoteSystemMsg.Ref(ref)) =>
-							sender ! sender.SystemMsg.Ref(RemoteActorRef(ActorPath.Remote(systemId, actorId), system))
+							sender ! sender.SystemMsg.Ref(ref.asInstanceOf[ActorRef[Msg, Rsp]])
 							respond(p, Done)
+						case Success(msg) =>
+							respond(p, unhandledMsg(msg).future) // the only successful response should be RemoteSystemMsg.Ref
 						case Failure(_: Actor.InvalidIdException) =>
-							respond(p, Actor.invalidActorId(actorId).future)
+							respond(p, invalidActorId(actorId).future)
 						case Failure(t) =>
 							p.foreach(_.failure(t))
 					}
@@ -110,16 +113,14 @@ final class ActorSystem[Msg, Rsp, State] private(
 	override def ask(msg: Msg, path: ActorPath, behId: String): CloseableFuture[Rsp] = {
 		inline def sendToStream() = CloseableFuture.from(Promise[Rsp]().tap { p => msgStream ! (msg, Some(p), behId) })
 		path match {
-			case Direct                                               => sendToStream()
-			case Local(`id`)                                          => sendToStream()
-			case Remote("", `id`)                                     => sendToStream()
-			case Remote(`id`, `id`)                                   => sendToStream()
-			case Local(actorId)        if actorRefs.contains(actorId) => actorRefs(actorId) ? (msg, behId)
-			case Remote("", actorId)   if actorRefs.contains(actorId) => actorRefs(actorId) ? (msg, behId)
-			case Remote(`id`, actorId) if actorRefs.contains(actorId) => actorRefs(actorId) ? (msg, behId)
-			case Remote(systemId, _)   if systemId != id && systems.contains(systemId)  => systems(systemId) ? (msg, path, behId)
-			case Local(actorId)                                       => Actor.invalidActorId(actorId)
-			case Remote(systemId, _)                                  => ActorSystem.invalidSystemId(systemId)
+			case Direct                => sendToStream()
+			case Local(`id`)           => sendToStream()
+			case Remote("", `id`)      => sendToStream()
+			case Remote(`id`, `id`)    => sendToStream()
+			case Local(actorId)        => if (actorRefs.contains(actorId)) actorRefs(actorId) ? (msg, behId) else invalidActorId(actorId)
+			case Remote("", actorId)   => if (actorRefs.contains(actorId)) actorRefs(actorId) ? (msg, behId) else invalidActorId(actorId)
+			case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId) ? (msg, behId) else invalidActorId(actorId)
+			case Remote(systemId, _)   => if (systemId != id && systems.contains(systemId)) systems(systemId) ? (msg, path, behId) else invalidSystemId(systemId)
 		}
 	}
 

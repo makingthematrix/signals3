@@ -245,12 +245,9 @@ messages, message loss) is respected throughout.
 
 **Result:** All invalid ID scenarios now consistently return failed futures with appropriate exceptions.
 
-#### 2. Wrong error message for own-system actor misses
+#### 2. ✅ FIXED: Wrong error message for own-system actor misses
 
-`ask(msg, Remote(ownId, missingActor), _)` falls through to the
-`Remote(systemId, _)` case and reports `"Invalid system id: <own id>"`. It
-should report an invalid actor id. The message-loss tests assert only failure,
-not the message, so they will not need updating.
+**Fix Summary:** Updated the `ask` method pattern matching to add a specific case for `Remote(`id`, actorId)` that checks if the actor exists in `actorRefs`. When the actor doesn't exist, it now calls `invalidActorId(actorId)` instead of falling through to the generic `Remote(systemId, _)` case which incorrectly reported an invalid system id. This ensures that `ask(msg, Remote(ownId, missingActor), _)` correctly reports "Invalid actor id: missingActor" instead of "Invalid system id: ownId".
 
 #### 3. Path-based sends to not-yet-registered actors drop silently
 
