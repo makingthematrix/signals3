@@ -62,6 +62,7 @@ trait Actor[Msg, Rsp, State] {
 		case AskForRefAsync(sender: Actor[Msg, Rsp, State], actorId: String, systemId: String = "")
 		case RegisterSystem(system: RemoteSystem[Msg, Rsp])
 		case UnregisterSystem(systemId: String)
+		case Requeue(actorId: String, msg: Msg, behId: String, tryNumber: Int = 0)
 	}
 
 	def id: String

@@ -249,14 +249,13 @@ messages, message loss) is respected throughout.
 
 **Fix Summary:** Updated the `ask` method pattern matching to add a specific case for `Remote(`id`, actorId)` that checks if the actor exists in `actorRefs`. When the actor doesn't exist, it now calls `invalidActorId(actorId)` instead of falling through to the generic `Remote(systemId, _)` case which incorrectly reported an invalid system id. This ensures that `ask(msg, Remote(ownId, missingActor), _)` correctly reports "Invalid actor id: missingActor" instead of "Invalid system id: ownId".
 
-#### 3. Path-based sends to not-yet-registered actors drop silently
+#### 3. ✅ FIXED: Path-based sends to not-yet-registered actors drop silently
 
-`bang(msg, Remote(ownId, childId))` immediately after `spawn` is dropped,
-because routing reads `actorRefs` on the caller's thread while the child's
-`Register` is still queued. Ref-based sends are immune (direct JVM reference).
-Either document that paths are only for known-registered ids, or make
-same-system misses fall back to enqueueing through the system's FIFO queue,
-behind `Register` — which would make path-based sends as reliable as refs.
+**Fix Summary:** Added `Requeue` system message to queue messages for not-yet-registered actors. Modified `bang` and `ask` methods in `ActorSystem` to route messages for same-system actors not found in `actorRefs` through the system's message processing via `Requeue`. The `processSysEntry` method now handles `Requeue` messages by attempting delivery to the target actor, or requeuing if the actor is still not registered. This makes path-based sends as reliable as ref-based sends by ensuring messages are queued and processed in FIFO order behind pending `Register` messages.
+
+**Files changed:** 
+- `ActorSystem.scala`: Added `Requeue` handling in `bang`/`ask` methods and `processSysEntry`
+- `Actor.scala`: Added `Requeue` case to `SystemMsg` enum
 
 #### 4. `SystemClosed` cleanup is eventual and one-directional
 
@@ -297,10 +296,7 @@ homogeneous `RemoteSystem[Msg, Rsp]` — worth a comment or tighter typing.
 The `toRef` registration race is fixed structurally (refs over paths, direct
 local delivery), routing is crash-free and loop-free, cross-system lookups
 verify actor existence race-free, and the remote surface is covered by tests (the whole project suite, 545 tests, passes).
-Invalid-id semantics have been unified (#1 ✅). What remains is mostly
-consistency work — fixing wrong error message for own-system actor misses (#2), deciding
-how reliable path-based sends must be (#3) — plus lifecycle hardening (#4, #5)
-before a real network transport is built on top of `RemoteSystem`.
+Invalid-id semantics have been unified (#1 ✅). Wrong error messages for own-system actor misses have been fixed (#2 ✅). Path-based sends are now reliable via message queuing (#3 ✅). What remains is lifecycle hardening (#4, #5) before a real network transport is built on top of `RemoteSystem`.
 
 ---
 

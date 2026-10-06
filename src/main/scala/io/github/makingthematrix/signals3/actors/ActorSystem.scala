@@ -52,6 +52,12 @@ final class ActorSystem[Msg, Rsp, State] private(
 					// Don't send InvalidId to sender - just fail the promise consistently
 					respond(p, invalidActorId(actorId).future)
 			}
+		case (Requeue(actorId, msg, behId, tryNumber), p) =>
+			actorRefs.get(actorId) match {
+				case Some(ref)             => ref ! (msg, behId)
+				case None if tryNumber < 2 => this ! Requeue(actorId, msg, behId, tryNumber + 1) // requeue
+				case None                  => respond(p, invalidActorId(actorId).future)
+			}
 		case (AskForRef(actorId, systemId), p) =>
 			systems.get(systemId) match {
 				case None => respond(p, invalidSystemId(systemId).future)
@@ -82,7 +88,7 @@ final class ActorSystem[Msg, Rsp, State] private(
 			super.processSysEntry(msg)
 	}
 
-	override protected def spawn(data: SystemMsg.Spawn): SystemMsg =
+	override protected def spawn(data: Spawn): SystemMsg =
 		if (children.contains(data.actorId)) SystemMsg.InvalidId else {
 			val b1 = ActorBuilder[Msg, Rsp, State](data.state.getOrElse(this.state))
 				.withIdIf(data.actorId.nonEmpty, data.actorId)
@@ -99,14 +105,14 @@ final class ActorSystem[Msg, Rsp, State] private(
 		}
 
 	override def bang(msg: Msg, path: ActorPath, behId: String): Unit = path match {
-		case Direct                                               => msgStream          ! (msg, None, behId)
-		case Local(`id`)                                          => msgStream          ! (msg, None, behId)
-		case Remote("", `id`)                                     => msgStream          ! (msg, None, behId)
-		case Remote(`id`, `id`)                                   => msgStream          ! (msg, None, behId)
-		case Local(actorId)        if actorRefs.contains(actorId) => actorRefs(actorId) ! (msg, behId)
-		case Remote("", actorId)   if actorRefs.contains(actorId) => actorRefs(actorId) ! (msg, behId)
-		case Remote(`id`, actorId) if actorRefs.contains(actorId) => actorRefs(actorId) ! (msg, behId)
-		case Remote(systemId, _)   if systemId != id && systems.contains(systemId)  => systems(systemId)  ! (msg, path, behId)
+		case Direct                => msgStream ! (msg, None, behId)
+		case Local(`id`)           => msgStream ! (msg, None, behId)
+		case Remote("", `id`)      => msgStream ! (msg, None, behId)
+		case Remote(`id`, `id`)    => msgStream ! (msg, None, behId)
+		case Local(actorId)        => if (actorRefs.contains(actorId)) actorRefs(actorId) ! (msg, behId) else this ! Requeue(actorId, msg, behId)
+		case Remote("", actorId)   => if (actorRefs.contains(actorId)) actorRefs(actorId) ! (msg, behId) else this ! Requeue(actorId, msg, behId)
+		case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId) ! (msg, behId) else this ! Requeue(actorId, msg, behId)
+		case Remote(systemId, _) if systemId != id && systems.contains(systemId)  => systems(systemId) ! (msg, path, behId)
 		case _ => // invalid system or actor id
 	}
 
@@ -117,9 +123,9 @@ final class ActorSystem[Msg, Rsp, State] private(
 			case Local(`id`)           => sendToStream()
 			case Remote("", `id`)      => sendToStream()
 			case Remote(`id`, `id`)    => sendToStream()
-			case Local(actorId)        => if (actorRefs.contains(actorId)) actorRefs(actorId) ? (msg, behId) else invalidActorId(actorId)
-			case Remote("", actorId)   => if (actorRefs.contains(actorId)) actorRefs(actorId) ? (msg, behId) else invalidActorId(actorId)
-			case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId) ? (msg, behId) else invalidActorId(actorId)
+			case Local(actorId)        => if (actorRefs.contains(actorId)) actorRefs(actorId) ? (msg, behId) else sendToStream()
+			case Remote("", actorId)   => if (actorRefs.contains(actorId)) actorRefs(actorId) ? (msg, behId) else sendToStream()
+			case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId) ? (msg, behId) else sendToStream()
 			case Remote(systemId, _)   => if (systemId != id && systems.contains(systemId)) systems(systemId) ? (msg, path, behId) else invalidSystemId(systemId)
 		}
 	}

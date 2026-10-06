@@ -375,4 +375,36 @@ class ActorSystemSpec extends FunSuite {
     children.values.foreach(close)
     close(sys)
   }
+
+  // ============================================================================
+  // 10. Path-based sends to not-yet-registered actors (Issue #3)
+  // ============================================================================
+
+  test("Path-based bang to not-yet-registered actor should be queued and delivered") {
+    val sys = newSystem()
+    val received = SourceSignal(0)
+    
+    // Create a child with a behavior that updates received signal
+    val child = newActor(sys, "test-child", { case (msg, _) => 
+      received.mutate(_ + 1); Some(s"Child: $msg") 
+    })
+    
+    // The child is not yet registered in the system
+    
+    // Send a message via path to the child when it's NOT registered
+    sys.bang(42, ActorPath.Remote(sys.id, "test-child"), "")
+    
+    // Now register the child manually
+    awaitCF(sys ? sys.SystemMsg.Register(child))
+    
+    // Wait to see if the message is processed
+    Thread.sleep(200)
+    
+    // After the fix: message should be queued and delivered (received count = 1)
+    // Before the fix: message was silently dropped (received count = 0)
+    assertEquals(received.currentValue, Some(1), "After fix: message to not-yet-registered actor should be queued and delivered")
+    
+    close(child)
+    close(sys)
+  }
 }
