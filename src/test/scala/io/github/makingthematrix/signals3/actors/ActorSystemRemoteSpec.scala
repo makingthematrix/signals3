@@ -68,8 +68,8 @@ class ActorSystemRemoteSpec extends FunSuite {
   private def crossRegistered(systemAId: String = "A", systemBId: String = "B"): (ActorSystem[Int, String, Int], ActorSystem[Int, String, Int]) = {
     val a = newSystem(systemAId)
     val b = newSystem(systemBId)
-    awaitCF(a ? a.SystemMsg.RegisterSystem(b))
-    awaitCF(b ? b.SystemMsg.RegisterSystem(a))
+    awaitCF(a ? RemoteSystem.RemoteSystemMsg.RegisterSystem(b))
+    awaitCF(b ? RemoteSystem.RemoteSystemMsg.RegisterSystem(a))
     (a, b)
   }
 
@@ -298,7 +298,7 @@ class ActorSystemRemoteSpec extends FunSuite {
     close(a)
     val newA = newSystem("A")
     a2 = Some(newA)
-    awaitCF(b ? b.SystemMsg.RegisterSystem(newA))
+    awaitCF(b ? RemoteSystem.RemoteSystemMsg.RegisterSystem(newA))
     newActorOn(newA, "onA2", behavior)
     // no awaitRef here: the lookup must queue behind the pending Register
     tryResultCF(b ? b.SystemMsg.AskForRef("onA2", "A")) match {
@@ -318,7 +318,7 @@ class ActorSystemRemoteSpec extends FunSuite {
       case Success(b.SystemMsg.Ref(_)) => ()
       case other => fail(s"Unexpected AskForRef response: $other")
     }
-    assertEquals(resultCF(b ? b.SystemMsg.UnregisterSystem("A")), b.SystemMsg.Done)
+    assertEquals(resultCF(b ? RemoteSystem.RemoteSystemMsg.UnregisterSystem("A")), RemoteSystem.RemoteSystemMsg.Done)
     val start = System.currentTimeMillis()
     var rsp: Option[Try[b.SystemMsg]] = None
     while (rsp.forall(_.isSuccess) && System.currentTimeMillis() - start < 5000) {

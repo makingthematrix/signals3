@@ -32,12 +32,6 @@ final class ActorSystem[Msg, Rsp, State] private(
 		case (ActorClosed(actorId), _) =>
 			actorRefs -= actorId
 			super.processSysEntry(msg)
-		case (RegisterSystem(system), p) =>
-			systems += (system.id -> system)
-			respond(p, Done)
-		case (UnregisterSystem(systemId), p) =>
-			systems -= systemId
-			respond(p, Done)
 		case (AskForRef(actorId, systemId), p) if systemId == "" || systemId == id =>
 			actorRefs.get(actorId) match {
 				case Some(ref) => respond(p, Ref(ref))
@@ -143,7 +137,13 @@ final class ActorSystem[Msg, Rsp, State] private(
 
 	override def ask(msg: RemoteSystem.RemoteSystemMsg): CloseableFuture[RemoteSystemMsg] = msg match {
 		case SystemClosed(systemId) =>
-			(this ? UnregisterSystem(systemId)).collect { case Done => RemoteSystemMsg.Done }
+			(this ? RemoteSystemMsg.UnregisterSystem(systemId)).collect { case RemoteSystemMsg.Done => RemoteSystemMsg.Done }
+		case RemoteSystemMsg.RegisterSystem(system: RemoteSystem[_, _]) =>
+			systems = systems + (system.id -> system.asInstanceOf[RemoteSystem[Msg, Rsp]])
+			CloseableFuture.successful(RemoteSystemMsg.Done)
+		case RemoteSystemMsg.UnregisterSystem(systemId) =>
+			systems = systems - systemId
+			CloseableFuture.successful(RemoteSystemMsg.Done)
 		case RemoteSystemMsg.AskForRef(actorId) =>
 			(this ? AskForRef(actorId)).flatMap {
 				case Ref(ref) => CloseableFuture.successful(RemoteSystemMsg.Ref(RemoteActorRef(ActorPath.Remote(id, actorId), this)))
@@ -153,7 +153,9 @@ final class ActorSystem[Msg, Rsp, State] private(
 	}
 
 	override def bang(msg: RemoteSystem.RemoteSystemMsg): Unit = msg match {
-		case SystemClosed(systemId) => this ! UnregisterSystem(systemId)
+		case SystemClosed(systemId) => systems = systems - systemId
+		case RemoteSystemMsg.RegisterSystem(system: RemoteSystem[_, _]) => systems = systems + (system.id -> system.asInstanceOf[RemoteSystem[Msg, Rsp]])
+		case RemoteSystemMsg.UnregisterSystem(systemId) => systems = systems - systemId
 		case _ =>
 	}
 }

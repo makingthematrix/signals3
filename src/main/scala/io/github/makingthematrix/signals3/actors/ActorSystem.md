@@ -266,11 +266,14 @@ Fire-and-forget `SystemClosed` is acceptable per the message-loss policy, but
 consider making registration bidirectional, or rely on the planned HealthCheck
 system message, before a real network transport exists.
 
-#### 5. Cross-system control messages need the recipient's path-dependent `SystemMsg`
+#### 5. ✅ FIXED: Cross-system control messages need the recipient's path-dependent `SystemMsg`
 
-`b ? a.SystemMsg.RegisterSystem(a)` does not compile — every system has its
-own `SystemMsg` enum. `RegisterSystem` / `UnregisterSystem` could live in a
-shared, non-path-dependent type, the way `RemoteSystemMsg` already does.
+**Fix Summary:** Moved `RegisterSystem` and `UnregisterSystem` from the path-dependent `SystemMsg` enum in `Actor` to the shared `RemoteSystemMsg` enum in `RemoteSystem`. This enables cross-system control messages since `RemoteSystemMsg` is not path-dependent. Updated `ActorSystem.ask` and `ActorSystem.bang` methods for `RemoteSystemMsg` to handle the new message types, and used `asInstanceOf` to safely cast systems to the expected type parameters when storing in the `systems` map.
+
+**Files changed:**
+- `Actor.scala`: Removed `RegisterSystem` and `UnregisterSystem` cases from `SystemMsg` enum
+- `RemoteSystem.scala`: Added `RegisterSystem` and `UnregisterSystem` cases to `RemoteSystemMsg` enum
+- `ActorSystem.scala`: Updated `ask` and `bang` methods for `RemoteSystemMsg` to handle new message types
 
 #### 6. The `@todo` conversion in `ask(msg: RemoteSystemMsg)` (fourth pass #6, unchanged)
 

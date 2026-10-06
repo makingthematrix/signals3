@@ -26,5 +26,7 @@ object RemoteSystem {
 		case SystemClosed(systemId: String)
 		case AskForRef(actorId: String)
 		case Ref[Msg, Rsp](ref: ActorRef[Msg, Rsp])
+		case RegisterSystem(system: RemoteSystem[?, ?])
+		case UnregisterSystem(systemId: String)
 	}
 }
