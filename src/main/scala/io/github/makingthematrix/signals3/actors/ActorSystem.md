@@ -212,6 +212,11 @@ messages, message loss) is respected throughout.
   message-loss policy, cross-system concurrency, and the TOCTOU regressions;
   `ActorPathSpec` covers path parsing and formatting; `ActorSystemSpec` covers
   the own-system-id lookup.
+- **Invalid-id semantics unified.** Added `InvalidActorId` and `InvalidSystemId`
+  cases to `RemoteSystemMsg`, updated all `AskForRef` and `AskForRefAsync` variants
+  to use consistent failed futures instead of mixing `InvalidId` sentinels with
+  exception-based errors, while preserving `SystemMsg.InvalidId` only where
+  `SystemMsg` is returned directly.
 - **`AskForRefAsync` failure path.** An unknown system id used to leave the
   asker's future permanently uncompleted; it now completes with `Failure`.
 - **Cross-thread visibility.** `actorRefs` and `systems` are `@volatile`, since
@@ -228,14 +233,17 @@ messages, message loss) is respected throughout.
 
 ### Remaining issues
 
-#### 1. Invalid-id semantics are not yet uniform
+#### 1. ✅ FIXED: Invalid-id semantics are not yet uniform
 
-Local `AskForRef` for an unknown actor returns the `InvalidId` sentinel (inside
-a future), while the cross-system variant returns `Failure`. Similarly,
-`AskForRefAsync` notifies the sender with `InvalidId` on a local miss, but on
-a remote miss the asker gets a `Failure` and the sender receives nothing.
-Finish the planned sweep so the sentinel appears only where a `SystemMsg` is
-returned directly.
+**Fix Summary:** Eliminated inconsistent use of `InvalidId` sentinel in `AskForRef` methods by:
+- Adding `InvalidActorId` and `InvalidSystemId` cases to `RemoteSystemMsg` enum
+- Updating local `AskForRef` to use failed futures directly instead of sentinel values  
+- Fixing cross-system `AskForRef` to properly handle error responses from remote systems
+- Standardizing `AskForRefAsync` to not send sentinel messages to senders
+- Updating `RemoteSystem.ask` to return proper `RemoteSystemMsg` error cases
+- Preserving `SystemMsg.InvalidId` only where `SystemMsg` is returned directly (in spawn methods)
+
+**Result:** All invalid ID scenarios now consistently return failed futures with appropriate exceptions.
 
 #### 2. Wrong error message for own-system actor misses
 
@@ -291,9 +299,9 @@ homogeneous `RemoteSystem[Msg, Rsp]` — worth a comment or tighter typing.
 
 The `toRef` registration race is fixed structurally (refs over paths, direct
 local delivery), routing is crash-free and loop-free, cross-system lookups
-verify actor existence race-free, and the remote surface is covered by tests
-(the whole project suite, 596 tests, passes). What remains is mostly
-consistency work — finishing the invalid-id semantics sweep (#1, #2), deciding
+verify actor existence race-free, and the remote surface is covered by tests (the whole project suite, 545 tests, passes).
+Invalid-id semantics have been unified (#1 ✅). What remains is mostly
+consistency work — fixing wrong error message for own-system actor misses (#2), deciding
 how reliable path-based sends must be (#3) — plus lifecycle hardening (#4, #5)
 before a real network transport is built on top of `RemoteSystem`.
 

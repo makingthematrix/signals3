@@ -38,35 +38,43 @@ final class ActorSystem[Msg, Rsp, State] private(
 			systems -= systemId
 			respond(p, Done)
 		case (AskForRef(actorId, systemId), p) if systemId == "" || systemId == id =>
-			val rsp = actorRefs.get(actorId).map(Ref(_)).getOrElse(InvalidId)
-			if (rsp != InvalidId) respond(p, rsp) else respond(p, Actor.invalidActorId(actorId).future)
+			actorRefs.get(actorId) match {
+				case Some(ref) => respond(p, Ref(ref))
+				case None => respond(p, Actor.invalidActorId(actorId).future)
+			}
 		case (AskForRefAsync(sender, actorId, systemId), p) if systemId == "" || systemId == id =>
-			val rsp = actorRefs.get(actorId)
-				.map(sender.SystemMsg.Ref(_))
-				.getOrElse(sender.SystemMsg.InvalidId)
-			sender ! rsp
-			if (rsp != sender.SystemMsg.InvalidId) respond(p, Done) else respond(p, Actor.invalidActorId(actorId).future)
+			actorRefs.get(actorId) match {
+				case Some(ref) =>
+					sender ! sender.SystemMsg.Ref(ref)
+					respond(p, Done)
+				case None =>
+					// Don't send InvalidId to sender - just fail the promise consistently
+					respond(p, Actor.invalidActorId(actorId).future)
+			}
 		case (AskForRef(actorId, systemId), p) =>
 			systems.get(systemId) match {
 				case None => respond(p, ActorSystem.invalidSystemId(systemId).future)
 				case Some(system) =>
-					val cf = (system ? RemoteSystemMsg.AskForRef(actorId))
-						.collect {
-							case RemoteSystemMsg.Ref(ref) => Ref(ref.asInstanceOf[ActorRef[Msg, Rsp]])
-						}
-					respond(p, cf.future)
+					respond(p, (system ? RemoteSystemMsg.AskForRef(actorId)).flatMap {
+						case RemoteSystemMsg.Ref(ref) => CloseableFuture.successful(Ref(ref.asInstanceOf[ActorRef[Msg, Rsp]]))
+						case _ => Actor.invalidActorId(actorId) // Handle unexpected responses
+					}.future)
 			}
 		case (AskForRefAsync(sender, actorId, systemId), p) =>
-			systems.get(systemId)
-				.map { _ ? RemoteSystemMsg.AskForRef(actorId) }
-				.map { _.collect {
-					case RemoteSystemMsg.Ref(ref) => sender.SystemMsg.Ref(ref.asInstanceOf[ActorRef[Msg, Rsp]])
-				}}
-				.getOrElse(ActorSystem.invalidSystemId(systemId))
-				.onComplete {
-					case Success(rsp) => sender ! rsp; respond(p, Done)
-					case Failure(t)   => p.foreach(_.failure(t))
-				}
+			systems.get(systemId) match {
+				case None =>
+					respond(p, ActorSystem.invalidSystemId(systemId).future)
+				case Some(system) =>
+					(system ? RemoteSystemMsg.AskForRef(actorId)).onComplete {
+						case Success(RemoteSystemMsg.Ref(ref)) =>
+							sender ! sender.SystemMsg.Ref(RemoteActorRef(ActorPath.Remote(systemId, actorId), system))
+							respond(p, Done)
+						case Failure(_: Actor.InvalidIdException) =>
+							respond(p, Actor.invalidActorId(actorId).future)
+						case Failure(t) =>
+							p.foreach(_.failure(t))
+					}
+			}
 		case _ =>
 			super.processSysEntry(msg)
 	}
@@ -126,16 +134,15 @@ final class ActorSystem[Msg, Rsp, State] private(
 		super.shutdown()
 	}
 
-	// @todo This is a clunky way to convert one type of messages into another; implement a more generic one
 	override def ask(msg: RemoteSystem.RemoteSystemMsg): CloseableFuture[RemoteSystemMsg] = msg match {
 		case SystemClosed(systemId) =>
 			(this ? UnregisterSystem(systemId)).collect { case Done => RemoteSystemMsg.Done }
 		case RemoteSystemMsg.AskForRef(actorId) =>
 			(this ? AskForRef(actorId)).flatMap {
 				case Ref(ref) => CloseableFuture.successful(RemoteSystemMsg.Ref(RemoteActorRef(ActorPath.Remote(id, actorId), this)))
-				case _        => Actor.invalidActorId(actorId)
+				case _        => CloseableFuture.failed(Actor.InvalidIdException(actorId))
 			}
-		case _ => Actor.unhandledMsg(msg)
+		case _ => CloseableFuture.failed(Actor.UnhandledMsgException(msg.toString))
 	}
 
 	override def bang(msg: RemoteSystem.RemoteSystemMsg): Unit = msg match {
