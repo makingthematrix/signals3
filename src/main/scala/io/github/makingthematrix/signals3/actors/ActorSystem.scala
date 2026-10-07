@@ -135,27 +135,27 @@ final class ActorSystem[Msg, Rsp, State] private(
 		super.shutdown()
 	}
 
-	override def ask(msg: RemoteSystem.RemoteSystemMsg): CloseableFuture[RemoteSystemMsg] = msg match {
-		case SystemClosed(systemId) =>
-			(this ? RemoteSystemMsg.UnregisterSystem(systemId)).collect { case RemoteSystemMsg.Done => RemoteSystemMsg.Done }
-		case RemoteSystemMsg.RegisterSystem(system: RemoteSystem[_, _]) =>
-			systems = systems + (system.id -> system.asInstanceOf[RemoteSystem[Msg, Rsp]])
-			CloseableFuture.successful(RemoteSystemMsg.Done)
-		case RemoteSystemMsg.UnregisterSystem(systemId) =>
-			systems = systems - systemId
-			CloseableFuture.successful(RemoteSystemMsg.Done)
-		case RemoteSystemMsg.AskForRef(actorId) =>
-			(this ? AskForRef(actorId)).flatMap {
-				case Ref(ref) => CloseableFuture.successful(RemoteSystemMsg.Ref(RemoteActorRef(ActorPath.Remote(id, actorId), this)))
-				case _        => CloseableFuture.failed(Actor.InvalidIdException(actorId))
-			}
-		case _ => CloseableFuture.failed(Actor.UnhandledMsgException(msg.toString))
+	override def ask(msg: RemoteSystem.RemoteSystemMsg): CloseableFuture[RemoteSystemMsg] = {
+		inline def unregister(systemId: String) = { systems -= systemId; CloseableFuture.successful(RemoteSystemMsg.Done) }
+		msg match {
+			case RemoteSystemMsg.SystemClosed(systemId) => unregister(systemId)
+			case RemoteSystemMsg.UnregisterSystem(systemId) => unregister(systemId)
+			case RemoteSystemMsg.RegisterSystem(system) =>
+				systems += (system.id -> system.asInstanceOf[RemoteSystem[Msg, Rsp]])
+				CloseableFuture.successful(RemoteSystemMsg.Done)
+			case RemoteSystemMsg.AskForRef(actorId) =>
+				(this ? AskForRef(actorId)).flatMap {
+					case Ref(ref) => CloseableFuture.successful(RemoteSystemMsg.Ref(RemoteActorRef(ActorPath.Remote(id, actorId), this)))
+					case _        => CloseableFuture.failed(Actor.InvalidIdException(actorId))
+				}
+			case _ => CloseableFuture.failed(Actor.UnhandledMsgException(msg.toString))
+		}
 	}
 
 	override def bang(msg: RemoteSystem.RemoteSystemMsg): Unit = msg match {
-		case SystemClosed(systemId) => systems = systems - systemId
-		case RemoteSystemMsg.RegisterSystem(system: RemoteSystem[_, _]) => systems = systems + (system.id -> system.asInstanceOf[RemoteSystem[Msg, Rsp]])
-		case RemoteSystemMsg.UnregisterSystem(systemId) => systems = systems - systemId
+		case RemoteSystemMsg.SystemClosed(systemId)     => systems -= systemId
+		case RemoteSystemMsg.UnregisterSystem(systemId) => systems -= systemId
+		case RemoteSystemMsg.RegisterSystem(system)     => systems += (system.id -> system.asInstanceOf[RemoteSystem[Msg, Rsp]])
 		case _ =>
 	}
 }

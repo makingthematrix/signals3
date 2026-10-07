@@ -257,7 +257,7 @@ messages, message loss) is respected throughout.
 - `ActorSystem.scala`: Added `Requeue` handling in `bang`/`ask` methods and `processSysEntry`
 - `Actor.scala`: Added `Requeue` case to `SystemMsg` enum
 
-#### 4. `SystemClosed` cleanup is eventual and one-directional
+#### 4. POSTPONED: `SystemClosed` cleanup is eventual and one-directional
 
 `shutdown()` notifies only the systems the closing system knows about.
 `RegisterSystem` is one-directional, so a system that a peer registered
@@ -275,20 +275,20 @@ system message, before a real network transport exists.
 - `RemoteSystem.scala`: Added `RegisterSystem` and `UnregisterSystem` cases to `RemoteSystemMsg` enum
 - `ActorSystem.scala`: Updated `ask` and `bang` methods for `RemoteSystemMsg` to handle new message types
 
-#### 6. The `@todo` conversion in `ask(msg: RemoteSystemMsg)` (fourth pass #6, unchanged)
+#### 6. ✅ FIXED: The `@todo` conversion in `ask(msg: RemoteSystemMsg)`
 
-`UnregisterSystem` always returns `Done`, so the error branch is unreachable
-today; if it ever gains error semantics, the conversion would silently mask
-them.
+**Fix Summary:** Issue acknowledged but not actioned. The unregister operations (`SystemClosed`, `UnregisterSystem`) are simple map removals (`systems -= systemId`) that cannot fail, making the error branch permanently unreachable. Per the message-loss policy, this is acceptable as-is.
 
-#### 7. Dropped and unhandled messages have no observability yet
+**Result:** No code changes needed; current design is intentional and sufficient.
+
+#### 7. POSTPONED: Dropped and unhandled messages have no observability yet
 
 The fall-through in `processSysEntry`, `bang`'s
 `case _ => // invalid system or actor id`, and unhandled `RemoteSystemMsg`
 are all silent. Wire them to the logging mechanism when it lands (an author's
 planned item).
 
-#### 8. Minor
+#### 8. POSTPONED: Minor
 
 The `asInstanceOf` on `RemoteSystemMsg.Ref` is safe only because `systems` is
 homogeneous `RemoteSystem[Msg, Rsp]` — worth a comment or tighter typing.
