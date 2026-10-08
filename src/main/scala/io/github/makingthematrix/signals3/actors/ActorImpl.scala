@@ -28,7 +28,7 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
                                                  override val parent: Option[Actor[Msg, Rsp, State]] = None,
                                                  override val system: Option[ActorSystem[Msg, Rsp, State]] = None
                                                 )(using ec: ExecutionContext)
-	extends MutableActor[Msg, Rsp, State] with Closeable with Pausable{
+	extends MutableActor[Msg, Rsp, State] with Closeable with Pausable {
 
 	protected type MsgEntry = (msg: Msg, rsp: Option[Promise[Rsp]], behId: String)
 	protected type SysEntry = (msg: SystemMsg, rsp: Option[Promise[SystemMsg]])

@@ -37,14 +37,26 @@ trait Actor[Msg, Rsp, State] {
 		* - `Pause`: the actor should temporarily suspend operations.
 		* - `Unpause`: the actor should resume operations after being paused.
 		* - `Close`: the actor should terminate its operations.
+		* - `Done`: a response message confirming that the operation was successful.
+		* - `InvalidId`: a response message indicating that the provided behavior ID is invalid, usually combined with `CloseableFuture.failed`
 		* - `AddBehavior(id, pf)` - adds a new behavior to the actor
 		* - `RemoveBehavior(id)` - removes a behavior from the actor
+		* - `AddBehaviorPF(pf)` - use instead of `AddBehavior`` if you don't care about persistence of behaviors
+		* - `Spawn(...)` - the actor should spawn a new sub-actor with the specified parameters.
+		* - `NewChild(child)` - the response for `Spawn` with the new actor's JVM reference (todo: change to ActorRef?)
+		* - `ActorClosed(actorId)` - informs that another actor has closed
+		* - `Register(actor)` - used to register a new actor with the system or another actor dictionary
+		* - `Unregister(actorId)` - used to unregister an actor from the system or another actor dictionary
+		* - `AskForRef(actorId, systemId)` - asks for another actor's reference and expects the response to come through `ask`
+		* - `AskForRefAsync(sender, actorId, systemId)` - asks for another actor's reference and expects the response to come as a separate message
+		* - `Ref(ref)` - a response to `AskForRef` and `AskForRefAsync`; passes another actor's reference to the actor
+		* - `Requeue(actorId, msg, behId, tryNumber)` - requeues a message so it will be processed again
 		*/
 	enum SystemMsg {
 		case Pause, Unpause, Close, Done, InvalidId
 		case AddBehavior(beh: Beh[Msg, Rsp, State])
 		case RemoveBehavior(behId: String)
-		case AddBehaviorPF(pf: PF[Msg, Rsp, State]) // use instead of AddBehavior if you don't care about persistence of behaviors
+		case AddBehaviorPF(pf: PF[Msg, Rsp, State])
 		case Spawn(actorId: String = "",
 		           state: Option[State] = None,
 		           behaviors: List[Actor.Beh[Msg, Rsp, State]] = Nil,
@@ -57,13 +69,16 @@ trait Actor[Msg, Rsp, State] {
 		case ActorClosed(actorId: String)
 		case Register(actor: Actor[Msg, Rsp, State])
 		case Unregister(actorId: String)
-		case Ref(ref: ActorRef[Msg, Rsp])
 		case AskForRef(actorId: String, systemId: String = "")
 		case AskForRefAsync(sender: Actor[Msg, Rsp, State], actorId: String, systemId: String = "")
+		case Ref(ref: ActorRef[Msg, Rsp])
 		case Requeue(actorId: String, msg: Msg, behId: String, tryNumber: Int = 0)
 	}
 
-	def id: String
+	/**
+		* The actor's unique identifier.
+		*/
+	val id: String
 
 	/** The input stream for handling incoming messages of type `Msg`.
 		*
@@ -171,24 +186,57 @@ trait Actor[Msg, Rsp, State] {
 		* Returns a signal that works on a given [[scala.concurrent.ExecutionContext]]; it starts with the value set to `false` (unless it's
 		* created after the actor is already initialized) and it will be set to `true` when the actor is initialized.
 		*
-		* @return A signal that will be set to `true` when the actor is initialzied.
+		* @return A signal that will be set to `true` when the actor is initialized.
 		*/
 	def isInitializedSignal(using ExecutionContext): Signal[Boolean]
-	
+
+	/**
+		* Returns whether the actor is initialized or not.
+		* Before initialization, the actor cannot receive messages.
+		*/
 	def isInitialized: Boolean
 
+	/**
+		* Returns whether the actor works on a serial dispatch queue.
+		*/
 	val isSerial: Boolean
-	
+
+	/**
+		* Returns whether the actor is closed or not.
+		* A closed actor cannot receive messages and it cannot be reopened.
+		*/
 	def isClosed: Boolean
-	
+
+	/**
+		* Returns a signal that works on a given [[scala.concurrent.ExecutionContext]]; it starts with the value set to `false` (unless it's
+		* created after the actor is already closed) and it will be set to `true` when the actor is closed.
+		*
+		* @return A signal that will be set to `true` when the actor is closed.
+		*/
 	def isClosedSignal(using ExecutionContext): Signal[Boolean]
-	
+
+	/**
+		* Returns whether the actor is paused or not.
+		* A paused actor still can receive messages, but it will not process them until it is unpaused.
+		*/
 	def isPaused: Boolean
-	
+
+	/**
+		* Returns a signal that works on a given [[scala.concurrent.ExecutionContext]]; it starts with the value set to `false` (unless it's
+		* created after the actor is already paused) and it will be set to `true` when the actor is paused.
+		*
+		* @return A signal that will be set to `true` when the actor is paused.
+		*/
 	def isPausedSignal: Signal[Boolean]
 
+	/**
+		* Returns the parent actor of this actor, if any.
+		*/
 	def parent: Option[Actor[Msg, Rsp, State]]
 
+	/**
+		* Returns the actor system that this actor belongs to, if any.
+		*/
 	def system: Option[ActorSystem[Msg, Rsp, State]]
 }
 
@@ -211,20 +259,44 @@ object Actor {
 		*/
 	inline def NoResponse[Rsp]: Success[Option[Rsp]] = ignored.asInstanceOf[Success[Option[Rsp]]]
 
+	/**
+		* A special type of failure indicating that the actor is closed and cannot process any more messages.
+		*/
 	inline def ActorIsClosed[Rsp](using ExecutionContext): CloseableFuture[Rsp] = CloseableFuture.failed[Rsp](actorIsClosed)
-	
+
+	/**
+		* A special type of failure indicating that the actor ID is invalid
+		*/
 	final case class InvalidIdException(actorId: String) extends IllegalArgumentException(s"Invalid actor id: $actorId")
-	
+
+	/**
+		* A special type of response, indicating that an invalid actor ID was provided.
+		* @return a failed `CloseableFuture` with an `InvalidIdException`.
+		*/
 	inline def invalidActorId[Rsp](actorId: String)(using ExecutionContext): CloseableFuture[Rsp] =
 		CloseableFuture.failed(InvalidIdException(actorId))
 
+	/**
+		* A special type of failure indicating that an unhandled message was received.
+		*/
 	final case class UnhandledMsgException(msg: String) extends IllegalArgumentException(s"Unhandled message: $msg")
-	
+
+	/**
+		* A special type of response, indicating that the received messages was not handled (probably not recognized).
+		* * @return a failed `CloseableFuture` with an `UnhandledMsgException`.
+		*/
 	inline def unhandledMsg[Msg, Rsp](msg: Msg)(using ExecutionContext): CloseableFuture[Rsp] =
 		CloseableFuture.failed(UnhandledMsgException(msg.toString))
 
+	/**
+		* A special type of failure indicating that an invalid path.
+		*/
 	final case class WrongPathException(path: ActorPath) extends IllegalArgumentException(s"Wrong path: $path")
-	
+
+	/**
+		* A special type of response, indicating that the provided actor path is invalid.
+		* * @return a failed `CloseableFuture` with an `WrongPathException`.
+		*/
 	inline def wrongPath[Rsp](path: ActorPath)(using ExecutionContext): CloseableFuture[Rsp] =
 		CloseableFuture.failed(WrongPathException(path))
 
@@ -273,19 +345,77 @@ object Actor {
 			actor.addBehavior(behavior)
 			actor.initialize()
 		}
-		
+
+	/**
+		* Creates a actor with the specified initial state, behavior, and heartbeat strategy.
+		* The new actor runs on a serial dispatch queue.
+		*
+		* Use only when you want a single independent actor.
+		* For a bigger system, use [[ActorSystem]] and/or [[ActorBuilder]].
+		*
+		* @param state    The initial state of the actor.
+		* @param behavior The behavior of the actor, responsible for handling incoming messages.
+		* @param beat     The heartbeat strategy used to configure the actor's responsiveness.
+		* @return An initialized serial actor instance.
+		*/
 	inline def serial[Msg, Rsp, State](state: State, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy): Actor[Msg, Rsp, State] =
 		apply(state, behavior, beat)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
 
+	/**
+		* Creates a actor with the specified behavior and heartbeat strategy.
+		* The actor is initialized immediately after creation. It's going to use the `ExecutionContext` passed to it
+		* as an implicit parameter.
+		*
+		* Use only when you want a single independent actor.
+		* For a bigger system, use [[ActorSystem]] and/or [[ActorBuilder]].
+		*
+		* @param behavior The behavior of the actor, responsible for handling incoming messages.
+		* @param beat     The heartbeat strategy used to configure the actor's responsiveness.
+		* @return An initialized serial actor instance.
+		*/
 	inline def apply[Msg, Rsp](behavior: Beh[Msg, Rsp, Unit], beat: HeartBeatStrategy)
 	                          (using ExecutionContext): Actor[Msg, Rsp, Unit] =
 		apply((), behavior, beat)
 
+	/**
+		* Creates a actor with the specified behavior and heartbeat strategy.
+		* The new actor runs on a serial dispatch queue.
+		*
+		* Use only when you want a single independent actor.
+		* For a bigger system, use [[ActorSystem]] and/or [[ActorBuilder]].
+		*
+		* @param behavior The behavior of the actor, responsible for handling incoming messages.
+		* @param beat     The heartbeat strategy used to configure the actor's responsiveness.
+		* @return An initialized serial actor instance.
+		*/
 	inline def serial[Msg, Rsp](behavior: Beh[Msg, Rsp, Unit], beat: HeartBeatStrategy): Actor[Msg, Rsp, Unit] =
 		serial((), behavior, beat)
 
+
+	/**
+		* Creates a actor with the specified behavior.
+		* The actor is initialized immediately after creation. It's going to use the `ExecutionContext` passed to it
+		* as an implicit parameter.
+		*
+		* Use only when you want a single independent actor.
+		* For a bigger system, use [[ActorSystem]] and/or [[ActorBuilder]].
+		*
+		* @param behavior The behavior of the actor, responsible for handling incoming messages.
+		* @return An initialized serial actor instance.
+		*/
 	inline def apply[Msg, Rsp](behavior: Beh[Msg, Rsp, Unit])(using ExecutionContext): Actor[Msg, Rsp, Unit] =
 		apply((), behavior, defBeat)
 
+
+	/**
+		* Creates a actor with the specified behavior.
+		* The new actor runs on a serial dispatch queue.
+		*
+		* Use only when you want a single independent actor.
+		* For a bigger system, use [[ActorSystem]] and/or [[ActorBuilder]].
+		*
+		* @param behavior The behavior of the actor, responsible for handling incoming messages.
+		* @return An initialized serial actor instance.
+		*/
 	inline def serial[Msg, Rsp](behavior: Beh[Msg, Rsp, Unit]): Actor[Msg, Rsp, Unit] = serial((), behavior, defBeat)
 }

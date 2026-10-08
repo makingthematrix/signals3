@@ -5,6 +5,29 @@ import io.github.makingthematrix.signals3.actors.Actor.{Beh, HeartBeatStrategy, 
 
 import scala.concurrent.ExecutionContext
 
+/**
+  * A builder for creating and configuring Actor instances.
+  *
+  * ActorBuilder provides a way to construct actors by chaining configuration methods.
+  * It supports setting the actor's ID, initial state, behaviors, heartbeat strategy, initialization
+  * callbacks, dispatch mode, execution context, parent actor, and actor system.
+  *
+  * The builder pattern allows for optional and conditional configuration through methods like
+  * `withIdIf`, `withStateIf`, etc., which apply settings based on boolean predicates.
+  *
+  * @tparam Msg   The type of incoming messages the actor will process
+  * @tparam Rsp   The type of responses the actor will produce
+  * @tparam State The type of internal state maintained by the actor
+  * @param id                The unique identifier for the actor (defaults to auto-generated)
+  * @param state             The initial state of the actor (must be set before building)
+  * @param behaviors         The list of behaviors that define how the actor processes messages
+  * @param heartbeat         The heartbeat strategy controlling message processing intervals
+  * @param onInit            Optional initialization callback invoked when the actor starts
+  * @param useSerialDispatch Whether to use serial (single-threaded) dispatch queue
+  * @param executionContext  Optional execution context for parallel dispatch
+  * @param parent            Optional parent actor in the actor hierarchy
+  * @param system            Optional actor system this actor belongs to
+  */
 final class ActorBuilder[Msg, Rsp, State] (
   private val id: String = "",
   private val state: Option[State] = None,
@@ -184,9 +207,25 @@ final class ActorBuilder[Msg, Rsp, State] (
   inline def withSerialDispatch(): ActorBuilder[Msg, Rsp, State] =
     new ActorBuilder(id, state, behaviors, heartbeat, onInit, useSerialDispatch = true, executionContext = None, parent, system)
 
+  /**
+   * Configures the actor to use a serial dispatch queue if a condition is met.
+   *
+   * Serial dispatch ensures that messages are processed one at a time in the order they are received, with reduced overhead.
+   *
+   * @param p The condition to check before configuring serial dispatch
+   * @return A new builder configured for serial dispatch if the condition is true, otherwise the current builder
+   */
   inline def withSerialDispatchIf(p: => Boolean): ActorBuilder[Msg, Rsp, State] =
     if (p) withSerialDispatch() else this
-  
+
+  /**
+    * Configures the actor to use a parallel dispatch queue with a specified execution context.
+    *
+    * Parallel dispatch allows messages to be processed concurrently, potentially improving performance but with increased overhead.
+    *
+    * @param ec The execution context to use for parallel dispatch
+    * @return A new builder configured for parallel dispatch with the specified execution context
+    */
   inline def withParallelDispatch(ec: ExecutionContext): ActorBuilder[Msg, Rsp, State] =
     new ActorBuilder(id, state, behaviors, heartbeat, onInit, useSerialDispatch = false, executionContext = Some(ec), parent, system)
 
