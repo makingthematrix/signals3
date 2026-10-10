@@ -291,7 +291,7 @@ planned item).
 #### 8. POSTPONED: Minor
 
 The `asInstanceOf` on `RemoteSystemMsg.Ref` is safe only because `systems` is
-homogeneous `RemoteSystem[Msg, Rsp]` — worth a comment or tighter typing.
+homogeneous `RemoteSystem[Msg]` — worth a comment or tighter typing.
 `RemoteSystem.scala` is missing a trailing newline.
 
 ### Summary

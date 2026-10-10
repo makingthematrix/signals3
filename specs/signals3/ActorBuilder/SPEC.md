@@ -15,18 +15,18 @@ The `ActorBuilder` class provides a fluent API for configuring and creating `Act
 
 ### Public API
 
-- `ActorBuilder[Msg, Rsp, State](initialState: State)` - Creates a new builder with initial state
+- `ActorBuilder[Msg, State](initialState: State)` - Creates a new builder with initial state
 - `withState(newState: State)` - Sets the initial state
-- `withBehavior(pf: PF[Msg, Rsp, State])` - Adds a behavior with auto-generated ID
-- `withBehavior(id: String, pf: PF[Msg, Rsp, State])` - Adds a behavior with explicit ID
-- `withBehavior(behavior: Beh[Msg, Rsp, State])` - Adds a behavior as a (String, PF) tuple
-- `withBehaviors(behaviors: Iterable[Beh[Msg, Rsp, State]])` - Adds multiple behaviors with explicit IDs
-- `withBehaviors(behaviors: Iterable[PF[Msg, Rsp, State]])` - Adds multiple behaviors with auto-generated IDs
+- `withBehavior(pf: PF[Msg, State])` - Adds a behavior with auto-generated ID
+- `withBehavior(id: String, pf: PF[Msg, State])` - Adds a behavior with explicit ID
+- `withBehavior(behavior: Beh[Msg, State])` - Adds a behavior as a (String, PF) tuple
+- `withBehaviors(behaviors: Iterable[Beh[Msg, State]])` - Adds multiple behaviors with explicit IDs
+- `withBehaviors(behaviors: Iterable[PF[Msg, State]])` - Adds multiple behaviors with auto-generated IDs
 - `withHeartbeat(strategy: HeartBeatStrategy)` - Sets a custom heartbeat strategy
 - `withLinearHeartbeat(ms: Long)` - Sets a linear heartbeat strategy
 - `withAgitatedHeartbeat(minMs: Long, coeff: Double, maxMs: Long)` - Sets an agitated heartbeat strategy
 - `withReactiveHeartbeat(maxMs: Long, maxMsgs: Int)` - Sets a reactive heartbeat strategy
-- `withOnInit(callback: MutableActor[Msg, Rsp, State] => Unit)` - Sets an initialization callback
+- `withOnInit(callback: MutableActor[Msg, State] => Unit)` - Sets an initialization callback
 - `withSerialDispatch()` - Configures the actor to use serial dispatch
 - `withExecutionContext(ec: ExecutionContext)` - Sets a custom execution context for parallel dispatch
 - `build()(using ec: ExecutionContext)` - Builds the actor with the configured settings

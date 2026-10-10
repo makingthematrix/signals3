@@ -166,14 +166,14 @@ class ActorSpec extends FunSuite {
     eventContext.stop()
 
   // Helper to close actor and wait for completion
-  private def close(actor: Actor[?, ?, ?] & Closeable): Unit = {
+  private def close(actor: Actor[?, ?] & Closeable): Unit = {
     actor.close()
     waitFor(actor.isClosedSignal, true)
   }
   
   // Helper to create actor with Closeable type for closing
-  private def create[Msg, Rsp, State](state: State, pf: Actor.PF[Msg, Rsp, State]): Actor[Msg, Rsp, State] & Closeable & Pausable =
-    Actor(state, pf).asInstanceOf[Actor[Msg, Rsp, State] & Closeable & Pausable]
+  private def create[Msg, State](state: State, pf: Actor.PF[Msg, State]): Actor[Msg, State] & Closeable & Pausable =
+    Actor(state, pf).asInstanceOf[Actor[Msg, State] & Closeable & Pausable]
 }
 ```
 

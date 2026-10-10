@@ -29,27 +29,27 @@ class ActorSystemSpec extends FunSuite {
   // Helpers
   // ============================================================================
 
-  private def newSystem(): ActorSystem[Int, String, Int] =
-    ActorSystem[Int, String, Int]("sys", 0, Actor.defBeat)
+  private def newSystem(): ActorSystem[String, Int] =
+    ActorSystem[String, Int]("sys", 0, Actor.defBeat)
 
-  private def newActor(sys: ActorSystem[Int, String, Int], id: String,
-                       pf: Actor.PF[Int, String, Int]): Actor[Int, String, Int] =
-    ActorBuilder[Int, String, Int]()
+  private def newActor(sys: ActorSystem[String, Int], id: String,
+                       pf: Actor.PF[String, Int]): Actor[String, Int] =
+    ActorBuilder[String, Int](0)
       .withId(id).withState(0).withBehavior("default", pf).withSystem(sys).build()
 
-  private def close(actor: Actor[?, ?, ?]): Unit = {
+  private def close(actor: Actor[?, ?]): Unit = {
     actor.asInstanceOf[Closeable].close()
     waitFor(actor.isClosedSignal, true)
   }
 
-  private def spawn(parent: Actor[Int, String, Int])(data: parent.SystemMsg.Spawn): Actor[Int, String, Int] =
+  private def spawn(parent: Actor[String, Int])(data: parent.SystemMsg.Spawn): Actor[String, Int] =
     tryResultCF(parent ? data) match {
       case Success(parent.SystemMsg.NewChild(child))             => child
       case Failure(InvalidIdException(id)) if id == data.actorId => fail(s"Spawn with id $id was rejected as invalid")
       case other                                                 => fail(s"Unexpected spawn response: $other")
     }
 
-  private def awaitRef(sys: ActorSystem[Int, String, Int], id: String): ActorRef[Int, String] = {
+  private def awaitRef(sys: ActorSystem[String, Int], id: String): ActorRef[String] = {
     import sys.SystemMsg.*
     val start = System.currentTimeMillis()
     while (System.currentTimeMillis() - start < 5000) {
@@ -66,7 +66,7 @@ class ActorSystemSpec extends FunSuite {
     fail(s"Actor '$id' was not registered within 5 seconds")
   }
 
-  private def awaitInvalid(sys: ActorSystem[Int, String, Int], id: String): Unit = {
+  private def awaitInvalid(sys: ActorSystem[String, Int], id: String): Unit = {
     import sys.SystemMsg.*
     val start = System.currentTimeMillis()
     while (System.currentTimeMillis() - start < 5000) {
@@ -102,8 +102,8 @@ class ActorSystemSpec extends FunSuite {
   test("Register via ? stores the actor and returns Ref") {
     val sys = newSystem()
     import sys.SystemMsg.*
-    val a = ActorBuilder[Int, String, Int]()
-      .withId("manual").withState(0)
+    val a = ActorBuilder[String, Int](0)
+      .withId("manual")
       .withBehavior("default", { case (msg, _) => Some(s"M: $msg") })
       .build()
     resultCF(sys ? Register(a)) match {
@@ -117,18 +117,18 @@ class ActorSystemSpec extends FunSuite {
   test("Register with a duplicate id overwrites the previous entry") {
     val sys = newSystem()
     import sys.SystemMsg.*
-    val a = ActorBuilder[Int, String, Int]()
-      .withId("dup").withState(0)
+    val a = ActorBuilder[String, Int](0)
+      .withId("dup")
       .withBehavior("default", { case (msg, _) => Some(s"A: $msg") })
       .build()
-    val b = ActorBuilder[Int, String, Int]()
-      .withId("dup").withState(0)
+    val b = ActorBuilder[String, Int](0)
+      .withId("dup")
       .withBehavior("default", { case (msg, _) => Some(s"B: $msg") })
       .build()
     awaitCF(sys ? Register(a))
     awaitCF(sys ? Register(b))
     val ref = awaitRef(sys, "dup")
-    assertEquals(resultCF(ref ? 1), "B: 1")
+    assertEquals(resultCF(ref ? "1"), "B: 1")
     close(a)
     close(b)
     close(sys)
@@ -202,8 +202,8 @@ class ActorSystemSpec extends FunSuite {
   test("ActorClosed via ? removes the actor from the registry") {
     val sys = newSystem()
     import sys.SystemMsg.*
-    val a = ActorBuilder[Int, String, Int]()
-      .withId("x").withState(0)
+    val a = ActorBuilder[String, Int](0)
+      .withId("x")
       .withBehavior("default", { case (msg, _) => Some(s"A: $msg") })
       .build()
     awaitCF(sys ? Register(a))
@@ -259,7 +259,7 @@ class ActorSystemSpec extends FunSuite {
     val sys = newSystem()
     val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
     val ref = awaitRef(sys, "a")
-    assertEquals(resultCF(ref ? 42), "A: 42")
+    assertEquals(resultCF(ref ? "42"), "A: 42")
     close(a)
     close(sys)
   }
@@ -267,12 +267,12 @@ class ActorSystemSpec extends FunSuite {
   test("Ref from AskForRef is usable for ! (bang)") {
     val sys = newSystem()
     val received = SourceSignal(0)
-    val a = ActorBuilder[Int, String, Int]()
-      .withId("a").withState(0)
+    val a = ActorBuilder[String, Int](0)
+      .withId("a")
       .withBehavior("default", { case (msg, _) => received.mutate(_ + 1); Some(s"A: $msg") })
       .withSystem(sys).build()
     val ref = awaitRef(sys, "a")
-    ref ! 42
+    ref ! "42"
     waitFor(received, 1)
     close(a)
     close(sys)
@@ -300,9 +300,9 @@ class ActorSystemSpec extends FunSuite {
     awaitRef(sys, "a")
     awaitRef(sys, "b")
     val aRef = awaitRef(sys, "a")
-    assertEquals(resultCF(aRef ? 10), "A: 10")
+    assertEquals(resultCF(aRef ? "10"), "A: 10")
     val bRef = awaitRef(sys, "b")
-    assertEquals(resultCF(bRef ? 20), "B: 20")
+    assertEquals(resultCF(bRef ? "20"), "B: 20")
     close(a); close(b)
     close(sys)
   }
@@ -315,7 +315,7 @@ class ActorSystemSpec extends FunSuite {
     val sys = newSystem()
     val numThreads = 10
     val actorsPerThread = 5
-    val actors = scala.collection.concurrent.TrieMap.empty[String, Actor[Int, String, Int]]
+    val actors = scala.collection.concurrent.TrieMap.empty[String, Actor[String, Int]]
 
     val futures: Seq[Future[Unit]] = (0 until numThreads).map { t =>
       Future {
@@ -356,7 +356,7 @@ class ActorSystemSpec extends FunSuite {
     val numThreads = 10
     val spawnsPerThread = 5
     val expected = numThreads * spawnsPerThread
-    val children = scala.collection.concurrent.TrieMap.empty[String, Actor[Int, String, Int]]
+    val children = scala.collection.concurrent.TrieMap.empty[String, Actor[String, Int]]
 
     val futures: Seq[Future[Unit]] = (0 until numThreads).map { _ =>
       Future {
@@ -392,7 +392,7 @@ class ActorSystemSpec extends FunSuite {
     // The child is not yet registered in the system
     
     // Send a message via path to the child when it's NOT registered
-    sys.bang(42, ActorPath.Remote(sys.id, "test-child"), "")
+    sys.tell("42", ActorPath.Remote(sys.id, "test-child"), "")
     
     // Now register the child manually
     awaitCF(sys ? sys.SystemMsg.Register(child))

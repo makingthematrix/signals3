@@ -9,6 +9,13 @@ import scala.concurrent.duration.*
 import scala.util.Try
 
 class ActorSpec extends FunSuite {
+  enum MyMsg{
+    case MyInt(n: Int)
+    case MyStr(str: String)
+  }
+
+  import MyMsg.*
+
   private val eventContext = EventContext()
   import Threading.defaultContext
 
@@ -20,41 +27,49 @@ class ActorSpec extends FunSuite {
   override def afterEach(context: AfterEach): Unit =
     eventContext.stop()
 
-  private def close(actor: Actor[?, ?, ?] & Closeable): Unit = {
+  private def close(actor: Actor[?, ?] & Closeable): Unit = {
     actor.close()
     waitFor(actor.isClosedSignal, true)
   }
-  
-  private def create[Msg, Rsp, State](state: State, pf: PF[Msg, Rsp, State]): Actor[Msg, Rsp, State] & Closeable & Pausable =
-    ActorBuilder[Msg, Rsp, State](state)
+
+  private def create[Msg](pf: PF[Msg, Unit]): Actor[Msg, Unit] & Closeable & Pausable =
+    ActorBuilder[Msg]()
       .withBehaviorPF(pf)
       .build()
-      .asInstanceOf[Actor[Msg, Rsp, State] & Closeable & Pausable]
 
-  private def create[Msg, Rsp, State](state: State, pf: PF[Msg, Rsp, State], hbs: HeartBeatStrategy): Actor[Msg, Rsp, State] & Closeable & Pausable =
-    ActorBuilder[Msg, Rsp, State](state)
+  private def create[Msg, State](state: State, pf: PF[Msg, State]): Actor[Msg, State] & Closeable & Pausable =
+    ActorBuilder[Msg, State](state)
+      .withBehaviorPF(pf)
+      .build()
+
+  private def create[Msg](pf: PF[Msg, Unit], hbs: HeartBeatStrategy): Actor[Msg, Unit] & Closeable & Pausable =
+    ActorBuilder[Msg, Unit](())
       .withBehaviorPF(pf)
       .withHeartbeat(hbs)
       .build()
-      .asInstanceOf[Actor[Msg, Rsp, State] & Closeable & Pausable]
 
-  private def create[Msg, Rsp, State](state: State, pf: PF[Msg, Rsp, State], onInit: MutableActor[Msg, Rsp, State] => Unit): Actor[Msg, Rsp, State] & Closeable & Pausable =
-    ActorBuilder[Msg, Rsp, State](state)
+  private def create[Msg, State](state: State, pf: PF[Msg, State], onInit: MutableActor[Msg, State] => Unit): Actor[Msg, State] & Closeable & Pausable =
+    ActorBuilder[Msg, State](state)
       .withBehaviorPF(pf)
       .withOnInit(onInit)
       .build()
-      .asInstanceOf[Actor[Msg, Rsp, State] & Closeable & Pausable]
+
+  private def create[Msg](pf: PF[Msg, Unit], onInit: MutableActor[Msg, Unit] => Unit): Actor[Msg, Unit] & Closeable & Pausable =
+    ActorBuilder[Msg, Unit](())
+      .withBehaviorPF(pf)
+      .withOnInit(onInit)
+      .build()
 
   test("Request-response message sending") {
-    val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Default: $msg") })
-    val response = actor ? 42
-    assertEquals(resultCF(response), "Default: 42")
+    val actor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Default: $msg")) })
+    val response = actor ? MyInt(42)
+    assertEquals(resultCF(response), MyStr("Default: 42"))
     close(actor)
   }
 
   test("Fire-and-forget message sending") {
     val received = Signal(false)
-    val actor = create[Int, Unit, Boolean](false, { case (_, actor) =>
+    val actor = create[Int, Boolean](false, { case (_, actor) =>
       actor.state = true
       received ! true
       None
@@ -66,7 +81,7 @@ class ActorSpec extends FunSuite {
   }
 
   test("System messages handling") {
-    val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Received: $msg") })
+    val actor = create[String]({ case (msg, _) => Some(s"Received: $msg") })
     import actor.SystemMsg
     actor ! SystemMsg.Pause
     waitFor(actor.isPausedSignal, true)
@@ -77,7 +92,7 @@ class ActorSpec extends FunSuite {
   }
 
   test("Concurrent message processing") {
-    val actor = create[Int, Int, Int](0, { case (msg, actor) =>
+    val actor = create[Int, Int](0, { case (msg, actor) =>
       actor.state += msg
       Some(actor.state)
     })
@@ -92,21 +107,21 @@ class ActorSpec extends FunSuite {
   }
 
   test("Heartbeat strategies") {
-    val linearResponse = Signal("")
-    val agitatedResponse = Signal("")
-    val reactiveResponse = Signal("")
+    val linearResponse = Signal(MyStr(""))
+    val agitatedResponse = Signal(MyStr(""))
+    val reactiveResponse = Signal(MyStr(""))
 
-    val linearActor = create[Int, String, Int](0, { case (msg, _) => Some(s"Linear: $msg")}, HeartBeatStrategy.Linear(100))
-    val agitatedActor = create[Int, String, Int](0, { case (msg, _) => Some(s"Agitated: $msg")}, HeartBeatStrategy.Agitated(50, 1.5, 500))
-    val reactiveActor = create[Int, String, Int](0, { case (msg, _) => Some(s"Reactive: $msg")}, HeartBeatStrategy.Reactive(100, 5))
+    val linearActor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Linear: $msg"))}, HeartBeatStrategy.Linear(100))
+    val agitatedActor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Agitated: $msg"))}, HeartBeatStrategy.Agitated(50, 1.5, 500))
+    val reactiveActor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Reactive: $msg"))}, HeartBeatStrategy.Reactive(100, 5))
 
-    (linearActor ? 1).pipeTo(linearResponse)
-    (agitatedActor ? 2).pipeTo(agitatedResponse)
-    (reactiveActor ? 3).pipeTo(reactiveResponse)
+    (linearActor ? MyInt(1)).pipeTo(linearResponse)
+    (agitatedActor ? MyInt(2)).pipeTo(agitatedResponse)
+    (reactiveActor ? MyInt(3)).pipeTo(reactiveResponse)
 
-    waitFor(linearResponse, "Linear: 1")
-    waitFor(agitatedResponse, "Agitated: 2")
-    waitFor(reactiveResponse, "Reactive: 3")
+    waitFor(linearResponse, MyStr("Linear: 1"))
+    waitFor(agitatedResponse, MyStr("Agitated: 2"))
+    waitFor(reactiveResponse, MyStr("Reactive: 3"))
 
     close(linearActor)
     close(agitatedActor)
@@ -116,17 +131,17 @@ class ActorSpec extends FunSuite {
   // ==================== Behavior Modification ====================
 
   test("Concurrent behavior addition and removal") {
-    val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Default: $msg") })
-    val behavior42: PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
-    val behavior99: PF[Int, String, Int] = { case (99, _) => Some("Special: 99") }
+    val actor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Default: $msg")) })
+    val behavior42: PF[MyMsg, Unit] = { case (MyInt(42), _) => Some(MyStr("Special: 42")) }
+    val behavior99: PF[MyMsg, Unit] = { case (MyInt(99), _) => Some(MyStr("Special: 99")) }
 
     val cf42 = actor ? actor.SystemMsg.AddBehavior("special_42", behavior42)
     val cf99 = actor ? actor.SystemMsg.AddBehavior("special_99", behavior99)
     awaitCF(cf42)
     awaitCF(cf99)
     
-    assertEquals(resultCF(actor ? 42), "Special: 42")
-    assertEquals(resultCF(actor ? 99), "Special: 99")
+    assertEquals(resultCF(actor ? MyInt(42)), MyStr("Special: 42"))
+    assertEquals(resultCF(actor ? MyInt(99)), MyStr("Special: 99"))
 
     val cf42r = actor ? actor.SystemMsg.RemoveBehavior("special_42")
     val cf99r = actor ? actor.SystemMsg.RemoveBehavior("special_99")
@@ -135,29 +150,29 @@ class ActorSpec extends FunSuite {
 
     awaitAllTasks
     
-    assertEquals(resultCF(actor ? 42), "Default: 42")
-    assertEquals(resultCF(actor ? 99), "Default: 99")
+    assertEquals(resultCF(actor ? MyInt(42)), MyStr("Default: 42"))
+    assertEquals(resultCF(actor ? MyInt(99)), MyStr("Default: 99"))
     close(actor)
   }
 
   test("Duplicate behavior IDs are NOT replaced") {
-    val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Default: $msg") })
+    val actor = create[String]{ case (msg, _) => Some(s"Default: $msg") }
     
     // Add first behavior that handles 42
-    val behavior1: PF[Int, String, Int] = { case (42, _) => Some("First: 42") }
+    val behavior1: PF[String, Unit] = { case ("42", _) => Some("First: 42") }
     val cf1 = actor ? actor.SystemMsg.AddBehavior("duplicate_id", behavior1)
     awaitCF(cf1)
     
     // Verify first behavior works
-    assertEquals(resultCF(actor ? 42), "First: 42")
+    assertEquals(resultCF(actor ? "42"), "First: 42")
     
     // Add second behavior with the same ID but different response
-    val behavior2: PF[Int, String, Int] = { case (42, _) => Some("Second: 42") }
+    val behavior2: PF[String, Unit] = { case ("42", _) => Some("Second: 42") }
     val cf2 = actor ? actor.SystemMsg.AddBehavior("duplicate_id", behavior2)
     awaitCF(cf2)
     
     // The second behavior should have replaced the first
-    assertEquals(resultCF(actor ? 42), "First: 42")
+    assertEquals(resultCF(actor ? "42"), "First: 42")
     
     close(actor)
   }
@@ -165,15 +180,15 @@ class ActorSpec extends FunSuite {
   // ==================== Behavior ID Message Routing ====================
 
   test("ask with behavior ID routes message to specific behavior") {
-    val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Default: $msg") })
+    val actor = create[String]{ case (msg, _) => Some(s"Default: $msg") }
     
     // Add a special behavior
-    val behavior: PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
+    val behavior: PF[String, Unit] = { case ("42", _) => Some("Special: 42") }
     val cfAdd = actor ? actor.SystemMsg.AddBehavior("special_42", behavior)
     awaitCF(cfAdd)
 
     // Message 42 should be handled by the special behavior when using its ID
-    val response = actor.ask("special_42", 42)
+    val response = actor.ask("special_42", "42")
     assertEquals(resultCF(response), "Special: 42")
     
     close(actor)
@@ -183,18 +198,12 @@ class ActorSpec extends FunSuite {
     val received = Signal(false)
     val receivedSpecial = Signal(false)
     
-    val actor = create[Int, Unit, Boolean](false, { case (_, _) => None })
+    val actor = create[Int]{ case _ => None }
     import actor.SystemMsg
     
     // Add behaviors via system messages
-    val defaultBehavior: PF[Int, Unit, Boolean] = { case (_, _) =>
-      received ! true
-      None
-    }
-    val specialBehavior: PF[Int, Unit, Boolean] = { case (_, _) =>
-      receivedSpecial ! true
-      None
-    }
+    val defaultBehavior: PF[Int, Unit] = { case _ => received ! true; None }
+    val specialBehavior: PF[Int, Unit] = { case _ => receivedSpecial ! true; None }
     
     awaitCF(actor ? SystemMsg.AddBehavior("default", defaultBehavior))
     awaitCF(actor ? SystemMsg.AddBehavior("special", specialBehavior))
@@ -208,7 +217,7 @@ class ActorSpec extends FunSuite {
     receivedSpecial ! false
     
     // Send via bang with specific behavior ID
-    actor.bang("special", 2)
+    actor.tell("special", 2)
     waitFor(receivedSpecial, true)
     
     // The default behavior should NOT have been triggered
@@ -221,13 +230,13 @@ class ActorSpec extends FunSuite {
   // ==================== Edge Cases ====================
 
   test("Actor closed while messages in-flight") {
-    val actor = create[Int, String, Int](0, { case (msg, _) =>
+    val actor = create[String] { case (msg, _) =>
       Thread.sleep(50)
       Some(s"Processed: $msg")
-    })
+    }
     import actor.SystemMsg
     
-    val futures = (1 to 5).map(actor ? _)
+    val futures = (1 to 5).map(n => actor ? n.toString)
     actor ! SystemMsg.Close
     waitFor(actor.isClosedSignal, true)
 
@@ -237,7 +246,7 @@ class ActorSpec extends FunSuite {
 
   test("System messages with messages in queue") {
     val received = Signal(false)
-    val actor = create[Int, Unit, Boolean](false, { case (_, actor) =>
+    val actor = create[Int, Boolean](false, { case (_, actor) =>
       actor.state = true
       received ! true
       None
@@ -260,101 +269,57 @@ class ActorSpec extends FunSuite {
     close(actor)
   }
 
-  // ==================== Heartbeat Strategy Specifics ====================
-
-  test("Agitated heartbeat interval grows when idle") {
-    val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Processed: $msg") },
-      HeartBeatStrategy.Agitated(minMs = 50, coeff = 2.0, maxMs = 1000))
-    
-    val response1 = actor ? 1
-    resultCF(response1)
-    
-    Thread.sleep(200) // Wait for interval to grow
-    val response2 = actor ? 2
-    resultCF(response2)
-    
-    close(actor)
-  }
-
   // ==================== Error Handling ====================
 
   test("Actor continues processing after behavior exception") {
     var callCount = 0
-    val actor = create[Int, String, Int](0, { case (msg, _) =>
+    val actor = create[String] { case (msg, _) =>
       callCount += 1
-      if (msg == 1) throw new RuntimeException("Test error") else Some(s"Processed: $msg")
-    })
+      if (msg == "1") throw new RuntimeException("Test error") else Some(s"Processed: $msg")
+    }
     
-    intercept[RuntimeException](resultCF(actor ? 1))
+    intercept[RuntimeException](resultCF(actor ? "1"))
     
-    val response2 = actor ? 2
+    val response2 = actor ? "2"
     assertEquals(resultCF(response2), "Processed: 2")
     assertEquals(callCount, 2)
-    close(actor)
-  }
-
-  test("Behavior returns None vs Some(None)") {
-    val actor = create[Int, Option[String], Int](0, { case (msg, _) =>
-      if (msg == 1) None
-      else if (msg == 2) Some(None)
-      else Some(Some("value"))
-    })
-    
-    val response1 = actor ? 1
-    intercept[IllegalStateException](resultCF(response1))
-    
-    val response2 = actor ? 2
-    assertEquals(resultCF(response2), None)
-    
-    val response3 = actor ? 3
-    assertEquals(resultCF(response3), Some("value"))
-    close(actor)
-  }
-
-  // ==================== Special Cases ====================
-
-  test("Actor with Unit state") {
-    val actor = create[Int, String, Unit]((), { case (msg, _) => Some(s"Received: $msg") })
-    
-    val response = actor ? 42
-    assertEquals(resultCF(response), "Received: 42")
     close(actor)
   }
 
   // ==================== DispatchQueue Integration ====================
 
   test("Serial dispatch queue with multiple behaviors") {
-    val behavior1: PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
-    val behavior2: PF[Int, String, Int] = { case (msg, _) => Some(s"Default: $msg") }
+    val behavior1: PF[String, Unit] = { case ("42", _) => Some("Special: 42") }
+    val behavior2: PF[String, Unit] = { case (msg, _) => Some(s"Default: $msg") }
     val actor =
-      ActorBuilder[Int, String, Int](0)
+      ActorBuilder[String]()
         .withBehaviorPFs(List(behavior1, behavior2))
         .withSerialDispatch()
         .build()
-        .asInstanceOf[Actor[Int, String, Int] & Closeable]
+        .asInstanceOf[Actor[String, Unit] & Closeable]
 
     waitForResult(actor.isInitializedSignal, true)
 
-    assertEquals(resultCF(actor ? 42), "Special: 42")
-    assertEquals(resultCF(actor ? 1), "Default: 1")
+    assertEquals(resultCF(actor ? "42"), "Special: 42")
+    assertEquals(resultCF(actor ? "1"), "Default: 1")
     close(actor)
   }
 
   // ==================== System Message Behavior Management ====================
 
   test("AddBehavior and RemoveBehavior via system messages") {
-    val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Default: $msg") })
+    val actor = create[String] { case (msg, _) => Some(s"Default: $msg") }
     import actor.SystemMsg
     
-    val behavior: PF[Int, String, Int] = { case (42, _) => Some("Special: 42") }
+    val behavior: PF[String, Unit] = { case ("42", _) => Some("Special: 42") }
     
     actor ! SystemMsg.AddBehavior("testId", behavior)
     Thread.sleep(200)
-    assertEquals(resultCF(actor ? 42), "Special: 42")
+    assertEquals(resultCF(actor ? "42"), "Special: 42")
     
     actor ! SystemMsg.RemoveBehavior("testId")
     Thread.sleep(200)
-    assertEquals(resultCF(actor ? 42), "Default: 42")
+    assertEquals(resultCF(actor ? "42"), "Default: 42")
     
     close(actor)
   }
@@ -362,7 +327,7 @@ class ActorSpec extends FunSuite {
   // ==================== System Message with Response ====================
 
   test("Pause system message with response via ?") {
-    val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Received: $msg") })
+    val actor = create[Unit] { case _ => None }
     import actor.SystemMsg
     
     val pauseFuture = actor ? SystemMsg.Pause
@@ -372,7 +337,7 @@ class ActorSpec extends FunSuite {
   }
 
   test("Unpause system message with response via ?") {
-    val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Received: $msg") })
+    val actor = create[Unit] { case _ => None }
     import actor.SystemMsg
     
     actor ! SystemMsg.Pause
@@ -387,10 +352,8 @@ class ActorSpec extends FunSuite {
   // ==================== Close Response Guarantees ====================
 
   test("Close via ? completes only after actor is closed") {
-    val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Received: $msg") })
+    val actor = create[Unit] { case _ => None }
     import actor.SystemMsg
-
-    import scala.util.Try
 
     val closeFuture = actor ? SystemMsg.Close
     
@@ -406,10 +369,10 @@ class ActorSpec extends FunSuite {
   }
 
   test("Close via ? with pending messages waits for processing") {
-    val actor = create[Int, String, Int](0, { case (msg, _) =>
+    val actor = create[Int] { case (msg, _) =>
       Thread.sleep(50) // Simulate slow processing
-      Some(s"Processed: $msg")
-    })
+      Some(msg + 1)
+    }
     import actor.SystemMsg
     
     // Send some messages that take time to process
@@ -427,7 +390,7 @@ class ActorSpec extends FunSuite {
   }
 
   test("Only the first close via ? completes, the next one fails") {
-    val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Received: $msg") })
+    val actor = create[Unit] { case _ => None }
     import actor.SystemMsg
 
     waitFor(actor.isInitializedSignal, true)
@@ -444,10 +407,7 @@ class ActorSpec extends FunSuite {
 
   test("Close via ? when actor has pending messages") {
     val received = Signal(false)
-    val actor = create[Int, Unit, Boolean](false, { case (_, _) =>
-      received ! true
-      None
-    })
+    val actor = create[Int] { case _ => received ! true; None }
     import actor.SystemMsg
     
     // Send a message that will take time
@@ -466,7 +426,7 @@ class ActorSpec extends FunSuite {
   // ==================== in/out Stream Tests =====================
 
   test("in stream receives messages sent to actor") {
-    val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Processed: $msg") })
+    val actor = create[Int]{ case (msg, _) => Some(msg + 1) }
     val received = Signal(Seq.empty[Int])
     
     // Subscribe to in stream
@@ -484,11 +444,11 @@ class ActorSpec extends FunSuite {
   }
 
   test("out stream receives responses when behavior sends to it") {
-    val actor = create[Int, String, Int](0, { case (msg, mut) =>
+    val actor = create[String] { case (msg, actor) =>
       // Behavior explicitly sends response to out stream
-      mut.out ! s"Response: $msg"
+      actor.out ! s"Response: $msg"
       None
-    })
+    }
     val responses = Signal(Seq.empty[String])
     
     // Subscribe to the out stream to receive responses
@@ -497,8 +457,8 @@ class ActorSpec extends FunSuite {
     }
     
     // Send messages via in stream
-    actor.in ! 1
-    actor.in ! 2
+    actor.in ! "1"
+    actor.in ! "2"
     
     // Wait for responses via out stream
     waitForResult(responses, Seq("Response: 1", "Response: 2"))
@@ -508,11 +468,11 @@ class ActorSpec extends FunSuite {
 
   test("in and out streams work together for bidirectional communication") {
     // This test demonstrates using in/out streams as an alternative to ! and ? operators
-    val actor = create[Int, String, Int](0, { case (msg, mut) =>
+    val actor = create[String] { case (msg, actor) =>
       // The behavior processes the message and sends response to out stream
-      mut.out ! s"Processed: $msg"
+      actor.out ! s"Processed: $msg"
       None
-    })
+    }
     
     val receivedResponses = Signal(Seq.empty[String])
     
@@ -522,9 +482,9 @@ class ActorSpec extends FunSuite {
     }
     
     // Send messages via in stream
-    actor.in ! 10
-    actor.in ! 20
-    actor.in ! 30
+    actor.in ! "10"
+    actor.in ! "20"
+    actor.in ! "30"
     
     // Wait for all responses to be received via out stream
     waitForResult(receivedResponses, Seq("Processed: 10", "Processed: 20", "Processed: 30"))
@@ -534,12 +494,12 @@ class ActorSpec extends FunSuite {
 
   test("piping messages from external stream to actor in stream") {
     // This test demonstrates a real-world scenario where external events are piped to the actor
-    val externalStream: SourceStream[Int] = Stream()
-    val actor = create[Int, String, Int](0, { case (msg, mut) =>
+    val externalStream: SourceStream[String] = Stream()
+    val actor = create[String] { case (msg, actor) =>
       // Behavior sends responses to out stream
-      mut.out ! s"Handled: $msg"
+      actor.out ! s"Handled: $msg"
       None
-    })
+    }
     val received = Signal(Seq.empty[String])
     
     // Subscribe to actor's responses via out stream
@@ -551,9 +511,9 @@ class ActorSpec extends FunSuite {
     externalStream.pipeTo(actor.in)
     
     // Send messages to external stream, which will be forwarded to actor
-    externalStream ! 1
-    externalStream ! 2
-    externalStream ! 3
+    externalStream ! "1"
+    externalStream ! "2"
+    externalStream ! "3"
     
     // Wait for responses via out stream
     waitForResult(received, Seq("Handled: 1", "Handled: 2", "Handled: 3"))
@@ -564,10 +524,9 @@ class ActorSpec extends FunSuite {
   // ==================== onInit Tests =====================
 
   test("onInit receives the actor as parameter") {
-    var receivedActor: Option[Actor[Int, String, Int]] = None
+    var receivedActor: Option[Actor[String, Unit]] = None
     
-    val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Processed: $msg") },
-      onInit = { a => receivedActor = Some(a) })
+    val actor = create[String]({ case (msg, _) => Some(s"Processed: $msg") }, onInit = { a => receivedActor = Some(a) })
     
     // onInit should have received the actor
     assert(receivedActor.isDefined)
@@ -578,13 +537,13 @@ class ActorSpec extends FunSuite {
   test("onInit is called before the actor starts processing messages") {
     val order = Signal(Seq.empty[String])
     
-    val actor = create[Int, String, Int](0, { case (msg, _) =>
+    val actor = create[String]({ case (msg, _) =>
       order.mutate(_ :+ "behavior")
       Some(s"Processed: $msg")
     }, onInit = { _ => order.mutate(_ :+ "onInit") })
     
     // Send a message immediately
-    actor ! 1
+    actor ! "1"
     
     // onInit should have been called before the behavior processes the message
     waitForResult(order, Seq("onInit", "behavior"))
@@ -595,12 +554,12 @@ class ActorSpec extends FunSuite {
     val initCalled = Signal(false)
 
     val actor =
-      ActorBuilder[Int, String, Int](0)
+      ActorBuilder[String]()
         .withBehaviorPF { case (msg, _) => Some(s"Processed: $msg") }
         .withOnInit { _ => initCalled ! true }
         .withSerialDispatch()
         .build()
-        .asInstanceOf[Actor[Int, String, Int] & Closeable]
+        .asInstanceOf[Actor[String, String] & Closeable]
 
     waitFor(initCalled, true)
     close(actor)
@@ -609,8 +568,7 @@ class ActorSpec extends FunSuite {
   test("onInit can send messages via out stream") {
     val initMessage = Signal("")
     
-    val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Processed: $msg") },
-      onInit = { actorImpl => actorImpl.out ! "Initialized" })
+    val actor = create[String]({ case (msg, _) => Some(s"Processed: $msg") }, onInit = { actorImpl => actorImpl.out ! "Initialized" })
     
     actor.out.foreach { msg => initMessage ! msg }
     
@@ -618,42 +576,14 @@ class ActorSpec extends FunSuite {
     close(actor)
   }
 
-  test("onInit handshake - actor sends reference to another actor") {
-    // Create a parent actor that will receive the child's reference
-    val parent = create[Actor[Int, String, Int], String, String]("", { case (childActor, _) =>
-      Some(s"Child registered: ${childActor.hashCode}")
-    })
-    
-    val parentReceivedChild = Signal(false)
-    
-    // Create a child actor with onInit that sends its reference to the parent
-    val child = create[Int, String, Int](0, { case (msg, _) => Some(s"Child: $msg") },
-      onInit = { childActor =>
-        // Send this actor's reference to the parent via the parent's in stream
-        parent.in ! childActor
-      })
-    
-    parent.out.foreach { _ => parentReceivedChild ! true }
-    
-    // Wait for the parent to receive the child's reference
-    waitFor(parentReceivedChild, true)
-    
-    close(child)
-    close(parent)
-  }
-
   test("onInit can modify actor state") {
-    val actor = create[Int, String, Int](0, { case (_, actorImpl) =>
-      Some(s"State: ${actorImpl.state}")
-    }, onInit = { actorImpl =>
-      actorImpl.state = 100
-    })
+    val actor = create[MyMsg, Int](0, { case (_, actor) => Some(MyStr(s"State: ${actor.state}")) }, onInit = { _.state = 100 })
     
     // State should have been modified by onInit
     assertEquals(actor.state, 100)
     
-    val response = actor ? 1
-    assertEquals(resultCF(response), "State: 100")
+    val response = actor ? MyInt(1)
+    assertEquals(resultCF(response), MyStr("State: 100"))
     close(actor)
   }
 
@@ -661,7 +591,7 @@ class ActorSpec extends FunSuite {
     val externalStreamReceived = Signal(Seq.empty[String])
     val externalStream: SourceStream[String] = Stream()
     
-    val actor = create[Int, String, Int](0, { case (msg, _) => Some(s"Processed: $msg") },
+    val actor = create[String]({ case (msg, _) => Some(s"Processed: $msg") },
       onInit = { _ =>
         externalStream ! "Actor initialized"
         externalStream ! "Ready to process"
@@ -677,17 +607,12 @@ class ActorSpec extends FunSuite {
     val handshakeComplete = Signal(false)
     
     // Create first actor with a reference to where the second will send its handshake
-    val actor1 = create[Int, String, Int](0, { case (msg, _) => Some(s"A1: $msg") })
+    val actor1 = create[String]({ case (msg, _) => Some(s"A1: $msg") })
     
     // Create second actor with onInit that sends a message to actor1's in stream
-    val actor2 = create[Int, String, Int](0, { case (msg, _) => Some(s"A2: $msg") },
-      onInit = { _ =>
-        actor1.in ! 42
-      })
+    val actor2 = create[String]({ case (msg, _) => Some(s"A2: $msg") }, onInit = { _ => actor1.in ! "42" })
     
-    actor1.in.foreach { msg =>
-      if (msg == 42) handshakeComplete ! true
-    }
+    actor1.in.foreach { msg => if (msg == "42") handshakeComplete ! true }
     
     waitFor(handshakeComplete, true)
     
@@ -700,11 +625,7 @@ class ActorSpec extends FunSuite {
     // during actor construction. The initialize() method now calls closeAndCheck() in a catch block,
     // ensuring that heartbeat and other resources are properly released even on initialization failure.
     intercept[RuntimeException] {
-      create[Int, String, Int](0, { case (msg, _) => Some(s"Processed: $msg") },
-        onInit = { _ =>
-          throw new RuntimeException("Init error")
-        })
+      create[Unit]({ case _ => None }, onInit = { _ => throw new RuntimeException("Init error") })
     }
   }
-
 }

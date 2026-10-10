@@ -31,8 +31,8 @@ The Actor module interacts with:
 
 ### Type Hierarchy
 
-1. **Actor[Msg, Rsp, State]**: Read-only trait exposing the actor's public API
-2. **MutableActor[Msg, Rsp, State]**: Extends Actor, adds mutable state and behavior modification methods (used by behaviors)
+1. **Actor[Msg, State]**: Read-only trait exposing the actor's public API
+2. **MutableActor[Msg, State]**: Extends Actor, adds mutable state and behavior modification methods (used by behaviors)
 3. **ActorImpl**: Private final class implementing MutableActor
 
 ### Type Parameters
@@ -48,13 +48,13 @@ Defined **inside** the `Actor` trait, making it path-dependent with access to th
 - `Pause`: Suspend regular message processing (system messages still processed)
 - `Unpause`: Resume regular message processing
 - `Close`: Terminate the actor
-- `AddBehavior(id: String, pf: PF[Msg, Rsp, State])`: Add a behavior dynamically
+- `AddBehavior(id: String, pf: PF[Msg, State])`: Add a behavior dynamically
 - `RemoveBehavior(id: String)`: Remove a behavior by ID
-- `AddPF(pf: PF[Msg, Rsp, State])`: Add a behavior with auto-generated UUID
+- `AddPF(pf: PF[Msg, State])`: Add a behavior with auto-generated UUID
 
 **Usage**: Access SystemMsg through an actor instance:
 ```scala
-val actor = Actor[Int, String, Int](0, ...)
+val actor = Actor[String, String](0, ...)
 import actor.SystemMsg
 actor ! SystemMsg.Pause
 ```
@@ -75,8 +75,8 @@ Strategies for controlling message processing intervals:
 
 Defined in the companion object:
 
-- `PF[Msg, Rsp, State]`: Partial function behavior type - `PartialFunction[(Msg, MutableActor[Msg, Rsp, State]), Option[Rsp]]`
-- `Beh[Msg, Rsp, State]`: Behavior tuple type - `(id: String, pf: PF[Msg, Rsp, State])`
+- `PF[Msg, State]`: Partial function behavior type - `PartialFunction[(Msg, MutableActor[Msg, State]), Option[Msg]]`
+- `Beh[Msg, State]`: Behavior tuple type - `(id: String, pf: PF[Msg, State])`
 
 **Note**: Behaviors receive `MutableActor` to allow state mutation. The `PF` type alias is the primary behavior type used throughout the Actor API.
 
@@ -87,7 +87,7 @@ Defined in the companion object:
 | Method | Description |
 |--------|-------------|
 | `!(msg: Msg)` | Fire-and-forget regular message |
-| `?(msg: Msg): CloseableFuture[Rsp]` | Request-response regular message |
+| `?(msg: Msg): CloseableFuture[Msg]` | Request-response regular message |
 | `!(msg: SystemMsg)` | Fire-and-forget system message |
 | `?(msg: SystemMsg): CloseableFuture[Unit]` | Request-response system message (completes when processed) |
 
@@ -113,7 +113,7 @@ Defined in the companion object:
 | Property | Actor | MutableActor |
 |----------|-------|--------------|
 | `in` | `SourceStream[Msg]` | `SourceStream[Msg]` |
-| `out` | `Stream[Rsp]` (read-only) | `SourceStream[Rsp]` (writable) |
+| `out` | `Stream[Msg]` (read-only) | `SourceStream[Msg]` (writable) |
 
 ### Lifecycle Methods
 
@@ -137,30 +137,30 @@ Defined in the companion object:
 
 ## Factory Methods
 
-All factory methods are in the `Actor` companion object. They return `Actor[Msg, Rsp, State]` which is actually an `ActorImpl` (private implementation) that extends `Closeable` and `Pausable`.
+All factory methods are in the `Actor` companion object. They return `Actor[Msg, State]` which is actually an `ActorImpl` (private implementation) that extends `Closeable` and `Pausable`.
 
 **Note**: For a more convenient way to create actors, see the `ActorBuilder` class (spec: `signals3-actor-builder`), which provides a fluent API that consolidates all factory method combinations.
 
 ```scala
 // With ExecutionContext (implicit)
-Actor[Msg, Rsp, State](state, pf: PF[Msg, Rsp, State])(using ExecutionContext)
-Actor[Msg, Rsp, State](state, pf: PF[Msg, Rsp, State], beat: HeartBeatStrategy)(using ExecutionContext)
-Actor[Msg, Rsp, State](state, behavior: Beh[Msg, Rsp, State])(using ExecutionContext)
-Actor[Msg, Rsp, State](state, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy)(using ExecutionContext)
-Actor[Msg, Rsp, State](state, pfs: List[PF[Msg, Rsp, State]])(using ExecutionContext)
-Actor[Msg, Rsp, State](state, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy)(using ExecutionContext)
+Actor[Msg, State](state, pf: PF[Msg, State])(using ExecutionContext)
+Actor[Msg, State](state, pf: PF[Msg, State], beat: HeartBeatStrategy)(using ExecutionContext)
+Actor[Msg, State](state, behavior: Beh[Msg, State])(using ExecutionContext)
+Actor[Msg, State](state, behavior: Beh[Msg, State], beat: HeartBeatStrategy)(using ExecutionContext)
+Actor[Msg, State](state, pfs: List[PF[Msg, State]])(using ExecutionContext)
+Actor[Msg, State](state, pfs: List[PF[Msg, State]], beat: HeartBeatStrategy)(using ExecutionContext)
 
 // With onInit callback
-Actor[Msg, Rsp, State](state, pf: PF[Msg, Rsp, State], onInit: MutableActor[Msg, Rsp, State] => Unit)(using ExecutionContext)
-Actor[Msg, Rsp, State](state, behavior: Beh[Msg, Rsp, State], onInit: MutableActor[Msg, Rsp, State] => Unit)(using ExecutionContext)
-Actor[Msg, Rsp, State](state, pfs: List[PF[Msg, Rsp, State]], onInit: MutableActor[Msg, Rsp, State] => Unit)(using ExecutionContext)
+Actor[Msg, State](state, pf: PF[Msg, State], onInit: MutableActor[Msg, State] => Unit)(using ExecutionContext)
+Actor[Msg, State](state, behavior: Beh[Msg, State], onInit: MutableActor[Msg, State] => Unit)(using ExecutionContext)
+Actor[Msg, State](state, pfs: List[PF[Msg, State]], onInit: MutableActor[Msg, State] => Unit)(using ExecutionContext)
 
 // Serial dispatch queue variants (use dedicated serial dispatch queue)
-Actor.serial[Msg, Rsp, State](state, pf: PF[Msg, Rsp, State])
-Actor.serial[Msg, Rsp, State](state, pf: PF[Msg, Rsp, State], beat: HeartBeatStrategy)
-Actor.serial[Msg, Rsp, State](state, behavior: Beh[Msg, Rsp, State])
-Actor.serial[Msg, Rsp, State](state, pfs: List[PF[Msg, Rsp, State]])
-Actor.serial[Msg, Rsp, State](state, pfs: List[PF[Msg, Rsp, State]], beat: HeartBeatStrategy)
+Actor.serial[Msg, State](state, pf: PF[Msg, State])
+Actor.serial[Msg, State](state, pf: PF[Msg, State], beat: HeartBeatStrategy)
+Actor.serial[Msg, State](state, behavior: Beh[Msg, State])
+Actor.serial[Msg, State](state, pfs: List[PF[Msg, State]])
+Actor.serial[Msg, State](state, pfs: List[PF[Msg, State]], beat: HeartBeatStrategy)
 ```
 
 **Note**: The default heartbeat strategy is `HeartBeatStrategy.Linear(100L)` (100ms interval).
@@ -173,7 +173,7 @@ Actor.serial[Msg, Rsp, State](state, pfs: List[PF[Msg, Rsp, State]], beat: Heart
 import scala.concurrent.ExecutionContext.Implicits.global
 
 // Create an actor with initial state and default behavior
-val counter = Actor[Int, String, Int](0, (msg, actor) => {
+val counter = Actor[String, String](0, (msg, actor) => {
   actor.state += msg
   Some(s"Count: ${actor.state}")
 })
@@ -192,7 +192,7 @@ counter.close()
 ### Custom Behaviors
 
 ```scala
-val actor = Actor[Int, String, Int](0, {
+val actor = Actor[String, String](0, {
   case (msg, _) => Some(s"Default: $msg")
 })
 
@@ -211,7 +211,7 @@ actor.ask(SystemMsg.AddPF({
 actor.ask(SystemMsg.RemoveBehavior("special"))
 
 // Retrieve behavior
-val specialBehavior: Option[Actor.PF[Int, String, Int]] = actor.getBehavior("special")
+val specialBehavior: Option[Actor.PF[String, String]] = actor.getBehavior("special")
 ```
 
 **Important**: Behavior modifications must be done through SystemMsg messages to ensure thread-safety. The `addBehavior` and `removeBehavior` methods on MutableActor are private and not accessible to users.
@@ -219,7 +219,7 @@ val specialBehavior: Option[Actor.PF[Int, String, Int]] = actor.getBehavior("spe
 ### Stream Integration
 
 ```scala
-val actor = Actor[Int, String, Int](0, (msg, mut) => {
+val actor = Actor[String, String](0, (msg, mut) => {
   mut.out ! s"Processed: $msg"  // Send to out stream
   None
 })
@@ -260,10 +260,10 @@ actor.close()
 
 ### Message Queues
 
-- `msgs: AtomicReference[mutable.Queue[(Msg, Option[Promise[Rsp]], behId: String)]]` - Regular messages with optional response promises and behavior ID, stored in an AtomicReference for thread-safety
+- `msgs: AtomicReference[mutable.Queue[(Msg, Option[Promise[Msg]], behId: String)]]` - Regular messages with optional response promises and behavior ID, stored in an AtomicReference for thread-safety
 - `systemMsgs: AtomicReference[mutable.Queue[(SystemMsg, Option[Promise[Unit]])]]` - System messages with optional response promises, stored in an AtomicReference for thread-safety
-- `behMap: mutable.HashMap[String, PF[Msg, Rsp, State]]` - O(1) lookup map for behaviors by ID
-- `behaviors: List[Beh[Msg, Rsp, State]]` - Ordered list of behaviors for sequential evaluation
+- `behMap: mutable.HashMap[String, PF[Msg, State]]` - O(1) lookup map for behaviors by ID
+- `behaviors: List[Beh[Msg, State]]` - Ordered list of behaviors for sequential evaluation
 
 ### Message Processing Flow
 
@@ -281,7 +281,7 @@ actor.close()
 
 1. Behaviors are evaluated in LIFO order (most recently added first) - the behaviors list is prepended to
 2. First behavior that matches the message (via `isDefinedAt`) wins
-3. If no behavior matches, returns `Ignored[Rsp]` which results in `NoResponse` for `?` calls
+3. If no behavior matches, returns `Ignored[Msg]` which results in `NoResponse` for `?` calls
 4. Behaviors can return `None` to indicate no response, which results in `NoResponse` for `?` calls
 5. Behaviors can return `Some(response)` to provide a response
 

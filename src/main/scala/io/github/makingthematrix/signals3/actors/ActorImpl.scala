@@ -22,18 +22,18 @@ import scala.util.{Failure, Success, Try}
 	* @tparam Rsp   The type of responses returned by this actor.
 	* @tparam State The type representing the internal state of the actor.
 	*/
-private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
+private[actors] class ActorImpl[Msg, State](override val id: String,
                                                  protected var _state: State,
                                                  override protected val heartbeat: HeartBeatStrategy = Actor.defBeat,
-                                                 override val parent: Option[Actor[Msg, Rsp, State]] = None,
-                                                 override val system: Option[ActorSystem[Msg, Rsp, State]] = None
+                                                 override val parent: Option[Actor[Msg, State]] = None,
+                                                 override val system: Option[ActorSystem[Msg, State]] = None
                                                 )(using ec: ExecutionContext)
-	extends MutableActor[Msg, Rsp, State] with Closeable with Pausable {
+	extends MutableActor[Msg, State] with Closeable with Pausable {
 
-	protected type MsgEntry = (msg: Msg, rsp: Option[Promise[Rsp]], behId: String)
+	protected type MsgEntry = (msg: Msg, rsp: Option[Promise[Msg]], behId: String)
 	protected type SysEntry = (msg: SystemMsg, rsp: Option[Promise[SystemMsg]])
 
-	protected var children: Map[String, Actor[Msg, Rsp, State]] = Map.empty
+	protected var children: Map[String, Actor[Msg, State]] = Map.empty
 
 	// a mutable queue of messages incoming from other actors and other sources; see the ! operator.
 	private val msgs = new AtomicReference[MQueue[MsgEntry]](MQueue.empty)
@@ -44,8 +44,8 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 	// a stream that serves as a single entry for the systemMsgs list to prevent concurrent modification; see the "! operator.
 	protected val systemStream: SourceStream[SysEntry] = Stream[SysEntry]()
 	// a variable list of behaviors; a behavior is a partial function that tries to process an incoming message; see the processMessages method.
-	protected var behaviors: List[Beh[Msg, Rsp, State]] = List[Beh[Msg, Rsp, State]]()
-	private val behMap = mutable.HashMap[String, PF[Msg, Rsp, State]]()
+	protected var behaviors: List[Beh[Msg, State]] = List[Beh[Msg, State]]()
+	private val behMap = mutable.HashMap[String, PF[Msg, State]]()
 	// the "beating heart" of the actor; depending on the strategy, accumulated messages are processed at each beat or when the message appears (reactive).
 	private lazy val beat = GeneratorStream.heartbeat(() => interval())
 
@@ -79,7 +79,7 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 	override val in: CloseableSourceStream[Msg] = CloseableSourceStream[Msg]()
 	in.map(msg => (msg, None, "")).pipeTo(msgStream)
 
-	override val out: CloseableSourceStream[Rsp] = CloseableSourceStream[Rsp]()
+	override val out: CloseableSourceStream[Msg] = CloseableSourceStream[Msg]()
 
 	msgStream.foreach { msg =>
 		enqueue(msg)
@@ -105,7 +105,7 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		* @param behavior The behavior to be added, represented as a tuple containing a unique identifier
 		*                 and a partial function that defines the behavior logic.
 		*/
-	private[actors] def addBehavior(behavior: Beh[Msg, Rsp, State]): Boolean =
+	private[actors] def addBehavior(behavior: Beh[Msg, State]): Boolean =
 		if (behMap.contains(behavior.id)) false
 		else {
 			behMap += behavior.id -> behavior.pf
@@ -124,7 +124,7 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		behMap -= id
 	}
 
-	override def getBehavior(id: String): Option[Beh[Msg, Rsp, State]] = 
+	override def getBehavior(id: String): Option[Beh[Msg, State]] =
 		behMap.collectFirst { case (behId, pf) if behId == id => behId -> pf }
 
 	/**
@@ -136,14 +136,14 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		* @param pf A partial function that represents the behavior logic.
 		* @return A unique identifier for the newly added behavior.
 		*/
-	inline private[actors] def addBehaviorPF(pf: PF[Msg, Rsp, State]): String =
+	inline private[actors] def addBehaviorPF(pf: PF[Msg, State]): String =
 		UUID.randomUUID().toString.tap { id => addBehavior(id -> pf) } // we assume uuids are unique
 
 	// adds all new behavior functions in front of the list of behaviors but maintains their own internal order
-	inline private[actors] def addBehaviorPFs(pfs: Iterable[PF[Msg, Rsp, State]]): Unit = 
+	inline private[actors] def addBehaviorPFs(pfs: Iterable[PF[Msg, State]]): Unit =
 		addBehaviors(pfs.map(pf => UUID.randomUUID().toString -> pf))
 	
-	private[actors] def addBehaviors(behs: Iterable[Beh[Msg, Rsp, State]]): Unit = {
+	private[actors] def addBehaviors(behs: Iterable[Beh[Msg, State]]): Unit = {
 		behaviors = behs.toList ::: behaviors
 		behMap ++= behs.map(b => b.id -> b.pf)
 	}
@@ -155,9 +155,9 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 			CloseableFuture.from(p)
 		} else ActorIsClosed[SystemMsg]
 
-	override def ask(msg: Msg, path: ActorPath, behId: String): CloseableFuture[Rsp] = if (!isClosed) {
+	override def ask(msg: Msg, path: ActorPath, behId: String): CloseableFuture[Msg] = if (!isClosed) {
 		import ActorPath.*
-		inline def sendToStream() = CloseableFuture.from(Promise[Rsp]().tap { p => msgStream ! (msg, Some(p), behId) })
+		inline def sendToStream() = CloseableFuture.from(Promise[Msg]().tap { p => msgStream ! (msg, Some(p), behId) })
 		path match {
 			case Direct                                          => sendToStream()
 			case Local(`id`)                                     => sendToStream()
@@ -166,18 +166,18 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 			case _ if system.nonEmpty                            => system.get.ask(msg, path, behId)
 			case _                                               => Actor.wrongPath(path)
 		}
-	} else ActorIsClosed[Rsp]
+	} else ActorIsClosed[Msg]
 
-	override def bang(msg: SystemMsg): Unit = if (!isClosed) {systemStream ! (msg, None)}
+	override def tell(msg: SystemMsg): Unit = if (!isClosed) {systemStream ! (msg, None)}
 
-	override def bang(msg: Msg, path: ActorPath, behId: String): Unit = if (!isClosed) {
+	override def tell(msg: Msg, path: ActorPath, behId: String): Unit = if (!isClosed) {
 		import ActorPath.*
 		path match {
 			case Direct                                          => msgStream ! (msg, None, behId)
 			case Local(`id`)                                     => msgStream ! (msg, None, behId)
 			case Remote("", `id`)                                => msgStream ! (msg, None, behId)
 			case Remote(sId, `id`) if system.exists(_.id == sId) => msgStream ! (msg, None, behId)
-			case _ if system.nonEmpty                            => system.get.bang(msg, path, behId)
+			case _ if system.nonEmpty                            => system.get.tell(msg, path, behId)
 			case _ => // wrong path
 		}
 	}
@@ -232,7 +232,7 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		pOpt.foreach(p => try {
 			res match {
 				case Success(Some(rsp)) => p.tryComplete(Try(rsp))
-				case Success(None)      => p.tryComplete(FailToRespond[Rsp])
+				case Success(None)      => p.tryComplete(FailToRespond[Msg])
 				case Failure(t)         => p.tryComplete(Failure(t))
 			}
 		} catch {
@@ -240,18 +240,18 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 		})
 	}
 
-	private def onMessage(msg: Msg, bId: String): Try[Option[Rsp]] = {
+	private def onMessage(msg: Msg, bId: String): Try[Option[Msg]] = {
 		val pfOpt =
 			if (bId.nonEmpty) getBehavior(bId).map(_.pf)
 			else behaviors.collectFirst { case (_, pf) if pf.isDefinedAt(msg, this) => pf }
 		pfOpt match {
 			case Some(pf) if isSerial => Try(pf(msg, this))
 			case Some(pf)             => Try(Await.result(Future {pf(msg, this)}, heartbeat.timeout))
-			case _                    => NoResponse[Rsp]
+			case _                    => NoResponse[Msg]
 		}
 	}
 
-	protected def onMessage(msg: Msg): Try[Option[Rsp]] = onMessage(msg, "")
+	protected def onMessage(msg: Msg): Try[Option[Msg]] = onMessage(msg, "")
 
 	private def removeChild(id: String): Unit = {
 		children = children - id
@@ -259,7 +259,7 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 
 	protected def spawn(data: SystemMsg.Spawn): SystemMsg =
 		if (children.contains(data.actorId)) SystemMsg.InvalidId else {
-			val b1 = ActorBuilder[Msg, Rsp, State](data.state.getOrElse(this.state))
+			val b1 = ActorBuilder[Msg, State](data.state.getOrElse(this.state))
 				.withIdIf(data.actorId.nonEmpty, data.actorId)
 				.withBehaviorsIf(data.behaviors.nonEmpty, data.behaviors, this.behaviors)
 				.withHeartbeat(data.heartbeat.getOrElse(this.heartbeat))
@@ -299,10 +299,10 @@ private[actors] class ActorImpl[Msg, Rsp, State](override val id: String,
 			if (!isInitialized) closeAndCheck()
 		}
 
-	private var _onInit: List[MutableActor[Msg, Rsp, State] => Unit] = Nil
+	private var _onInit: List[MutableActor[Msg, State] => Unit] = Nil
 
 	// Registers a function that should be called exactly once when the actor is initialized
-	private[actors] def onInit(f: MutableActor[Msg, Rsp, State] => Unit): Unit =
+	private[actors] def onInit(f: MutableActor[Msg, State] => Unit): Unit =
 		_onInit ::= f
 
 	override def isInitializedSignal(using ExecutionContext): Signal[Boolean] =

@@ -14,7 +14,7 @@ import io.github.makingthematrix.signals3.SourceStream
 	* @tparam Rsp   The type of the response
 	* @tparam State The type of the internal state
 	*/
-trait MutableActor[Msg, Rsp, State] extends Actor[Msg, Rsp, State]{
+trait MutableActor[Msg, State] extends Actor[Msg, State]{
 	/**
 		* Enables the behavior method to alter the actor's state
 		*
@@ -28,7 +28,7 @@ trait MutableActor[Msg, Rsp, State] extends Actor[Msg, Rsp, State]{
 		* You may build your actor in such a way that it operates solely on the `in` and `out` streams, you can forget
 		* about them, or you can do anything in-between.
 		*
-		* In `MutableActor` the type of `out` changes to `SourceStream[Rsp]` so that the behavior may send a response to it.
+		* In `MutableActor` the type of `out` changes to `SourceStream[Msg]` so that the behavior may send a response to it.
 		*/
-	override def out: SourceStream[Rsp]
+	override def out: SourceStream[Msg]
 }

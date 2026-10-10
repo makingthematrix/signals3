@@ -25,10 +25,9 @@ import scala.util.{Failure, Success}
 	* that it might make sense in both those use cases: as a big gateway between components, or as a small, independent entity.
   *
 	* @tparam Msg The type of the incoming message
-	* @tparam Rsp The type of the response
 	* @tparam State The type of the internal state
 	*/
-trait Actor[Msg, Rsp, State] {
+trait Actor[Msg, State] {
 	/**
 		* Represents system-level messages that can be used to control or affect the behavior
 		* of an actor. These messages are typically utilized for lifecycle management or operational changes within a system.
@@ -54,24 +53,24 @@ trait Actor[Msg, Rsp, State] {
 		*/
 	enum SystemMsg {
 		case Pause, Unpause, Close, Done, InvalidId
-		case AddBehavior(beh: Beh[Msg, Rsp, State])
+		case AddBehavior(beh: Beh[Msg, State])
 		case RemoveBehavior(behId: String)
-		case AddBehaviorPF(pf: PF[Msg, Rsp, State])
+		case AddBehaviorPF(pf: PF[Msg, State])
 		case Spawn(actorId: String = "",
 		           state: Option[State] = None,
-		           behaviors: List[Actor.Beh[Msg, Rsp, State]] = Nil,
+		           behaviors: List[Actor.Beh[Msg, State]] = Nil,
 		           heartbeat: Option[Actor.HeartBeatStrategy] = None,
-		           onInit: Option[MutableActor[Msg, Rsp, State] => Unit] = None,
+		           onInit: Option[MutableActor[Msg, State] => Unit] = None,
 		           useSerialDispatch: Boolean = false,
 		           executionContext: Option[ExecutionContext] = None
 		          )
-		case NewChild(child: Actor[Msg, Rsp, State])
+		case NewChild(child: Actor[Msg, State])
 		case ActorClosed(actorId: String)
-		case Register(actor: Actor[Msg, Rsp, State])
+		case Register(actor: Actor[Msg, State])
 		case Unregister(actorId: String)
 		case AskForRef(actorId: String, systemId: String = "")
-		case AskForRefAsync(sender: Actor[Msg, Rsp, State], actorId: String, systemId: String = "")
-		case Ref(ref: ActorRef[Msg, Rsp])
+		case AskForRefAsync(sender: Actor[Msg, State], actorId: String, systemId: String = "")
+		case Ref(ref: ActorRef[Msg])
 		case Requeue(actorId: String, msg: Msg, behId: String, tryNumber: Int = 0)
 	}
 
@@ -96,7 +95,7 @@ trait Actor[Msg, Rsp, State] {
 		* You may build your actor in such a way that it operates solely on the `in` and `out` streams, you can forget
 		* about them, or you can do anything in-between.
 		*/
-	def out: Stream[Rsp]
+	def out: Stream[Msg]
 
 	/**
 		* Retrieves a behavior from the actor's list of behaviors based on its unique identifier.
@@ -104,7 +103,7 @@ trait Actor[Msg, Rsp, State] {
 		* @param id The unique identifier of the behavior to retrieve.
 		* @return An `Option` containing the partial function defining the behavior, if found; otherwise, `None`.
 		*/
-	def getBehavior(id: String): Option[Beh[Msg, Rsp, State]]
+	def getBehavior(id: String): Option[Beh[Msg, State]]
 
 	/**
 		* Sends a system message to the actor, expecting a response in the form of a `CloseableFuture`.
@@ -132,12 +131,12 @@ trait Actor[Msg, Rsp, State] {
 		* @param msg the message to send to the actor.
 		* @return a `CloseableFuture` containing the response from the actor.
 		*/
-	def ask(msg: Msg, actorPath: ActorPath, behId: String): CloseableFuture[Rsp]
-	inline def ask(behId: String, msg: Msg): CloseableFuture[Rsp] = ask(msg, ActorPath.Direct, behId)
-	inline def ask(t: (String, Msg)): CloseableFuture[Rsp] = ask(t._1, t._2)
-	inline def ?(t: (String, Msg)): CloseableFuture[Rsp] = ask(t)
-	inline def ask(msg: Msg): CloseableFuture[Rsp] = ask("", msg)
-	inline def ?(msg: Msg): CloseableFuture[Rsp] = ask(msg)
+	def ask(msg: Msg, actorPath: ActorPath, behId: String): CloseableFuture[Msg]
+	inline def ask(behId: String, msg: Msg): CloseableFuture[Msg] = ask(msg, ActorPath.Direct, behId)
+	inline def ask(t: (String, Msg)): CloseableFuture[Msg] = ask(t._1, t._2)
+	inline def ?(t: (String, Msg)): CloseableFuture[Msg] = ask(t)
+	inline def ask(msg: Msg): CloseableFuture[Msg] = ask("", msg)
+	inline def ?(msg: Msg): CloseableFuture[Msg] = ask(msg)
 
 	/**
 		* Sends a system message to the actor.
@@ -148,8 +147,8 @@ trait Actor[Msg, Rsp, State] {
 		*
 		* @param msg the message to send to the actor.
 		*/
-	def bang(msg: SystemMsg): Unit
-	inline def !(msg: SystemMsg): Unit = bang(msg)
+	def tell(msg: SystemMsg): Unit
+	inline def !(msg: SystemMsg): Unit = tell(msg)
 
 	/**
 		* Sends a message to the actor without expecting a response.
@@ -163,12 +162,12 @@ trait Actor[Msg, Rsp, State] {
 		* @param behId An optional parameter for forcing the identified behavior to process the message. Leave out for regular processing.
 		* @param msg The message to be sent to the actor.
 		*/
-	def bang(msg: Msg, actorPath: ActorPath, behId: String): Unit
-	inline def bang(behId: String, msg: Msg): Unit = bang(msg, ActorPath.Direct, behId)
-	inline def bang(t: (String, Msg)): Unit = bang(t._1, t._2)
-	inline def !(t: (String, Msg)): Unit = bang(t)
-	inline def bang(msg: Msg): Unit = bang("", msg)
-	inline def !(msg: Msg): Unit = bang(msg)
+	def tell(msg: Msg, actorPath: ActorPath, behId: String): Unit
+	inline def tell(behId: String, msg: Msg): Unit = tell(msg, ActorPath.Direct, behId)
+	inline def tell(t: (String, Msg)): Unit = tell(t._1, t._2)
+	inline def !(t: (String, Msg)): Unit = tell(t)
+	inline def tell(msg: Msg): Unit = tell("", msg)
+	inline def !(msg: Msg): Unit = tell(msg)
 
 	/**
 		* Retrieves the current state of the actor
@@ -232,12 +231,12 @@ trait Actor[Msg, Rsp, State] {
 	/**
 		* Returns the parent actor of this actor, if any.
 		*/
-	def parent: Option[Actor[Msg, Rsp, State]]
+	def parent: Option[Actor[Msg, State]]
 
 	/**
 		* Returns the actor system that this actor belongs to, if any.
 		*/
-	def system: Option[ActorSystem[Msg, Rsp, State]]
+	def system: Option[ActorSystem[Msg, State]]
 }
 
 object Actor {
@@ -251,18 +250,18 @@ object Actor {
 		*
 		* @return A `Failure` instance wrapping an `IllegalStateException`: "no response".
 		*/
-	inline def FailToRespond[Rsp]: Failure[Rsp] = noResponse.asInstanceOf[Failure[Rsp]]
+	inline def FailToRespond[Msg]: Failure[Msg] = noResponse.asInstanceOf[Failure[Msg]]
 
 	/**
 		* A special type of response, indicating the incoming message was ignored. It's not necessarily an error.
 		* @return A `Success` instance wrapping `None`
 		*/
-	inline def NoResponse[Rsp]: Success[Option[Rsp]] = ignored.asInstanceOf[Success[Option[Rsp]]]
+	inline def NoResponse[Msg]: Success[Option[Msg]] = ignored.asInstanceOf[Success[Option[Msg]]]
 
 	/**
 		* A special type of failure indicating that the actor is closed and cannot process any more messages.
 		*/
-	inline def ActorIsClosed[Rsp](using ExecutionContext): CloseableFuture[Rsp] = CloseableFuture.failed[Rsp](actorIsClosed)
+	inline def ActorIsClosed[Msg](using ExecutionContext): CloseableFuture[Msg] = CloseableFuture.failed[Msg](actorIsClosed)
 
 	/**
 		* A special type of failure indicating that the actor ID is invalid
@@ -273,7 +272,7 @@ object Actor {
 		* A special type of response, indicating that an invalid actor ID was provided.
 		* @return a failed `CloseableFuture` with an `InvalidIdException`.
 		*/
-	inline def invalidActorId[Rsp](actorId: String)(using ExecutionContext): CloseableFuture[Rsp] =
+	inline def invalidActorId[Msg](actorId: String)(using ExecutionContext): CloseableFuture[Msg] =
 		CloseableFuture.failed(InvalidIdException(actorId))
 
 	/**
@@ -285,8 +284,8 @@ object Actor {
 		* A special type of response, indicating that the received messages was not handled (probably not recognized).
 		* * @return a failed `CloseableFuture` with an `UnhandledMsgException`.
 		*/
-	inline def unhandledMsg[Msg, Rsp](msg: Msg)(using ExecutionContext): CloseableFuture[Rsp] =
-		CloseableFuture.failed(UnhandledMsgException(msg.toString))
+	inline def unhandledMsg[Msg](error: String)(using ExecutionContext): CloseableFuture[Msg] =
+		CloseableFuture.failed(UnhandledMsgException(error))
 
 	/**
 		* A special type of failure indicating that an invalid path.
@@ -297,13 +296,14 @@ object Actor {
 		* A special type of response, indicating that the provided actor path is invalid.
 		* * @return a failed `CloseableFuture` with an `WrongPathException`.
 		*/
-	inline def wrongPath[Rsp](path: ActorPath)(using ExecutionContext): CloseableFuture[Rsp] =
+	inline def wrongPath[Msg](path: ActorPath)(using ExecutionContext): CloseableFuture[Msg] =
 		CloseableFuture.failed(WrongPathException(path))
 
 	// The type of a custom behavior: a partial function that takes a message and an actor and returns an optional response.
-	type PF[Msg, Rsp, State] = PartialFunction[(Msg, MutableActor[Msg, Rsp, State]), Option[Rsp]]
+	type PF[Msg, State] = PartialFunction[(Msg, MutableActor[Msg, State]), Option[Msg]]
+	
 	// A shorthand for behavior tuples
-	type Beh[Msg, Rsp, State] = (id: String, pf: PF[Msg, Rsp, State])
+	type Beh[Msg, State] = (id: String, pf: PF[Msg, State])
 
 	/**
 		* Represents a strategy for configuring the heartbeat of an actor.
@@ -339,8 +339,8 @@ object Actor {
 		* @param beat     The heartbeat strategy used to configure the actor's responsiveness.
 		* @return An initialized actor instance.
 		*/
-	def apply[Msg, Rsp, State](state: State, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy)
-	                          (using ExecutionContext): Actor[Msg, Rsp, State] =
+	def apply[Msg, State](state: State, behavior: Beh[Msg, State], beat: HeartBeatStrategy)
+	                          (using ExecutionContext): Actor[Msg, State] =
 		new ActorImpl(IdGenerator.generate(), state, beat).tap { actor =>
 			actor.addBehavior(behavior)
 			actor.initialize()
@@ -358,7 +358,7 @@ object Actor {
 		* @param beat     The heartbeat strategy used to configure the actor's responsiveness.
 		* @return An initialized serial actor instance.
 		*/
-	inline def serial[Msg, Rsp, State](state: State, behavior: Beh[Msg, Rsp, State], beat: HeartBeatStrategy): Actor[Msg, Rsp, State] =
+	inline def serial[Msg, State](state: State, behavior: Beh[Msg, State], beat: HeartBeatStrategy): Actor[Msg, State] =
 		apply(state, behavior, beat)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
 
 	/**
@@ -373,8 +373,8 @@ object Actor {
 		* @param beat     The heartbeat strategy used to configure the actor's responsiveness.
 		* @return An initialized serial actor instance.
 		*/
-	inline def apply[Msg, Rsp](behavior: Beh[Msg, Rsp, Unit], beat: HeartBeatStrategy)
-	                          (using ExecutionContext): Actor[Msg, Rsp, Unit] =
+	inline def apply[Msg](behavior: Beh[Msg, Unit], beat: HeartBeatStrategy)
+	                          (using ExecutionContext): Actor[Msg, Unit] =
 		apply((), behavior, beat)
 
 	/**
@@ -388,7 +388,7 @@ object Actor {
 		* @param beat     The heartbeat strategy used to configure the actor's responsiveness.
 		* @return An initialized serial actor instance.
 		*/
-	inline def serial[Msg, Rsp](behavior: Beh[Msg, Rsp, Unit], beat: HeartBeatStrategy): Actor[Msg, Rsp, Unit] =
+	inline def serial[Msg](behavior: Beh[Msg, Unit], beat: HeartBeatStrategy): Actor[Msg, Unit] =
 		serial((), behavior, beat)
 
 
@@ -403,7 +403,7 @@ object Actor {
 		* @param behavior The behavior of the actor, responsible for handling incoming messages.
 		* @return An initialized serial actor instance.
 		*/
-	inline def apply[Msg, Rsp](behavior: Beh[Msg, Rsp, Unit])(using ExecutionContext): Actor[Msg, Rsp, Unit] =
+	inline def apply[Msg](behavior: Beh[Msg, Unit])(using ExecutionContext): Actor[Msg, Unit] =
 		apply((), behavior, defBeat)
 
 
@@ -417,5 +417,5 @@ object Actor {
 		* @param behavior The behavior of the actor, responsible for handling incoming messages.
 		* @return An initialized serial actor instance.
 		*/
-	inline def serial[Msg, Rsp](behavior: Beh[Msg, Rsp, Unit]): Actor[Msg, Rsp, Unit] = serial((), behavior, defBeat)
+	inline def serial[Msg](behavior: Beh[Msg, Unit]): Actor[Msg, Unit] = serial((), behavior, defBeat)
 }

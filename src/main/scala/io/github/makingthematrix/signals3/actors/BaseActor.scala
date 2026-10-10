@@ -15,10 +15,10 @@ import scala.util.{Failure, Success, Try}
 	*/
 abstract class BaseActor[Msg](override val id: String,
                               override protected val heartbeat: HeartBeatStrategy = Actor.defBeat,
-                              override val parent: Option[Actor[Msg, Msg, Unit]] = None,
-                              override val system: Option[ActorSystem[Msg, Msg, Unit]] = None
+                              override val parent: Option[Actor[Msg, Unit]] = None,
+                              override val system: Option[ActorSystem[Msg, Unit]] = None
                              )(using ExecutionContext)
-  extends ActorImpl[Msg, Msg, Unit](id, (), heartbeat, parent, system) {
+  extends ActorImpl[Msg, Unit](id, (), heartbeat, parent, system) {
 	inline protected def reply(msg: Msg): Try[Option[Msg]] = Success(Some(msg))
 	inline protected def noResponse: Try[Option[Msg]] = Actor.NoResponse[Msg]
 	inline protected def fail(error: String): Try[Option[Msg]] = Failure(new IllegalStateException(error))

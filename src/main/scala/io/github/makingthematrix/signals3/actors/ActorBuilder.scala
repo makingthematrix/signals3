@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.DispatchQueue
+import io.github.makingthematrix.signals3.{Closeable, DispatchQueue, Pausable}
 import io.github.makingthematrix.signals3.actors.Actor.{Beh, HeartBeatStrategy, PF, defBeat}
 
 import scala.concurrent.ExecutionContext
@@ -16,7 +16,6 @@ import scala.concurrent.ExecutionContext
   * `withIdIf`, `withStateIf`, etc., which apply settings based on boolean predicates.
   *
   * @tparam Msg   The type of incoming messages the actor will process
-  * @tparam Rsp   The type of responses the actor will produce
   * @tparam State The type of internal state maintained by the actor
   * @param id                The unique identifier for the actor (defaults to auto-generated)
   * @param state             The initial state of the actor (must be set before building)
@@ -28,16 +27,16 @@ import scala.concurrent.ExecutionContext
   * @param parent            Optional parent actor in the actor hierarchy
   * @param system            Optional actor system this actor belongs to
   */
-final class ActorBuilder[Msg, Rsp, State] (
-  private val id: String = "",
-  private val state: Option[State] = None,
-  private val behaviors: List[Beh[Msg, Rsp, State]] = Nil,
+final class ActorBuilder[Msg, State] (
+  private val id: String,
+  private val state: State,
+  private val behaviors: List[Beh[Msg, State]] = Nil,
   private val heartbeat: HeartBeatStrategy = defBeat,
-  private val onInit: Option[MutableActor[Msg, Rsp, State] => Unit] = None,
+  private val onInit: Option[MutableActor[Msg, State] => Unit] = None,
   private val useSerialDispatch: Boolean = false,
   private val executionContext: Option[ExecutionContext] = None,
-  private val parent: Option[Actor[Msg, Rsp, State]] = None,
-  private val system: Option[ActorSystem[Msg, Rsp, State]] = None
+  private val parent: Option[Actor[Msg, State]] = None,
+  private val system: Option[ActorSystem[Msg, State]] = None
 ) {
 
   /**
@@ -46,13 +45,13 @@ final class ActorBuilder[Msg, Rsp, State] (
     * @param newId The new id
     * @return A new builder with the new id
     */
-  inline def withId(newId: String): ActorBuilder[Msg, Rsp, State] =
+  inline def withId(newId: String): ActorBuilder[Msg, State] =
     new ActorBuilder(newId, state, behaviors, heartbeat, onInit, useSerialDispatch, executionContext, parent, system)
     
-  inline def withIdIf(p: => Boolean, newId: => String): ActorBuilder[Msg, Rsp, State] =
+  inline def withIdIf(p: => Boolean, newId: => String): ActorBuilder[Msg, State] =
     if (p) withId(newId) else this
 
-  inline def withIdIf(p: => Boolean, newId: => String, orElse: => String): ActorBuilder[Msg, Rsp, State] =
+  inline def withIdIf(p: => Boolean, newId: => String, orElse: => String): ActorBuilder[Msg, State] =
     withId(if (p) newId else orElse)
   /**
    * Sets the initial state of the actor.
@@ -60,13 +59,13 @@ final class ActorBuilder[Msg, Rsp, State] (
    * @param newState The new initial state
    * @return A new builder with the updated state
    */
-  inline def withState(newState: State): ActorBuilder[Msg, Rsp, State] =
-    new ActorBuilder(id, Option(newState), behaviors, heartbeat, onInit, useSerialDispatch, executionContext, parent, system)
+  inline def withState(newState: State): ActorBuilder[Msg, State] =
+    new ActorBuilder(id, newState, behaviors, heartbeat, onInit, useSerialDispatch, executionContext, parent, system)
 
-  inline def withStateIf(p: => Boolean, newState: => State): ActorBuilder[Msg, Rsp, State] =
+  inline def withStateIf(p: => Boolean, newState: => State): ActorBuilder[Msg, State] =
     if (p) withState(newState) else this
 
-  inline def withStateIf(p: => Boolean, newState: => State, orElse: => State): ActorBuilder[Msg, Rsp, State] =
+  inline def withStateIf(p: => Boolean, newState: => State, orElse: => State): ActorBuilder[Msg, State] =
     withState(if (p) newState else orElse)
 
   /**
@@ -75,13 +74,13 @@ final class ActorBuilder[Msg, Rsp, State] (
    * @param pf The partial function defining the behavior
    * @return A new builder with the added behavior
    */
-  inline def withBehaviorPF(pf: PF[Msg, Rsp, State]): ActorBuilder[Msg, Rsp, State] =
+  inline def withBehaviorPF(pf: PF[Msg, State]): ActorBuilder[Msg, State] =
     withBehavior(IdGenerator.generate("beh:"), pf)
 
-  inline def withBehaviorPFIf(p: => Boolean, pf: => PF[Msg, Rsp, State]): ActorBuilder[Msg, Rsp, State] =
+  inline def withBehaviorPFIf(p: => Boolean, pf: => PF[Msg, State]): ActorBuilder[Msg, State] =
     if (p) withBehaviorPF(pf) else this
 
-  inline def withBehaviorPFIf(p: => Boolean, pf: => PF[Msg, Rsp, State], orElse: => PF[Msg, Rsp, State]): ActorBuilder[Msg, Rsp, State] =
+  inline def withBehaviorPFIf(p: => Boolean, pf: => PF[Msg, State], orElse: => PF[Msg, State]): ActorBuilder[Msg, State] =
     withBehaviorPF(if (p) pf else orElse)
 
   /**
@@ -90,13 +89,13 @@ final class ActorBuilder[Msg, Rsp, State] (
    * @param behavior The behavior tuple (id, partial function)
    * @return A new builder with the added behavior
    */
-  inline def withBehavior(behavior: Beh[Msg, Rsp, State]): ActorBuilder[Msg, Rsp, State] =
+  inline def withBehavior(behavior: Beh[Msg, State]): ActorBuilder[Msg, State] =
     new ActorBuilder(id, state, behavior :: behaviors, heartbeat, onInit, useSerialDispatch, executionContext, parent, system)
 
-  inline def withBehaviorIf(p: => Boolean, behavior: => Beh[Msg, Rsp, State]): ActorBuilder[Msg, Rsp, State] =
+  inline def withBehaviorIf(p: => Boolean, behavior: => Beh[Msg, State]): ActorBuilder[Msg, State] =
     if (p) withBehavior(behavior) else this
 
-  inline def withBehaviorIf(p: => Boolean, behavior: => Beh[Msg, Rsp, State], orElse: => Beh[Msg, Rsp, State]): ActorBuilder[Msg, Rsp, State] =
+  inline def withBehaviorIf(p: => Boolean, behavior: => Beh[Msg, State], orElse: => Beh[Msg, State]): ActorBuilder[Msg, State] =
     withBehavior(if (p) behavior else orElse)
 
   /**
@@ -105,13 +104,13 @@ final class ActorBuilder[Msg, Rsp, State] (
    * @param newBehaviors A collection of behavior tuples to add
    * @return A new builder with the added behaviors
    */
-  inline def withBehaviors(newBehaviors: Iterable[Beh[Msg, Rsp, State]]): ActorBuilder[Msg, Rsp, State] =
+  inline def withBehaviors(newBehaviors: Iterable[Beh[Msg, State]]): ActorBuilder[Msg, State] =
     new ActorBuilder(id, state, newBehaviors.toList ::: behaviors, heartbeat, onInit, useSerialDispatch, executionContext, parent, system)
 
-  inline def withBehaviorsIf(p: => Boolean, newBehaviors: => Iterable[Beh[Msg, Rsp, State]]): ActorBuilder[Msg, Rsp, State] =
+  inline def withBehaviorsIf(p: => Boolean, newBehaviors: => Iterable[Beh[Msg, State]]): ActorBuilder[Msg, State] =
     if (p) withBehaviors(newBehaviors) else this
 
-  inline def withBehaviorsIf(p: => Boolean, newBehaviors: => Iterable[Beh[Msg, Rsp, State]], orElse: => Iterable[Beh[Msg, Rsp, State]]): ActorBuilder[Msg, Rsp, State] =
+  inline def withBehaviorsIf(p: => Boolean, newBehaviors: => Iterable[Beh[Msg, State]], orElse: => Iterable[Beh[Msg, State]]): ActorBuilder[Msg, State] =
     withBehaviors(if (p) newBehaviors else orElse)
 
   /**
@@ -120,13 +119,13 @@ final class ActorBuilder[Msg, Rsp, State] (
    * @param newBehaviors A collection of partial functions to add
    * @return A new builder with the added behaviors
    */
-  inline def withBehaviorPFs(newBehaviors: Iterable[PF[Msg, Rsp, State]]): ActorBuilder[Msg, Rsp, State] =
+  inline def withBehaviorPFs(newBehaviors: Iterable[PF[Msg, State]]): ActorBuilder[Msg, State] =
     withBehaviors(newBehaviors.map(pf => IdGenerator.generate("beh:") -> pf))
 
-  inline def withBehaviorPFsIf(p: => Boolean, newBehaviors: => Iterable[PF[Msg, Rsp, State]]): ActorBuilder[Msg, Rsp, State] =
+  inline def withBehaviorPFsIf(p: => Boolean, newBehaviors: => Iterable[PF[Msg, State]]): ActorBuilder[Msg, State] =
     if (p) withBehaviorPFs(newBehaviors) else this
 
-  inline def withBehaviorPFsIf(p: => Boolean, newBehaviors: => Iterable[PF[Msg, Rsp, State]], orElse: => Iterable[PF[Msg, Rsp, State]]): ActorBuilder[Msg, Rsp, State] =
+  inline def withBehaviorPFsIf(p: => Boolean, newBehaviors: => Iterable[PF[Msg, State]], orElse: => Iterable[PF[Msg, State]]): ActorBuilder[Msg, State] =
     withBehaviorPFs(if (p) newBehaviors else orElse)
 
   /**
@@ -135,13 +134,13 @@ final class ActorBuilder[Msg, Rsp, State] (
    * @param newHeartbeat The heartbeat strategy to use
    * @return A new builder with the updated heartbeat strategy
    */
-  inline def withHeartbeat(newHeartbeat: HeartBeatStrategy): ActorBuilder[Msg, Rsp, State] =
+  inline def withHeartbeat(newHeartbeat: HeartBeatStrategy): ActorBuilder[Msg, State] =
     new ActorBuilder(id, state, behaviors, newHeartbeat, onInit, useSerialDispatch, executionContext, parent, system)
 
-  inline def withHeartbeatIf(p: => Boolean, newHeartbeat: => HeartBeatStrategy): ActorBuilder[Msg, Rsp, State] =
+  inline def withHeartbeatIf(p: => Boolean, newHeartbeat: => HeartBeatStrategy): ActorBuilder[Msg, State] =
     if (p) withHeartbeat(newHeartbeat) else this
 
-  inline def withHeartbeatIf(p: => Boolean, newHeartbeat: => HeartBeatStrategy, orElse: => HeartBeatStrategy): ActorBuilder[Msg, Rsp, State] =
+  inline def withHeartbeatIf(p: => Boolean, newHeartbeat: => HeartBeatStrategy, orElse: => HeartBeatStrategy): ActorBuilder[Msg, State] =
     withHeartbeat(if (p) newHeartbeat else orElse)
 
   /**
@@ -150,7 +149,7 @@ final class ActorBuilder[Msg, Rsp, State] (
    * @param ms The interval in milliseconds
    * @return A new builder with the linear heartbeat strategy
    */
-  inline def withLinearHeartbeat(ms: Long): ActorBuilder[Msg, Rsp, State] =
+  inline def withLinearHeartbeat(ms: Long): ActorBuilder[Msg, State] =
     withHeartbeat(HeartBeatStrategy.Linear(ms))
 
   /**
@@ -164,7 +163,7 @@ final class ActorBuilder[Msg, Rsp, State] (
    * @param maxMs  The maximum interval in milliseconds
    * @return A new builder with the agitated heartbeat strategy
    */
-  inline def withAgitatedHeartbeat(minMs: Long, coeff: Double, maxMs: Long): ActorBuilder[Msg, Rsp, State] =
+  inline def withAgitatedHeartbeat(minMs: Long, coeff: Double, maxMs: Long): ActorBuilder[Msg, State] =
     withHeartbeat(HeartBeatStrategy.Agitated(minMs, coeff, maxMs))
   
   /**
@@ -176,7 +175,7 @@ final class ActorBuilder[Msg, Rsp, State] (
    * @param maxMsgs  The maximum number of messages to queue before triggering
    * @return A new builder with the reactive heartbeat strategy
    */
-  inline def withReactiveHeartbeat(maxMs: Long, maxMsgs: Int): ActorBuilder[Msg, Rsp, State] =
+  inline def withReactiveHeartbeat(maxMs: Long, maxMsgs: Int): ActorBuilder[Msg, State] =
     withHeartbeat(HeartBeatStrategy.Reactive(maxMs, maxMsgs))
 
   /**
@@ -188,13 +187,13 @@ final class ActorBuilder[Msg, Rsp, State] (
    * @param callback The function to call on initialization
    * @return A new builder with the initialization callback
    */
-  inline def withOnInit(callback: MutableActor[Msg, Rsp, State] => Unit): ActorBuilder[Msg, Rsp, State] =
+  inline def withOnInit(callback: MutableActor[Msg, State] => Unit): ActorBuilder[Msg, State] =
     new ActorBuilder(id, state, behaviors, heartbeat, Some(callback), useSerialDispatch, executionContext, parent, system)
 
-  inline def withOnInitIf(p: => Boolean, callback: => (MutableActor[Msg, Rsp, State] => Unit)): ActorBuilder[Msg, Rsp, State] =
+  inline def withOnInitIf(p: => Boolean, callback: => (MutableActor[Msg, State] => Unit)): ActorBuilder[Msg, State] =
     if (p) withOnInit(callback) else this
 
-  inline def withOnInitIf(p: => Boolean, callback: => (MutableActor[Msg, Rsp, State] => Unit), orElse: => (MutableActor[Msg, Rsp, State] => Unit)): ActorBuilder[Msg, Rsp, State] =
+  inline def withOnInitIf(p: => Boolean, callback: => (MutableActor[Msg, State] => Unit), orElse: => (MutableActor[Msg, State] => Unit)): ActorBuilder[Msg, State] =
     withOnInit(if (p) callback else orElse)
     
   /**
@@ -204,7 +203,7 @@ final class ActorBuilder[Msg, Rsp, State] (
    *
    * @return A new builder configured for serial dispatch
    */
-  inline def withSerialDispatch(): ActorBuilder[Msg, Rsp, State] =
+  inline def withSerialDispatch(): ActorBuilder[Msg, State] =
     new ActorBuilder(id, state, behaviors, heartbeat, onInit, useSerialDispatch = true, executionContext = None, parent, system)
 
   /**
@@ -215,7 +214,7 @@ final class ActorBuilder[Msg, Rsp, State] (
    * @param p The condition to check before configuring serial dispatch
    * @return A new builder configured for serial dispatch if the condition is true, otherwise the current builder
    */
-  inline def withSerialDispatchIf(p: => Boolean): ActorBuilder[Msg, Rsp, State] =
+  inline def withSerialDispatchIf(p: => Boolean): ActorBuilder[Msg, State] =
     if (p) withSerialDispatch() else this
 
   /**
@@ -226,55 +225,54 @@ final class ActorBuilder[Msg, Rsp, State] (
     * @param ec The execution context to use for parallel dispatch
     * @return A new builder configured for parallel dispatch with the specified execution context
     */
-  inline def withParallelDispatch(ec: ExecutionContext): ActorBuilder[Msg, Rsp, State] =
+  inline def withParallelDispatch(ec: ExecutionContext): ActorBuilder[Msg, State] =
     new ActorBuilder(id, state, behaviors, heartbeat, onInit, useSerialDispatch = false, executionContext = Some(ec), parent, system)
 
-  inline def withParallelDispatchIf(p: => Boolean, ec: ExecutionContext): ActorBuilder[Msg, Rsp, State] =
+  inline def withParallelDispatchIf(p: => Boolean, ec: ExecutionContext): ActorBuilder[Msg, State] =
     if (p) withParallelDispatch(ec) else this
 
-  inline def withParallelDispatchIf(p: => Boolean, ec: ExecutionContext, orElse: => ExecutionContext): ActorBuilder[Msg, Rsp, State] =
+  inline def withParallelDispatchIf(p: => Boolean, ec: ExecutionContext, orElse: => ExecutionContext): ActorBuilder[Msg, State] =
     withParallelDispatch(if (p) ec else orElse)
 
-  inline def withParent(parent: Actor[Msg, Rsp, State]): ActorBuilder[Msg, Rsp, State] =
+  inline def withParent(parent: Actor[Msg, State]): ActorBuilder[Msg, State] =
     new ActorBuilder(id, state, behaviors, heartbeat, onInit, useSerialDispatch, executionContext, Some(parent), system)
 
-  inline def withParentIf(p: => Boolean, parent: => Actor[Msg, Rsp, State]): ActorBuilder[Msg, Rsp, State] =
+  inline def withParentIf(p: => Boolean, parent: => Actor[Msg, State]): ActorBuilder[Msg, State] =
     if (p) withParent(parent) else this
 
-  inline def withParentIf(p: => Boolean, parent: => Actor[Msg, Rsp, State], orElse: => Actor[Msg, Rsp, State]): ActorBuilder[Msg, Rsp, State] =
+  inline def withParentIf(p: => Boolean, parent: => Actor[Msg, State], orElse: => Actor[Msg, State]): ActorBuilder[Msg, State] =
     withParent(if (p) parent else orElse)
 
-  inline def withNoParent(): ActorBuilder[Msg, Rsp, State] =
+  inline def withNoParent(): ActorBuilder[Msg, State] =
     new ActorBuilder(id, state, behaviors, heartbeat, onInit, useSerialDispatch, executionContext, None, system)
 
-  inline def withNoParentIf(p: => Boolean): ActorBuilder[Msg, Rsp, State] = 
+  inline def withNoParentIf(p: => Boolean): ActorBuilder[Msg, State] =
     if (p) withNoParent() else this
 
-  inline def withSystem(system: ActorSystem[Msg, Rsp, State]): ActorBuilder[Msg, Rsp, State] =
+  inline def withSystem(system: ActorSystem[Msg, State]): ActorBuilder[Msg, State] =
     new ActorBuilder(id, state, behaviors, heartbeat, onInit, useSerialDispatch, executionContext, parent, Some(system))
 
-  inline def withSystemIf(p: => Boolean, system: => ActorSystem[Msg, Rsp, State]): ActorBuilder[Msg, Rsp, State] =
+  inline def withSystemIf(p: => Boolean, system: => ActorSystem[Msg, State]): ActorBuilder[Msg, State] =
     if (p) withSystem(system) else this
 
-  inline def withSystemIf(p: => Boolean, system: => ActorSystem[Msg, Rsp, State], orElse: => ActorSystem[Msg, Rsp, State]): ActorBuilder[Msg, Rsp, State] =
+  inline def withSystemIf(p: => Boolean, system: => ActorSystem[Msg, State], orElse: => ActorSystem[Msg, State]): ActorBuilder[Msg, State] =
     withSystem(if (p) system else orElse)
 
-  inline def withNoSystem(): ActorBuilder[Msg, Rsp, State] =
+  inline def withNoSystem(): ActorBuilder[Msg, State] =
     new ActorBuilder(id, state, behaviors, heartbeat, onInit, useSerialDispatch, executionContext, parent, None)
 
-  inline def withNoSystemIf(p: => Boolean): ActorBuilder[Msg, Rsp, State] =
+  inline def withNoSystemIf(p: => Boolean): ActorBuilder[Msg, State] =
     if (p) withNoSystem() else this
     
-  def build()(using ec: ExecutionContext): Actor[Msg, Rsp, State] = { 
-    assert(state.nonEmpty)
+  def build()(using ec: ExecutionContext): Actor[Msg, State] & Closeable & Pausable = {
     if (useSerialDispatch)
-      buildActor(state.get, DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
+      buildActor(state, DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
     else
-      buildActor(state.get, executionContext.getOrElse(ec))
+      buildActor(state, executionContext.getOrElse(ec))
   }
 
-  private def buildActor(state: State, ec: ExecutionContext): Actor[Msg, Rsp, State] = {
-    val actor = new ActorImpl[Msg, Rsp, State](id, state, heartbeat, parent, system)(using ec)
+  private def buildActor(state: State, ec: ExecutionContext): Actor[Msg, State] & Closeable & Pausable = {
+    val actor = new ActorImpl[Msg, State](id, state, heartbeat, parent, system)(using ec)
     onInit.foreach(actor.onInit)
     actor.addBehaviors(behaviors)
     actor.initialize()
@@ -286,22 +284,17 @@ final class ActorBuilder[Msg, Rsp, State] (
  * Companion object for ActorBuilder with factory methods and pre-defined strategies.
  */
 object ActorBuilder {
-
+  
   /**
-   * Creates a new ActorBuilder with the specified initial state.
-   *
-   * @tparam Msg   The type of incoming messages
-   * @tparam Rsp   The type of responses
-   * @tparam State The type of internal state
-   * @return A new ActorBuilder instance
-   */
-  def apply[Msg, Rsp, State](): ActorBuilder[Msg, Rsp, State] = new ActorBuilder(IdGenerator.generate())
-
-  def apply[Msg, Rsp, State](id: String, state: State): ActorBuilder[Msg, Rsp, State] =
-    new ActorBuilder(id = id, state = Some(state))
-
-  inline def apply[Msg, Rsp, State](state: State): ActorBuilder[Msg, Rsp, State] =
-    apply(id = IdGenerator.generate(), state = state)
+    * Creates a new ActorBuilder with the specified initial state.
+    *
+    * @tparam Msg   The type of incoming messages
+    * @tparam State The type of internal state
+    * @return A new ActorBuilder instance
+    */
+  def apply[Msg, State](id: String, state: State): ActorBuilder[Msg, State] = new ActorBuilder(id = id, state = state)
+  inline def apply[Msg, State](state: State): ActorBuilder[Msg, State] = apply(id = IdGenerator.generate(), state = state)
+  inline def apply[Msg](): ActorBuilder[Msg, Unit] = ActorBuilder[Msg, Unit](state = ())
 
   // Pre-defined heartbeat strategies for convenience
 

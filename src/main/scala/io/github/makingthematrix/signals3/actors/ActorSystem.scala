@@ -10,16 +10,16 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success}
 import scala.util.chaining.scalaUtilChainingOps
 
-final class ActorSystem[Msg, Rsp, State] private(
+final class ActorSystem[Msg, State] private(
   override val id: String,
   state: State,
   override protected val heartbeat: HeartBeatStrategy
-)(using ExecutionContext) extends ActorImpl[Msg, Rsp, State](id, state, heartbeat) with RemoteSystem[Msg, Rsp] {
+)(using ExecutionContext) extends ActorImpl[Msg, State](id, state, heartbeat) with RemoteSystem[Msg] {
 	import SystemMsg.*
 	import ActorPath.*
 
-	@volatile private var actorRefs: Map[String, ActorRef[Msg, Rsp]] = Map.empty
-	@volatile private var systems: Map[String, RemoteSystem[Msg, Rsp]] = Map.empty
+	@volatile private var actorRefs: Map[String, ActorRef[Msg]] = Map.empty
+	@volatile private var systems: Map[String, RemoteSystem[Msg]] = Map.empty
 
 	override protected def processSysEntry(msg: SysEntry): Unit = msg match {
 		case (Register(actor), p) =>
@@ -57,7 +57,7 @@ final class ActorSystem[Msg, Rsp, State] private(
 				case None => respond(p, invalidSystemId(systemId).future)
 				case Some(system) =>
 					respond(p, (system ? RemoteSystemMsg.AskForRef(actorId)).flatMap {
-						case RemoteSystemMsg.Ref(ref) => CloseableFuture.successful(Ref(ref.asInstanceOf[ActorRef[Msg, Rsp]]))
+						case RemoteSystemMsg.Ref(ref) => CloseableFuture.successful(Ref(ref.asInstanceOf[ActorRef[Msg]]))
 						case _ => invalidActorId(actorId) // Handle unexpected responses
 					}.future)
 			}
@@ -68,10 +68,10 @@ final class ActorSystem[Msg, Rsp, State] private(
 				case Some(system) =>
 					(system ? RemoteSystemMsg.AskForRef(actorId)).onComplete {
 						case Success(RemoteSystemMsg.Ref(ref)) =>
-							sender ! sender.SystemMsg.Ref(ref.asInstanceOf[ActorRef[Msg, Rsp]])
+							sender ! sender.SystemMsg.Ref(ref.asInstanceOf[ActorRef[Msg]])
 							respond(p, Done)
 						case Success(msg) =>
-							respond(p, unhandledMsg(msg).future) // the only successful response should be RemoteSystemMsg.Ref
+							respond(p, unhandledMsg[SystemMsg](msg.toString).future) // the only successful response should be RemoteSystemMsg.Ref
 						case Failure(_: Actor.InvalidIdException) =>
 							respond(p, invalidActorId(actorId).future)
 						case Failure(t) =>
@@ -84,7 +84,7 @@ final class ActorSystem[Msg, Rsp, State] private(
 
 	override protected def spawn(data: Spawn): SystemMsg =
 		if (children.contains(data.actorId)) SystemMsg.InvalidId else {
-			val b1 = ActorBuilder[Msg, Rsp, State](data.state.getOrElse(this.state))
+			val b1 = ActorBuilder[Msg, State](data.state.getOrElse(this.state))
 				.withIdIf(data.actorId.nonEmpty, data.actorId)
 				.withBehaviorsIf(data.behaviors.nonEmpty, data.behaviors, this.behaviors)
 				.withHeartbeat(data.heartbeat.getOrElse(this.heartbeat))
@@ -98,7 +98,7 @@ final class ActorSystem[Msg, Rsp, State] private(
 			SystemMsg.NewChild(child)
 		}
 
-	override def bang(msg: Msg, path: ActorPath, behId: String): Unit = path match {
+	override def tell(msg: Msg, path: ActorPath, behId: String): Unit = path match {
 		case Direct                => msgStream ! (msg, None, behId)
 		case Local(`id`)           => msgStream ! (msg, None, behId)
 		case Remote("", `id`)      => msgStream ! (msg, None, behId)
@@ -110,8 +110,8 @@ final class ActorSystem[Msg, Rsp, State] private(
 		case _ => // invalid system or actor id
 	}
 
-	override def ask(msg: Msg, path: ActorPath, behId: String): CloseableFuture[Rsp] = {
-		inline def sendToStream() = CloseableFuture.from(Promise[Rsp]().tap { p => msgStream ! (msg, Some(p), behId) })
+	override def ask(msg: Msg, path: ActorPath, behId: String): CloseableFuture[Msg] = {
+		inline def sendToStream() = CloseableFuture.from(Promise[Msg]().tap { p => msgStream ! (msg, Some(p), behId) })
 		path match {
 			case Direct                => sendToStream()
 			case Local(`id`)           => sendToStream()
@@ -141,7 +141,7 @@ final class ActorSystem[Msg, Rsp, State] private(
 			case RemoteSystemMsg.SystemClosed(systemId) => unregister(systemId)
 			case RemoteSystemMsg.UnregisterSystem(systemId) => unregister(systemId)
 			case RemoteSystemMsg.RegisterSystem(system) =>
-				systems += (system.id -> system.asInstanceOf[RemoteSystem[Msg, Rsp]])
+				systems += (system.id -> system.asInstanceOf[RemoteSystem[Msg]])
 				CloseableFuture.successful(RemoteSystemMsg.Done)
 			case RemoteSystemMsg.AskForRef(actorId) =>
 				(this ? AskForRef(actorId)).flatMap {
@@ -152,10 +152,10 @@ final class ActorSystem[Msg, Rsp, State] private(
 		}
 	}
 
-	override def bang(msg: RemoteSystem.RemoteSystemMsg): Unit = msg match {
+	override def tell(msg: RemoteSystem.RemoteSystemMsg): Unit = msg match {
 		case RemoteSystemMsg.SystemClosed(systemId)     => systems -= systemId
 		case RemoteSystemMsg.UnregisterSystem(systemId) => systems -= systemId
-		case RemoteSystemMsg.RegisterSystem(system)     => systems += (system.id -> system.asInstanceOf[RemoteSystem[Msg, Rsp]])
+		case RemoteSystemMsg.RegisterSystem(system)     => systems += (system.id -> system.asInstanceOf[RemoteSystem[Msg]])
 		case _ =>
 	}
 }
@@ -163,14 +163,14 @@ final class ActorSystem[Msg, Rsp, State] private(
 object ActorSystem {
 	final case class InvalidSystemIdException(systemId: String) extends IllegalArgumentException(s"Invalid system id: $systemId")
 
-	inline def invalidSystemId[Rsp](systemId: String)(using ExecutionContext): CloseableFuture[Rsp] =
+	inline def invalidSystemId[Msg](systemId: String)(using ExecutionContext): CloseableFuture[Msg] =
 		CloseableFuture.failed(InvalidSystemIdException(systemId))
 
-	def apply[Msg, Rsp, State](id: String, state: State, heartbeat: HeartBeatStrategy)(using ExecutionContext): ActorSystem[Msg, Rsp, State] = {
+	def apply[Msg, State](id: String, state: State, heartbeat: HeartBeatStrategy)(using ExecutionContext): ActorSystem[Msg, State] = {
 		assert(id != "")
 		new ActorSystem(id, state, heartbeat).tap { _.initialize() }
 	}
 
-	inline def apply[Msg, Rsp, State](state: State, heartbeat: HeartBeatStrategy)(using ExecutionContext): ActorSystem[Msg, Rsp, State] =
+	inline def apply[Msg, State](state: State, heartbeat: HeartBeatStrategy)(using ExecutionContext): ActorSystem[Msg, State] =
 		apply(IdGenerator.generate("system"), state, heartbeat)
 }
