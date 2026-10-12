@@ -3,9 +3,9 @@ package io.github.makingthematrix.signals3.actors
 import io.github.makingthematrix.signals3.CloseableFuture
 import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, invalidActorId, unhandledMsg}
 import io.github.makingthematrix.signals3.actors.ActorSystem.invalidSystemId
-import io.github.makingthematrix.signals3.actors.SystemMsg.*
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.reflect.TypeTest
 import scala.util.{Failure, Success}
 import scala.util.chaining.scalaUtilChainingOps
 
@@ -15,6 +15,7 @@ final class ActorSystem[Msg, State] private(
   override protected val heartbeat: HeartBeatStrategy
 )(using ExecutionContext) extends ActorImpl[Msg, State](id, state, heartbeat) with RemoteSystem[Msg] {
 	import ActorPath.*
+	import SystemMsg.*
 
 	@volatile private var actorRefs: Map[String, ActorRef[Msg]] = Map.empty
 	@volatile private var systems: Map[String, RemoteSystem[Msg]] = Map.empty
@@ -23,6 +24,12 @@ final class ActorSystem[Msg, State] private(
 		systems -= systemId
 		CloseableFuture.successful(Done)
 	}
+
+	// As in `ActorImpl`, `SystemMsg` cases with type parameters are matched through trusted `TypeTest`
+	// instances created by `SystemMsg.trusted` - the type arguments are erased at runtime, so the tests
+	// verify only the runtime class of the message and take the type arguments on trust.
+	private given RegisterT: TypeTest[SystemMsg, Register[Msg, State]] = trusted[SystemMsg, Register[Msg, State]]
+	private given RequeueT: TypeTest[SystemMsg, Requeue[Msg]] = trusted[SystemMsg, Requeue[Msg]]
 
 	override protected def processSysEntry(msg: SysEntry): Unit = msg match {
 		case (SystemClosed(systemId), p) =>
@@ -34,9 +41,9 @@ final class ActorSystem[Msg, State] private(
 		case (RegisterSystem(system), p) =>
 			systems += (system.id -> system.asInstanceOf[RemoteSystem[Msg]])
 			respond(p, Done)
-		case (Register[Msg, State](actor), p) =>
-			val ref = LocalActorRef(actor)
-			actorRefs += (actor.id -> ref)
+		case (RegisterT(reg), p) =>
+			val ref = LocalActorRef(reg.actor)
+			actorRefs += (reg.actor.id -> ref)
 			respond(p, Ref(ref))
 		case (Unregister(actorId), p) =>
 			actorRefs -= actorId
@@ -58,11 +65,11 @@ final class ActorSystem[Msg, State] private(
 					// Don't send InvalidId to sender - just fail the promise consistently
 					respond(p, invalidActorId(actorId).future)
 			}
-		case (Requeue[Msg](actorId, msg, behId, tryNumber), p) =>
-			actorRefs.get(actorId) match {
-				case Some(ref)             => ref ! (msg, behId)
-				case None if tryNumber < 2 => this ! Requeue(actorId, msg, behId, tryNumber + 1) // requeue
-				case None                  => respond(p, invalidActorId(actorId).future)
+		case (RequeueT(rq), p) =>
+			actorRefs.get(rq.actorId) match {
+				case Some(ref)                => ref ! (rq.msg, rq.behId)
+				case None if rq.tryNumber < 2 => this ! Requeue(rq.actorId, rq.msg, rq.behId, rq.tryNumber + 1) // requeue
+				case None                     => respond(p, invalidActorId(rq.actorId).future)
 			}
 		case (AskForRef(actorId, systemId), p) =>
 			systems.get(systemId) match {
@@ -144,7 +151,7 @@ final class ActorSystem[Msg, State] private(
 	}
 
 	override protected def shutdown(): Future[SystemMsg] = {
-		systems.collect { case (systemId, sys) if systemId != id => sys ! SystemClosed(id) }
+		systems.foreach { (systemId, sys) => if (systemId != id) sys ! SystemClosed(id) }
 		super.shutdown()
 	}
 }

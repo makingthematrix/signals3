@@ -45,12 +45,15 @@ class ActorIntegrationSpec extends FunSuite {
       .withBehaviorPF(pf)
       .build()
 
-  private def spawn[Msg, State](parent: Actor[Msg, State])(data: SystemMsg.Spawn[Msg, State]): Actor[Msg, State] =
+  import SystemMsg.*
+
+  @unchecked private def spawn[Msg, State](parent: Actor[Msg, State])(data: SystemMsg.Spawn[Msg, State]): Actor[Msg, State] = {
     tryResultCF(parent ? data) match {
-      case Success(SystemMsg.NewChild[Msg, State](child)) => child
+      case Success(NewChild(child)) => child.asInstanceOf[Actor[Msg, State]]
       case Failure(InvalidIdException(id)) if id == data.actorId => fail(s"Spawn with id $id was rejected as invalid")
       case other => fail(s"Unexpected spawn response: $other")
     }
+  }
 
   // ============================================================================
   // Thread Safety Tests for Behavior Modifications
@@ -65,7 +68,7 @@ class ActorIntegrationSpec extends FunSuite {
     val actor = create[String, String]("0", {
       case (msg, _) => Some(s"Default: $msg")
     })
-    
+
     val numThreads = 10
     val behaviorsPerThread = 10
     val totalBehaviors = numThreads * behaviorsPerThread
@@ -121,7 +124,7 @@ class ActorIntegrationSpec extends FunSuite {
     val actor = create[String, String]("0", {
       case (msg, _) => Some(s"Default: $msg")
     })
-    
+
     val numOperations = 100
     val behaviorIds = (0 until numOperations).map(i => s"behavior-$i").toList
     
@@ -202,7 +205,7 @@ class ActorIntegrationSpec extends FunSuite {
    */
   test("Behavior modifications do not cause message loss") {
     val actor = create[MyMsg] { case (MyInt(n), _) => Some(MyMsg(s"Default: $n")) }
-    
+
     val numMessages = 100
     val receivedCount = SourceSignal(0)
     
@@ -483,7 +486,7 @@ class ActorIntegrationSpec extends FunSuite {
       Future {
         (0 until spawnsPerThread).foreach { _ =>
           resultCF(parent ? SystemMsg.Spawn[String, Unit]()) match {
-            case SystemMsg.NewChild[String, Unit](c) => children.put(c.id, c)
+            case SystemMsg.NewChild(c) => children.put(c.id, c.asInstanceOf[Actor[String, Unit]])
             case other                 => throw new AssertionError(s"Unexpected response: $other")
           }
         }
@@ -566,8 +569,8 @@ class ActorIntegrationSpec extends FunSuite {
     val futures: Seq[Future[Unit]] = (0 until numThreads).map { _ =>
       Future {
         tryResultCF(parent ? SystemMsg.Spawn[String, Unit](actorId = "race")) match {
-          case Success(SystemMsg.NewChild[String, Unit](c)) =>
-            childRef.compareAndSet(None, Some(c))
+          case Success(SystemMsg.NewChild(c)) =>
+            childRef.compareAndSet(None, Some(c.asInstanceOf[Actor[String, Unit]]))
             newChildCount.mutate(_ + 1)
           case Failure(InvalidIdException("race")) =>
             invalidIdCount.mutate(_ + 1)

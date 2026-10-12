@@ -11,7 +11,6 @@ import io.github.makingthematrix.signals3.SourceStream
 	* Mainly used by the `Behavior` functions.
 	*
 	* @tparam Msg   The type of the incoming message
-	* @tparam Rsp   The type of the response
 	* @tparam State The type of the internal state
 	*/
 trait MutableActor[Msg, State] extends Actor[Msg, State]{

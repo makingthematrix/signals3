@@ -3,6 +3,7 @@ package io.github.makingthematrix.signals3.actors
 import io.github.makingthematrix.signals3.actors.Actor.{Beh, HeartBeatStrategy, PF}
 
 import scala.concurrent.ExecutionContext
+import scala.reflect.{ClassTag, TypeTest}
 
 /**
 	* Represents system-level messages that can be used to control or affect the behavior
@@ -48,7 +49,34 @@ enum SystemMsg{
 	case AskForRefAsync[Msg, State](sender: Actor[Msg, State], actorId: String, systemId: String = "")
 	case Ref[Msg](ref: ActorRef[Msg])
 	case Requeue[Msg](actorId: String, msg: Msg, behId: String, tryNumber: Int = 0)
-	case SystemClosed(systemId: String)
 	case RegisterSystem[Msg](system: RemoteSystem[Msg])
+	case SystemClosed(systemId: String)
 	case UnregisterSystem(systemId: String)
+}
+
+object SystemMsg {
+	/**
+		* Creates a "trusted" [[scala.reflect.TypeTest]] used to match on `SystemMsg` cases with type parameters
+		* (like `AddBehavior[Msg, State]`) without giving up the full static type of the matched message.
+		*
+		* The type arguments of such cases are erased at runtime, so a plain type pattern like
+		* `case msg: AddBehavior[Msg, State]` cannot be checked - the compiler emits an unchecked warning
+		* and falls back to testing only the runtime class of the message. A `TypeTest` created by this method
+		* does exactly that check, but in one auditable place: it verifies the runtime class of the scrutinee
+		* and then casts the message to the full type, taking the type arguments on trust. The trust is based on
+		* the invariant that the actor infrastructure creates and routes these messages only between actors
+		* parameterized with the same `Msg` and `State` types.
+		*
+		* The `TypeTest` instances used by `ActorImpl` and `ActorSystem` are defined next to the `match` expressions
+		* which process system messages - see `ActorImpl.processSysEntry` and `ActorSystem.processSysEntry`.
+		*
+		* @tparam S the supertype of the matched values - in practice `SystemMsg`
+		* @tparam T the expected subtype of the matched values, e.g. `SystemMsg.AddBehavior[Msg, State]`
+		* @return a `TypeTest[S, T]` which matches any value of the runtime class of `T`
+		*/
+	private[actors] def trusted[S, T](using ct: ClassTag[T]): TypeTest[S, T] =
+		new TypeTest[S, T] {
+			def unapply(s: S): Option[s.type & T] =
+				if (ct.runtimeClass.isInstance(s)) Some(s.asInstanceOf[s.type & T]) else None
+		}
 }

@@ -12,6 +12,7 @@ import scala.collection.mutable
 import scala.collection.mutable.Queue as MQueue
 import scala.concurrent.duration.{DurationLong, FiniteDuration}
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
+import scala.reflect.TypeTest
 import scala.util.chaining.*
 import scala.util.{Failure, Success, Try}
 
@@ -211,17 +212,25 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 
 	import SystemMsg.*
 
+	// The type arguments of `SystemMsg` cases like `AddBehavior[Msg, State]` are erased at runtime,
+	// so instead of unchecked type patterns - which the compiler reports as warnings - these cases are matched
+	// through trusted `TypeTest` instances created by `SystemMsg.trusted`. Each test verifies only the runtime
+	// class of the message and takes the type arguments on trust - see `SystemMsg.trusted` for the details.
+	private given AddBehaviorT: TypeTest[SystemMsg, AddBehavior[Msg, State]] = trusted[SystemMsg, AddBehavior[Msg, State]]
+	private given AddBehaviorPFT: TypeTest[SystemMsg, AddBehaviorPF[Msg, State]] = trusted[SystemMsg, AddBehaviorPF[Msg, State]]
+	private given SpawnT: TypeTest[SystemMsg, Spawn[Msg, State]] = trusted[SystemMsg, Spawn[Msg, State]]
+
 	protected def processSysEntry(msg: SysEntry): Unit = msg match {
-		case (Pause, p)               => pause(); respond(p, Done)
-		case (Unpause, p)             => unpause(); respond(p, Done)
-		case (Close, p)               => if (p.isEmpty) close() else respond(p, shutdown().map(_ => Done))
-		case (AddBehavior[Msg, State](beh), p)    => addBehavior(beh); respond(p, Done)
-		case (RemoveBehavior(id), p)  => removeBehavior(id); respond(p, Done)
-		case (AddBehaviorPF[Msg, State](pf), p)   => addBehaviorPF(pf); respond(p, Done)
-		case (data: Spawn[Msg, State], p)         => 
+		case (Pause, p)              => pause(); respond(p, Done)
+		case (Unpause, p)            => unpause(); respond(p, Done)
+		case (Close, p)              => if (p.isEmpty) close() else respond(p, shutdown().map(_ => Done))
+		case (AddBehaviorT(ab), p)   => addBehavior(ab.beh); respond(p, Done)
+		case (RemoveBehavior(id), p) => removeBehavior(id); respond(p, Done)
+		case (AddBehaviorPFT(ab), p) => addBehaviorPF(ab.pf); respond(p, Done)
+		case (SpawnT(data), p)       =>
 			val rsp = spawn(data)
 			if (rsp != SystemMsg.InvalidId) respond(p, rsp) else respond(p, Actor.invalidActorId(data.actorId).future)
-		case (ActorClosed(id), p)     => removeChild(id); respond(p, Done)
+		case (ActorClosed(id), p)    => removeChild(id); respond(p, Done)
 		case _ => // @todo: log the unhandled messages
 	}
 
