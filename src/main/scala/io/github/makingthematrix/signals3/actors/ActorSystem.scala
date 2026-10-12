@@ -75,7 +75,7 @@ final class ActorSystem[Msg, State] private(
 			systems.get(systemId) match {
 				case None => respond(p, invalidSystemId(systemId).future)
 				case Some(system) =>
-					respond(p, (system ? AskForRef(actorId)).flatMap {
+					respond(p, system.ask(AskForRef(actorId)).flatMap {
 						case Ref(ref) =>
 							CloseableFuture.successful(Ref(RemoteActorRef(ActorPath.Remote(systemId, actorId), this)))
 						case _ => invalidActorId(actorId) // Handle unexpected responses
@@ -86,7 +86,7 @@ final class ActorSystem[Msg, State] private(
 				case None =>
 					respond(p, invalidSystemId(systemId).future)
 				case Some(system) =>
-					(system ? AskForRef(actorId)).onComplete {
+					system.ask(AskForRef(actorId)).onComplete {
 						case Success(Ref(ref)) =>
 							sender ! Ref(ref.asInstanceOf[ActorRef[Msg]])
 							respond(p, Done)
@@ -126,7 +126,7 @@ final class ActorSystem[Msg, State] private(
 		case Local(actorId)        => if (actorRefs.contains(actorId)) actorRefs(actorId) ! (msg, behId) else this ! Requeue(actorId, msg, behId)
 		case Remote("", actorId)   => if (actorRefs.contains(actorId)) actorRefs(actorId) ! (msg, behId) else this ! Requeue(actorId, msg, behId)
 		case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId) ! (msg, behId) else this ! Requeue(actorId, msg, behId)
-		case Remote(systemId, _) if systemId != id && systems.contains(systemId)  => systems(systemId) ! (msg, path, behId)
+		case Remote(systemId, _) if systemId != id && systems.contains(systemId)  => systems(systemId).tell(msg, path, behId)
 		case _ => // invalid system or actor id
 	}
 
@@ -140,7 +140,7 @@ final class ActorSystem[Msg, State] private(
 			case Local(actorId)        => if (actorRefs.contains(actorId)) actorRefs(actorId) ? (msg, behId) else sendToStream()
 			case Remote("", actorId)   => if (actorRefs.contains(actorId)) actorRefs(actorId) ? (msg, behId) else sendToStream()
 			case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId) ? (msg, behId) else sendToStream()
-			case Remote(systemId, _)   => if (systemId != id && systems.contains(systemId)) systems(systemId) ? (msg, path, behId) else invalidSystemId(systemId)
+			case Remote(systemId, _)   => if (systemId != id && systems.contains(systemId)) systems(systemId).ask(msg, path, behId) else invalidSystemId(systemId)
 		}
 	}
 
@@ -151,7 +151,7 @@ final class ActorSystem[Msg, State] private(
 	}
 
 	override protected def shutdown(): Future[SystemMsg] = {
-		systems.foreach { (systemId, sys) => if (systemId != id) sys ! SystemClosed(id) }
+		systems.foreach { (systemId, sys) => if (systemId != id) sys.tell(SystemClosed(id)) }
 		super.shutdown()
 	}
 }
