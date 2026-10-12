@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, InvalidIdException, UnhandledMsgException}
+import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, InvalidIdException, SystemMsg, UnhandledMsgException}
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
@@ -25,7 +25,7 @@ abstract class BaseActor[Msg](override val id: String,
 	inline protected def invalidActorId(actorId: String): Try[Option[Msg]] = Failure(InvalidIdException(actorId))
 	inline protected def unhandledMsg(msg: Msg): Try[Option[Msg]] = Failure(UnhandledMsgException(msg.toString))
 
-	override protected def spawn(data: SystemMsg.Spawn): SystemMsg
+	override protected def spawn(data: SystemMsg.Spawn[Msg, Unit]): SystemMsg
 	
 	override protected def onMessage(msg: Msg): Try[Option[Msg]]
 }

@@ -2,12 +2,13 @@ package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.testutils.*
 import io.github.makingthematrix.signals3.*
-import io.github.makingthematrix.signals3.actors.Actor.InvalidIdException
+import io.github.makingthematrix.signals3.actors.Actor.SystemMsg.*
+import io.github.makingthematrix.signals3.actors.Actor.{InvalidIdException, SystemMsg}
 import munit.FunSuite
 
 import scala.concurrent.duration.*
 import scala.concurrent.{Await, Future, TimeoutException}
-import scala.util.{Try, Success, Failure}
+import scala.util.{Failure, Success, Try}
 
 /**
  * Unit tests for ActorSystem functionality: registration, lookup, deregistration,
@@ -42,20 +43,19 @@ class ActorSystemSpec extends FunSuite {
     waitFor(actor.isClosedSignal, true)
   }
 
-  private def spawn(parent: Actor[String, Int])(data: parent.SystemMsg.Spawn): Actor[String, Int] =
+  private def spawn(parent: Actor[String, Int])(data: Spawn[String, Int]): Actor[String, Int] =
     tryResultCF(parent ? data) match {
-      case Success(parent.SystemMsg.NewChild(child))             => child
+      case Success(SystemMsg.NewChild[String, Int](child))             => child
       case Failure(InvalidIdException(id)) if id == data.actorId => fail(s"Spawn with id $id was rejected as invalid")
       case other                                                 => fail(s"Unexpected spawn response: $other")
     }
 
   private def awaitRef(sys: ActorSystem[String, Int], id: String): ActorRef[String] = {
-    import sys.SystemMsg.*
     val start = System.currentTimeMillis()
     while (System.currentTimeMillis() - start < 5000) {
       try {
         tryResultCF(sys ? AskForRef(id)) match {
-          case Success(Ref(ref))                 => return ref
+          case Success(Ref[String](ref))                 => return ref
           case Failure(InvalidIdException(`id`)) => Thread.sleep(50)
           case other                             => fail(s"Unexpected response: $other")
         }
@@ -67,11 +67,10 @@ class ActorSystemSpec extends FunSuite {
   }
 
   private def awaitInvalid(sys: ActorSystem[String, Int], id: String): Unit = {
-    import sys.SystemMsg.*
     val start = System.currentTimeMillis()
     while (System.currentTimeMillis() - start < 5000) {
       try {
-        tryResultCF[sys.SystemMsg](sys ? AskForRef(id)) match {
+        tryResultCF[SystemMsg](sys ? AskForRef(id)) match {
           case Failure(InvalidIdException(`id`)) => return
           case Success(Ref(_)) => Thread.sleep(50)
           case other => throw new AssertionError(s"Unexpected response: $other")
@@ -101,7 +100,7 @@ class ActorSystemSpec extends FunSuite {
 
   test("Register via ? stores the actor and returns Ref") {
     val sys = newSystem()
-    import sys.SystemMsg.*
+    
     val a = ActorBuilder[String, Int](0)
       .withId("manual")
       .withBehavior("default", { case (msg, _) => Some(s"M: $msg") })
@@ -116,7 +115,6 @@ class ActorSystemSpec extends FunSuite {
 
   test("Register with a duplicate id overwrites the previous entry") {
     val sys = newSystem()
-    import sys.SystemMsg.*
     val a = ActorBuilder[String, Int](0)
       .withId("dup")
       .withBehavior("default", { case (msg, _) => Some(s"A: $msg") })
@@ -140,7 +138,6 @@ class ActorSystemSpec extends FunSuite {
 
   test("Spawned child auto-registers on the system") {
     val sys = newSystem()
-    import sys.SystemMsg.*
     val child = spawn(sys)(Spawn(actorId = "c"))
     val ref = awaitRef(sys, "c")
     assertEquals(ref.path.actorId, "c")
@@ -150,8 +147,8 @@ class ActorSystemSpec extends FunSuite {
 
   test("Grandchild auto-registers on the same system") {
     val sys = newSystem()
-    val child = spawn(sys)(sys.SystemMsg.Spawn())
-    val grandchild = spawn(child)(child.SystemMsg.Spawn())
+    val child = spawn(sys)(SystemMsg.Spawn())
+    val grandchild = spawn(child)(Spawn())
     awaitRef(sys, grandchild.id)
     close(grandchild)
     close(child)
@@ -164,7 +161,7 @@ class ActorSystemSpec extends FunSuite {
 
   test("AskForRef returns InvalidId for an unknown id") {
     val sys = newSystem()
-    import sys.SystemMsg.*
+    
     val rsp = tryResultCF(sys ? AskForRef("nonexistent"))
     assertEquals(rsp, Failure(InvalidIdException("nonexistent")))
     close(sys)
@@ -172,7 +169,7 @@ class ActorSystemSpec extends FunSuite {
 
   test("AskForRef with the system's own id behaves as a local lookup") {
     val sys = newSystem()
-    import sys.SystemMsg.*
+    
     val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
     awaitRef(sys, "a")
     resultCF(sys ? AskForRef("a", sys.id)) match {
@@ -201,7 +198,7 @@ class ActorSystemSpec extends FunSuite {
 
   test("ActorClosed via ? removes the actor from the registry") {
     val sys = newSystem()
-    import sys.SystemMsg.*
+    
     val a = ActorBuilder[String, Int](0)
       .withId("x")
       .withBehavior("default", { case (msg, _) => Some(s"A: $msg") })
@@ -216,7 +213,7 @@ class ActorSystemSpec extends FunSuite {
 
   test("ActorClosed for a non-existent id is safe") {
     val sys = newSystem()
-    import sys.SystemMsg.*
+    
     val rsp = resultCF(sys ? ActorClosed("nope"))
     assertEquals(rsp, Done)
     close(sys)
@@ -224,7 +221,7 @@ class ActorSystemSpec extends FunSuite {
 
   test("ActorClosed on system cascades to removeChild") {
     val sys = newSystem()
-    import sys.SystemMsg.*
+    
     val child = spawn(sys)(Spawn(actorId = "c"))
     awaitRef(sys, "c")
     close(child)
@@ -238,7 +235,7 @@ class ActorSystemSpec extends FunSuite {
 
   test("Closing a spawned child does not deregister its siblings") {
     val sys = newSystem()
-    import sys.SystemMsg.*
+    
     val c1 = spawn(sys)(Spawn(actorId = "c1"))
     val c2 = spawn(sys)(Spawn(actorId = "c2"))
     awaitRef(sys, "c1")
@@ -352,7 +349,7 @@ class ActorSystemSpec extends FunSuite {
 
   test("Concurrent spawning on the system registers all children") {
     val sys = newSystem()
-    import sys.SystemMsg.*
+    
     val numThreads = 10
     val spawnsPerThread = 5
     val expected = numThreads * spawnsPerThread
@@ -362,7 +359,7 @@ class ActorSystemSpec extends FunSuite {
       Future {
         (0 until spawnsPerThread).foreach { _ =>
           resultCF(sys ? Spawn()) match {
-            case NewChild(c) => children.put(c.id, c)
+            case NewChild[String, Int](c) => children.put(c.id, c)
             case other => throw new AssertionError(s"Unexpected response: $other")
           }
         }
@@ -395,7 +392,7 @@ class ActorSystemSpec extends FunSuite {
     sys.tell("42", ActorPath.Remote(sys.id, "test-child"), "")
     
     // Now register the child manually
-    awaitCF(sys ? sys.SystemMsg.Register(child))
+    awaitCF(sys ? SystemMsg.Register(child))
     
     // Wait to see if the message is processed
     Thread.sleep(200)

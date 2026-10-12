@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, PF}
+import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, PF, SystemMsg}
 import io.github.makingthematrix.signals3.testutils.*
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, EventContext, Pausable, Signal, SourceStream, Stream, Threading}
 import munit.FunSuite
@@ -82,7 +82,7 @@ class ActorSpec extends FunSuite {
 
   test("System messages handling") {
     val actor = create[String]({ case (msg, _) => Some(s"Received: $msg") })
-    import actor.SystemMsg
+    
     actor ! SystemMsg.Pause
     waitFor(actor.isPausedSignal, true)
     actor ! SystemMsg.Unpause
@@ -135,16 +135,16 @@ class ActorSpec extends FunSuite {
     val behavior42: PF[MyMsg, Unit] = { case (MyInt(42), _) => Some(MyStr("Special: 42")) }
     val behavior99: PF[MyMsg, Unit] = { case (MyInt(99), _) => Some(MyStr("Special: 99")) }
 
-    val cf42 = actor ? actor.SystemMsg.AddBehavior("special_42", behavior42)
-    val cf99 = actor ? actor.SystemMsg.AddBehavior("special_99", behavior99)
+    val cf42 = actor ? SystemMsg.AddBehavior("special_42", behavior42)
+    val cf99 = actor ? SystemMsg.AddBehavior("special_99", behavior99)
     awaitCF(cf42)
     awaitCF(cf99)
     
     assertEquals(resultCF(actor ? MyInt(42)), MyStr("Special: 42"))
     assertEquals(resultCF(actor ? MyInt(99)), MyStr("Special: 99"))
 
-    val cf42r = actor ? actor.SystemMsg.RemoveBehavior("special_42")
-    val cf99r = actor ? actor.SystemMsg.RemoveBehavior("special_99")
+    val cf42r = actor ? SystemMsg.RemoveBehavior("special_42")
+    val cf99r = actor ? SystemMsg.RemoveBehavior("special_99")
     awaitCF(cf42r)
     awaitCF(cf99r)
 
@@ -160,7 +160,7 @@ class ActorSpec extends FunSuite {
     
     // Add first behavior that handles 42
     val behavior1: PF[String, Unit] = { case ("42", _) => Some("First: 42") }
-    val cf1 = actor ? actor.SystemMsg.AddBehavior("duplicate_id", behavior1)
+    val cf1 = actor ? SystemMsg.AddBehavior("duplicate_id", behavior1)
     awaitCF(cf1)
     
     // Verify first behavior works
@@ -168,7 +168,7 @@ class ActorSpec extends FunSuite {
     
     // Add second behavior with the same ID but different response
     val behavior2: PF[String, Unit] = { case ("42", _) => Some("Second: 42") }
-    val cf2 = actor ? actor.SystemMsg.AddBehavior("duplicate_id", behavior2)
+    val cf2 = actor ? SystemMsg.AddBehavior("duplicate_id", behavior2)
     awaitCF(cf2)
     
     // The second behavior should have replaced the first
@@ -184,7 +184,7 @@ class ActorSpec extends FunSuite {
     
     // Add a special behavior
     val behavior: PF[String, Unit] = { case ("42", _) => Some("Special: 42") }
-    val cfAdd = actor ? actor.SystemMsg.AddBehavior("special_42", behavior)
+    val cfAdd = actor ? SystemMsg.AddBehavior("special_42", behavior)
     awaitCF(cfAdd)
 
     // Message 42 should be handled by the special behavior when using its ID
@@ -199,7 +199,6 @@ class ActorSpec extends FunSuite {
     val receivedSpecial = Signal(false)
     
     val actor = create[Int]{ case _ => None }
-    import actor.SystemMsg
     
     // Add behaviors via system messages
     val defaultBehavior: PF[Int, Unit] = { case _ => received ! true; None }
@@ -234,7 +233,6 @@ class ActorSpec extends FunSuite {
       Thread.sleep(50)
       Some(s"Processed: $msg")
     }
-    import actor.SystemMsg
     
     val futures = (1 to 5).map(n => actor ? n.toString)
     actor ! SystemMsg.Close
@@ -251,7 +249,6 @@ class ActorSpec extends FunSuite {
       received ! true
       None
     })
-    import actor.SystemMsg
     
     actor ! SystemMsg.Pause
     waitFor(actor.isPausedSignal, true)
@@ -309,7 +306,6 @@ class ActorSpec extends FunSuite {
 
   test("AddBehavior and RemoveBehavior via system messages") {
     val actor = create[String] { case (msg, _) => Some(s"Default: $msg") }
-    import actor.SystemMsg
     
     val behavior: PF[String, Unit] = { case ("42", _) => Some("Special: 42") }
     
@@ -328,7 +324,6 @@ class ActorSpec extends FunSuite {
 
   test("Pause system message with response via ?") {
     val actor = create[Unit] { case _ => None }
-    import actor.SystemMsg
     
     val pauseFuture = actor ? SystemMsg.Pause
     resultCF(pauseFuture)
@@ -338,7 +333,6 @@ class ActorSpec extends FunSuite {
 
   test("Unpause system message with response via ?") {
     val actor = create[Unit] { case _ => None }
-    import actor.SystemMsg
     
     actor ! SystemMsg.Pause
     waitFor(actor.isPausedSignal, true)
@@ -353,7 +347,6 @@ class ActorSpec extends FunSuite {
 
   test("Close via ? completes only after actor is closed") {
     val actor = create[Unit] { case _ => None }
-    import actor.SystemMsg
 
     val closeFuture = actor ? SystemMsg.Close
     
@@ -373,7 +366,6 @@ class ActorSpec extends FunSuite {
       Thread.sleep(50) // Simulate slow processing
       Some(msg + 1)
     }
-    import actor.SystemMsg
     
     // Send some messages that take time to process
     actor ! 1
@@ -391,7 +383,6 @@ class ActorSpec extends FunSuite {
 
   test("Only the first close via ? completes, the next one fails") {
     val actor = create[Unit] { case _ => None }
-    import actor.SystemMsg
 
     waitFor(actor.isInitializedSignal, true)
 
@@ -408,7 +399,6 @@ class ActorSpec extends FunSuite {
   test("Close via ? when actor has pending messages") {
     val received = Signal(false)
     val actor = create[Int] { case _ => received ! true; None }
-    import actor.SystemMsg
     
     // Send a message that will take time
     actor ! 1

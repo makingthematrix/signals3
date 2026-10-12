@@ -216,10 +216,10 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		case (Pause, p)               => pause(); respond(p, Done)
 		case (Unpause, p)             => unpause(); respond(p, Done)
 		case (Close, p)               => if (p.isEmpty) close() else respond(p, shutdown().map(_ => Done))
-		case (AddBehavior(beh), p)    => addBehavior(beh); respond(p, Done)
+		case (AddBehavior[Msg, State](beh), p)    => addBehavior(beh); respond(p, Done)
 		case (RemoveBehavior(id), p)  => removeBehavior(id); respond(p, Done)
-		case (AddBehaviorPF(pf), p)   => addBehaviorPF(pf); respond(p, Done)
-		case (data: Spawn, p)         => 
+		case (AddBehaviorPF[Msg, State](pf), p)   => addBehaviorPF(pf); respond(p, Done)
+		case (data: Spawn[Msg, State], p)         => 
 			val rsp = spawn(data)
 			if (rsp != SystemMsg.InvalidId) respond(p, rsp) else respond(p, Actor.invalidActorId(data.actorId).future)
 		case (ActorClosed(id), p)     => removeChild(id); respond(p, Done)
@@ -257,7 +257,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		children = children - id
 	}
 
-	protected def spawn(data: SystemMsg.Spawn): SystemMsg =
+	protected def spawn(data: SystemMsg.Spawn[Msg, State]): SystemMsg =
 		if (children.contains(data.actorId)) SystemMsg.InvalidId else {
 			val b1 = ActorBuilder[Msg, State](data.state.getOrElse(this.state))
 				.withIdIf(data.actorId.nonEmpty, data.actorId)
@@ -293,7 +293,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 			_onInit.foreach(_(this))
 			_onInit = Nil
 			beat.foreach(_ => processMessages())
-			system.foreach(s => s ! s.SystemMsg.Register(this))
+			system.foreach(s => s ! SystemMsg.Register(this))
 			initialized.set(true)
 		} finally {
 			if (!isInitialized) closeAndCheck()
@@ -324,14 +324,14 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 
 	protected def shutdown(): Future[SystemMsg] = {
 		super.closeAndCheck()
-		children.values.foreach(child => child ! child.SystemMsg.Close)
+		children.values.foreach(child => child ! SystemMsg.Close)
 		in.close()
 		out.close()
 		beat.closeAndCheck()
 		flushMsgEntries().collect { case (_, Some(p), _) => p }.foreach(_.tryFailure(actorIsClosed))
 		flushSystemEntries().collect { case (_, Some(p)) => p }.foreach(_.tryFailure(actorIsClosed))
-		parent.foreach(p => p ! p.SystemMsg.ActorClosed(id))
-		system.foreach(s => s ! s.SystemMsg.ActorClosed(id))
+		parent.foreach(p => p ! SystemMsg.ActorClosed(id))
+		system.foreach(s => s ! SystemMsg.ActorClosed(id))
 		beat.isClosedSignal.onTrue.map(_ => SystemMsg.ActorClosed(id))
 	}
 

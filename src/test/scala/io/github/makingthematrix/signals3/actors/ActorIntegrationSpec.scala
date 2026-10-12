@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.*
-import io.github.makingthematrix.signals3.actors.Actor.{InvalidIdException, PF}
+import io.github.makingthematrix.signals3.actors.Actor.{InvalidIdException, PF, SystemMsg}
 import io.github.makingthematrix.signals3.testutils.*
 import munit.FunSuite
 
@@ -45,9 +45,9 @@ class ActorIntegrationSpec extends FunSuite {
       .withBehaviorPF(pf)
       .build()
 
-  private def spawn[Msg, State](parent: Actor[Msg, State])(data: parent.SystemMsg.Spawn): Actor[Msg, State] =
+  private def spawn[Msg, State](parent: Actor[Msg, State])(data: SystemMsg.Spawn[Msg, State]): Actor[Msg, State] =
     tryResultCF(parent ? data) match {
-      case Success(parent.SystemMsg.NewChild(child)) => child
+      case Success(SystemMsg.NewChild[Msg, State](child)) => child
       case Failure(InvalidIdException(id)) if id == data.actorId => fail(s"Spawn with id $id was rejected as invalid")
       case other => fail(s"Unexpected spawn response: $other")
     }
@@ -65,9 +65,6 @@ class ActorIntegrationSpec extends FunSuite {
     val actor = create[String, String]("0", {
       case (msg, _) => Some(s"Default: $msg")
     })
-    
-    // Get the SystemMsg type from the actor instance
-    import actor.SystemMsg
     
     val numThreads = 10
     val behaviorsPerThread = 10
@@ -125,8 +122,6 @@ class ActorIntegrationSpec extends FunSuite {
       case (msg, _) => Some(s"Default: $msg")
     })
     
-    import actor.SystemMsg
-    
     val numOperations = 100
     val behaviorIds = (0 until numOperations).map(i => s"behavior-$i").toList
     
@@ -177,7 +172,7 @@ class ActorIntegrationSpec extends FunSuite {
     })
 
     // Try to remove a behavior that doesn't exist
-    val cf = actor.ask(actor.SystemMsg.RemoveBehavior("non-existent"))
+    val cf = actor.ask(SystemMsg.RemoveBehavior("non-existent"))
     
     // Should complete successfully without error
     awaitCF(cf)
@@ -207,8 +202,6 @@ class ActorIntegrationSpec extends FunSuite {
    */
   test("Behavior modifications do not cause message loss") {
     val actor = create[MyMsg] { case (MyInt(n), _) => Some(MyMsg(s"Default: $n")) }
-    
-    import actor.SystemMsg
     
     val numMessages = 100
     val receivedCount = SourceSignal(0)
@@ -264,7 +257,7 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Spawn via ? returns NewChild with a working child") {
     val parent = create[String] { case (msg, _) => Some(s"Parent: $msg") }
-    val child = spawn(parent)(parent.SystemMsg.Spawn())
+    val child = spawn(parent)(SystemMsg.Spawn())
     assert(child.isInitialized)
     assertEquals(resultCF(child ? "42"), "Parent: 42") // inherited behavior
     closeChild(child)
@@ -277,7 +270,7 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Child inherits parent's state when Spawn.state is None") {
     val parent = create[String, Int](100, { case (msg, _) => Some(s"P: $msg") })
-    val child = spawn(parent)(parent.SystemMsg.Spawn())
+    val child = spawn(parent)(SystemMsg.Spawn())
     assertEquals(child.state, 100)
     closeChild(child)
     close(parent)
@@ -285,7 +278,6 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Child inherits parent's behaviors added via AddBehavior") {
     val parent = create[String] { case (msg, _) => Some(s"Default: $msg") }
-    import parent.SystemMsg
     val special: PF[String, Unit] = { case ("42", _) => Some("Special: 42") }
     awaitCF(parent ? SystemMsg.AddBehavior("special", special))
     assert(parent.getBehavior("special").isDefined)
@@ -298,7 +290,7 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Child has independent state from the parent") {
     val parent = create[Int, Int](0, { case (msg, a) => a.state += msg; Some(a.state) })
-    val child = spawn(parent)(parent.SystemMsg.Spawn())
+    val child = spawn(parent)(SystemMsg.Spawn())
 
     assertEquals(resultCF(parent ? 5), 5)
     assertEquals(resultCF(child ? 7), 7)
@@ -314,7 +306,7 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Spawn with explicit id sets child.id") {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
-    val child = spawn(parent)(parent.SystemMsg.Spawn(actorId = "my-child"))
+    val child = spawn(parent)(SystemMsg.Spawn(actorId = "my-child"))
     assertEquals(child.id, "my-child")
     closeChild(child)
     close(parent)
@@ -322,7 +314,7 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Spawn with explicit state overrides inheritance") {
     val parent = create[String, Int](0, { case (msg, _) => Some(s"P: $msg") })
-    val child = spawn(parent)(parent.SystemMsg.Spawn(state = Some(999)))
+    val child = spawn(parent)(SystemMsg.Spawn(state = Some(999)))
     assertEquals(child.state, 999)
     closeChild(child)
     close(parent)
@@ -331,7 +323,7 @@ class ActorIntegrationSpec extends FunSuite {
   test("Spawn with explicit behaviors overrides inheritance") {
     val parent = create[String] { case (msg, _) => Some(s"Parent: $msg") }
     val childBeh: PF[String, Unit] = { case (msg, _) => Some(s"Child: $msg") }
-    val child = spawn(parent)(parent.SystemMsg.Spawn(behaviors = List("c" -> childBeh)))
+    val child = spawn(parent)(SystemMsg.Spawn(behaviors = List("c" -> childBeh)))
     assertEquals(resultCF(child ? "1"), "Child: 1")
     assertEquals(resultCF(parent ? "1"), "Parent: 1")
     closeChild(child)
@@ -346,7 +338,7 @@ class ActorIntegrationSpec extends FunSuite {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
     val flag = Signal(false)
     var receivedChild: Option[Actor[String, Unit]] = None
-    val child = spawn(parent)(parent.SystemMsg.Spawn(onInit = Some { c =>
+    val child = spawn(parent)(SystemMsg.Spawn(onInit = Some { c =>
       receivedChild = Some(c)
       flag ! true
     }))
@@ -362,7 +354,7 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Spawned child's parent is the spawning actor") {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
-    val child = spawn(parent)(parent.SystemMsg.Spawn())
+    val child = spawn(parent)(SystemMsg.Spawn())
     assert(child.parent.contains(parent))
     closeChild(child)
     close(parent)
@@ -370,9 +362,9 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Multiple children have distinct ids and all work") {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
-    val c1 = spawn(parent)(parent.SystemMsg.Spawn())
-    val c2 = spawn(parent)(parent.SystemMsg.Spawn())
-    val c3 = spawn(parent)(parent.SystemMsg.Spawn())
+    val c1 = spawn(parent)(SystemMsg.Spawn())
+    val c2 = spawn(parent)(SystemMsg.Spawn())
+    val c3 = spawn(parent)(SystemMsg.Spawn())
     assert(c1.id != c2.id)
     assert(c2.id != c3.id)
     assert(c1.id != c3.id)
@@ -387,8 +379,8 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Child can spawn a grandchild (hierarchical spawning)") {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
-    val child = spawn(parent)(parent.SystemMsg.Spawn())
-    val grandchild = spawn(child)(child.SystemMsg.Spawn())
+    val child = spawn(parent)(SystemMsg.Spawn())
+    val grandchild = spawn(child)(SystemMsg.Spawn())
     assert(grandchild.parent.contains(child))
     assertEquals(resultCF(grandchild ? "1"), "P: 1")
     closeChild(grandchild)
@@ -398,7 +390,6 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Spawn with a duplicate explicit id is rejected with InvalidId") {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
-    import parent.SystemMsg
     val first = spawn(parent)(SystemMsg.Spawn(actorId = "dup"))
     tryResultCF(parent ? SystemMsg.Spawn(actorId = "dup")) match {
       case Failure(InvalidIdException("dup")) => // expected
@@ -412,10 +403,10 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("A freed id can be re-spawned after the child closes") {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
-    val c1 = spawn(parent)(parent.SystemMsg.Spawn(actorId = "x"))
+    val c1 = spawn(parent)(SystemMsg.Spawn(actorId = "x"))
     closeChild(c1)
     // After close, the child sends ActorClosed to parent, which removes it; re-spawn should succeed
-    val c2 = spawn(parent)(parent.SystemMsg.Spawn(actorId = "x"))
+    val c2 = spawn(parent)(SystemMsg.Spawn(actorId = "x"))
     assertEquals(c2.id, "x")
     assertEquals(resultCF(c2 ? "1"), "P: 1")
     closeChild(c2)
@@ -428,7 +419,6 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Spawn works on a paused actor (system messages bypass pause)") {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
-    import parent.SystemMsg
     parent ! SystemMsg.Pause
     waitFor(parent.isPausedSignal, true)
     val child = spawn(parent)(SystemMsg.Spawn())
@@ -440,7 +430,6 @@ class ActorIntegrationSpec extends FunSuite {
   test("Spawn on a closed actor fails with ActorIsClosed") {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
     close(parent)
-    import parent.SystemMsg
     intercept[IllegalStateException] {
       resultCF(parent ? SystemMsg.Spawn())
     }
@@ -448,8 +437,8 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Closing the parent cascades close to all children") {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
-    val c1 = spawn(parent)(parent.SystemMsg.Spawn())
-    val c2 = spawn(parent)(parent.SystemMsg.Spawn())
+    val c1 = spawn(parent)(SystemMsg.Spawn())
+    val c2 = spawn(parent)(SystemMsg.Spawn())
     close(parent) // close waits for parent.isClosedSignal; cascade is bang-based
     waitFor(c1.isClosedSignal, true)
     waitFor(c2.isClosedSignal, true)
@@ -457,8 +446,8 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Closing the parent cascades close to grandchildren") {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
-    val child = spawn(parent)(parent.SystemMsg.Spawn())
-    val grandchild = spawn(child)(child.SystemMsg.Spawn())
+    val child = spawn(parent)(SystemMsg.Spawn())
+    val grandchild = spawn(child)(SystemMsg.Spawn())
     close(parent)
     waitFor(child.isClosedSignal, true)
     waitFor(grandchild.isClosedSignal, true)
@@ -466,8 +455,8 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("An independently closed child does not close its siblings or the parent") {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
-    val c1 = spawn(parent)(parent.SystemMsg.Spawn())
-    val c2 = spawn(parent)(parent.SystemMsg.Spawn())
+    val c1 = spawn(parent)(SystemMsg.Spawn())
+    val c2 = spawn(parent)(SystemMsg.Spawn())
     closeChild(c1)
     waitFor(c1.isClosedSignal, true)
     assert(!c2.isClosed, "Sibling should not be closed")
@@ -484,7 +473,6 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Concurrent spawning from multiple threads is thread-safe") {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
-    import parent.SystemMsg
 
     val numThreads = 10
     val spawnsPerThread = 5
@@ -494,8 +482,8 @@ class ActorIntegrationSpec extends FunSuite {
     val futures: Seq[Future[Unit]] = (0 until numThreads).map { _ =>
       Future {
         (0 until spawnsPerThread).foreach { _ =>
-          resultCF(parent ? SystemMsg.Spawn()) match {
-            case SystemMsg.NewChild(c) => children.put(c.id, c)
+          resultCF(parent ? SystemMsg.Spawn[String, Unit]()) match {
+            case SystemMsg.NewChild[String, Unit](c) => children.put(c.id, c)
             case other                 => throw new AssertionError(s"Unexpected response: $other")
           }
         }
@@ -518,8 +506,6 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Spawning does not interfere with concurrent message processing") {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
-    import parent.SystemMsg
-
     val messageFutures: Seq[Future[String]] = (0 until 100).map { i =>
       Future { resultCF(parent ? i.toString) }
     }
@@ -541,7 +527,7 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Parent and child process messages concurrently without interference") {
     val parent = create[Int, Int](0, { case (msg, a) => a.state += msg; Some(a.state) })
-    val child = spawn(parent)(parent.SystemMsg.Spawn())
+    val child = spawn(parent)(SystemMsg.Spawn())
 
     val parentCount = SourceSignal(0)
     val childCount = SourceSignal(0)
@@ -572,8 +558,6 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Concurrent spawns with the same explicit id yield exactly one child") {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
-    import parent.SystemMsg
-
     val numThreads = 10
     val newChildCount = SourceSignal(0)
     val invalidIdCount = SourceSignal(0)
@@ -581,8 +565,8 @@ class ActorIntegrationSpec extends FunSuite {
 
     val futures: Seq[Future[Unit]] = (0 until numThreads).map { _ =>
       Future {
-        tryResultCF(parent ? SystemMsg.Spawn(actorId = "race")) match {
-          case Success(SystemMsg.NewChild(c)) =>
+        tryResultCF(parent ? SystemMsg.Spawn[String, Unit](actorId = "race")) match {
+          case Success(SystemMsg.NewChild[String, Unit](c)) =>
             childRef.compareAndSet(None, Some(c))
             newChildCount.mutate(_ + 1)
           case Failure(InvalidIdException("race")) =>
@@ -609,10 +593,9 @@ class ActorIntegrationSpec extends FunSuite {
 
   test("Spawn via ! creates a child without returning a reference") {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
-    import parent.SystemMsg
     val flag = Signal(false)
     var ref: Option[Actor[String, Unit]] = None
-    parent ! SystemMsg.Spawn(onInit = Some { c =>
+    parent ! SystemMsg.Spawn[String, Unit](onInit = Some { c =>
       ref = Some(c)
       flag ! true
     })
