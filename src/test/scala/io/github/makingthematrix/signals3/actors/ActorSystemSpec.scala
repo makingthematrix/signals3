@@ -2,8 +2,8 @@ package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.testutils.*
 import io.github.makingthematrix.signals3.*
-import io.github.makingthematrix.signals3.actors.Actor.SystemMsg.*
-import io.github.makingthematrix.signals3.actors.Actor.{InvalidIdException, SystemMsg}
+import io.github.makingthematrix.signals3.actors.SystemMsg.*
+import io.github.makingthematrix.signals3.actors.Actor.InvalidIdException
 import munit.FunSuite
 
 import scala.concurrent.duration.*

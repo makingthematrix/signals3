@@ -1,7 +1,6 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.CloseableFuture
-import io.github.makingthematrix.signals3.actors.Actor.SystemMsg
 
 trait RemoteSystem[Msg] extends Actor[Msg, ?] {
 	val id: String

@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.*
-import io.github.makingthematrix.signals3.actors.Actor.{InvalidIdException, PF, SystemMsg}
+import io.github.makingthematrix.signals3.actors.Actor.{InvalidIdException, PF}
 import io.github.makingthematrix.signals3.testutils.*
 import munit.FunSuite
 

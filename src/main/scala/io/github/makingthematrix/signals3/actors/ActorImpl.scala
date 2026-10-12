@@ -19,7 +19,6 @@ import scala.util.{Failure, Success, Try}
 	* Represents an implementation of a mutable actor with a customizable state, behaviors, and heartbeat strategy.
 	*
 	* @tparam Msg   The type of messages processed by this actor.
-	* @tparam Rsp   The type of responses returned by this actor.
 	* @tparam State The type representing the internal state of the actor.
 	*/
 private[actors] class ActorImpl[Msg, State](override val id: String,
@@ -168,7 +167,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		}
 	} else ActorIsClosed[Msg]
 
-	override def tell(msg: SystemMsg): Unit = if (!isClosed) {systemStream ! (msg, None)}
+	override def tell(msg: SystemMsg): Unit = if (!isClosed) { systemStream ! (msg, None)}
 
 	override def tell(msg: Msg, path: ActorPath, behId: String): Unit = if (!isClosed) {
 		import ActorPath.*

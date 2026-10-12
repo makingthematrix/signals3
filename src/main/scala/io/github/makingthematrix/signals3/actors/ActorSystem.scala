@@ -1,9 +1,9 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.CloseableFuture
-import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, SystemMsg, invalidActorId, unhandledMsg}
+import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, invalidActorId, unhandledMsg}
 import io.github.makingthematrix.signals3.actors.ActorSystem.invalidSystemId
-import io.github.makingthematrix.signals3.actors.Actor.SystemMsg.*
+import io.github.makingthematrix.signals3.actors.SystemMsg.*
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success}
@@ -19,7 +19,21 @@ final class ActorSystem[Msg, State] private(
 	@volatile private var actorRefs: Map[String, ActorRef[Msg]] = Map.empty
 	@volatile private var systems: Map[String, RemoteSystem[Msg]] = Map.empty
 
+	inline private def unregister(systemId: String) = {
+		systems -= systemId
+		CloseableFuture.successful(Done)
+	}
+
 	override protected def processSysEntry(msg: SysEntry): Unit = msg match {
+		case (SystemClosed(systemId), p) =>
+			systems -= systemId
+			respond(p, Done)
+		case (UnregisterSystem(systemId), p) =>
+			systems -= systemId
+			respond(p, Done)
+		case (RegisterSystem(system), p) =>
+			systems += (system.id -> system.asInstanceOf[RemoteSystem[Msg]])
+			respond(p, Done)
 		case (Register[Msg, State](actor), p) =>
 			val ref = LocalActorRef(actor)
 			actorRefs += (actor.id -> ref)
@@ -55,7 +69,8 @@ final class ActorSystem[Msg, State] private(
 				case None => respond(p, invalidSystemId(systemId).future)
 				case Some(system) =>
 					respond(p, (system ? AskForRef(actorId)).flatMap {
-						case Ref(ref) => CloseableFuture.successful(Ref(ref.asInstanceOf[ActorRef[Msg]]))
+						case Ref(ref) =>
+							CloseableFuture.successful(Ref(RemoteActorRef(ActorPath.Remote(systemId, actorId), this)))
 						case _ => invalidActorId(actorId) // Handle unexpected responses
 					}.future)
 			}
@@ -131,32 +146,6 @@ final class ActorSystem[Msg, State] private(
 	override protected def shutdown(): Future[SystemMsg] = {
 		systems.collect { case (systemId, sys) if systemId != id => sys ! SystemClosed(id) }
 		super.shutdown()
-	}
-
-	override def ask(msg: SystemMsg): CloseableFuture[SystemMsg] = {
-		inline def unregister(systemId: String) = { systems -= systemId; CloseableFuture.successful(Done) }
-		msg match {
-			case SystemClosed(systemId) => unregister(systemId)
-			case UnregisterSystem(systemId) => unregister(systemId)
-			case RegisterSystem(system) =>
-				systems += (system.id -> system.asInstanceOf[RemoteSystem[Msg]])
-				CloseableFuture.successful(Done)
-			case AskForRef(actorId, `id`) =>
-				(this ? AskForRef(actorId)).flatMap {
-					case Ref(ref) => CloseableFuture.successful(Ref(RemoteActorRef(ActorPath.Remote(id, actorId), this)))
-					case _        => CloseableFuture.failed(Actor.InvalidIdException(actorId))
-				}
-			case AskForRef(actorId, otherSystemId) if systems.contains(otherSystemId) =>
-			  systems(otherSystemId) ? msg	
-			case _ => CloseableFuture.failed(Actor.UnhandledMsgException(msg.toString))
-		}
-	}
-
-	override def tell(msg: SystemMsg): Unit = msg match {
-		case SystemClosed(systemId)     => systems -= systemId
-		case UnregisterSystem(systemId) => systems -= systemId
-		case RegisterSystem(system)     => systems += (system.id -> system.asInstanceOf[RemoteSystem[Msg]])
-		case _ =>
 	}
 }
 
