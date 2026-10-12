@@ -74,9 +74,11 @@ object SystemMsg {
 		* @tparam T the expected subtype of the matched values, e.g. `SystemMsg.AddBehavior[Msg, State]`
 		* @return a `TypeTest[S, T]` which matches any value of the runtime class of `T`
 		*/
-	private[actors] def trusted[S, T](using ct: ClassTag[T]): TypeTest[S, T] =
-		new TypeTest[S, T] {
-			def unapply(s: S): Option[s.type & T] =
-				if (ct.runtimeClass.isInstance(s)) Some(s.asInstanceOf[s.type & T]) else None
-		}
+	
+	private[actors] final class SystemMsgTypeTest[S, T](using ct: ClassTag[T]) extends TypeTest[S, T] {
+		override inline def unapply(s: S): Option[s.type & T] =
+			if (ct.runtimeClass.isInstance(s)) Some(s.asInstanceOf[s.type & T]) else None
+	}
+		
+	private[actors] inline def trusted[S, T](using ct: ClassTag[T]): TypeTest[S, T] = new SystemMsgTypeTest[S, T]
 }
