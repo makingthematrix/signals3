@@ -88,7 +88,9 @@ trait Actor[Msg, State] {
 	def ask(msg: Msg, actorPath: ActorPath, behId: String): CloseableFuture[Msg]
 	inline def ask(behId: String, msg: Msg): CloseableFuture[Msg] = ask(msg, ActorPath.Direct, behId)
 	inline def ask(t: (String, Msg)): CloseableFuture[Msg] = ask(t._1, t._2)
+	inline def ask(t: (Msg, ActorPath, String)): CloseableFuture[Msg] = ask(t._1, t._2, t._3)
 	inline def ?(t: (String, Msg)): CloseableFuture[Msg] = ask(t)
+	inline def ?(t: (Msg, ActorPath, String)): CloseableFuture[Msg] = ask(t)
 	inline def ask(msg: Msg): CloseableFuture[Msg] = ask("", msg)
 	inline def ?(msg: Msg): CloseableFuture[Msg] = ask(msg)
 
@@ -119,9 +121,11 @@ trait Actor[Msg, State] {
 	def tell(msg: Msg, actorPath: ActorPath, behId: String): Unit
 	inline def tell(behId: String, msg: Msg): Unit = tell(msg, ActorPath.Direct, behId)
 	inline def tell(t: (String, Msg)): Unit = tell(t._1, t._2)
+	inline def tell(t: (Msg, ActorPath, String)): Unit = tell(t._1, t._2, t._3)
 	inline def !(t: (String, Msg)): Unit = tell(t)
 	inline def tell(msg: Msg): Unit = tell("", msg)
 	inline def !(msg: Msg): Unit = tell(msg)
+	inline def !(t: (Msg, ActorPath, String)): Unit = tell(t)
 
 	/**
 		* Retrieves the current state of the actor
