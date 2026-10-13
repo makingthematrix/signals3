@@ -89,7 +89,7 @@ final class ActorSystem[Msg, State] private(
 				case Some(system) =>
 					system.ask(AskForRef(actorId)).onComplete {
 						case Success(Ref(ref)) =>
-							sender ! Ref(ref.asInstanceOf[ActorRef[Msg]])
+							sender ! Ref(ref)
 							respond(p, Done)
 						case Success(msg) =>
 							respond(p, unhandledMsg[SystemMsg](msg.toString).future) // the only successful response should be RemoteSystemMsg.Ref

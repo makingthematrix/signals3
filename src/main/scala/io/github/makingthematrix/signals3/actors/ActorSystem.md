@@ -294,12 +294,96 @@ The `asInstanceOf` on `RemoteSystemMsg.Ref` is safe only because `systems` is
 homogeneous `RemoteSystem[Msg]` — worth a comment or tighter typing.
 `RemoteSystem.scala` is missing a trailing newline.
 
-### Summary
-
-The `toRef` registration race is fixed structurally (refs over paths, direct
-local delivery), routing is crash-free and loop-free, cross-system lookups
-verify actor existence race-free, and the remote surface is covered by tests (the whole project suite, 545 tests, passes).
-Invalid-id semantics have been unified (#1 ✅). Wrong error messages for own-system actor misses have been fixed (#2 ✅). Path-based sends are now reliable via message queuing (#3 ✅). What remains is lifecycle hardening (#4, #5) before a real network transport is built on top of `RemoteSystem`.
-
 ---
 
+## Review: `into[Msg]` Conversions — Sixth Pass
+
+**Vibe Session ID:** `d5cf0f30-5a06-11cc-6164-d1067ac7c6c5`  
+**Date:** 2026-10-13  
+**Reviewer:** Mistral Vibe (automated analysis)
+
+This section records findings from the introduction of `into[Msg]` parameters on
+`ask`/`tell` in `Actor`, `OtherActor`, `ActorRef`, `ActorSystem`, and
+`RemoteSystem` (commit `8e415cc` "into[Msg]", plus the `ActorRef`/`ActorSystem`
+follow-ups in the working tree), verified by the new `ConversionActorSpec`
+(21 tests: conversions through every overload, conversion semantics, and
+cross-type communication through `ConversionRemoteSystem`). All findings below
+were hit at compile or runtime while writing those tests.
+
+### What was covered
+
+- A conversion inserted at the call site of every overload of `!`/`tell`/`?`/`ask`
+  on `Actor`, `OtherActor` extensions, `LocalActorRef`, `RemoteActorRef`, and
+  `ActorSystem` (including behavior-id and path-based forms).
+- The semantics of those conversions: applied exactly once across the
+  ref → system → actor chains, skipped for already-conforming arguments,
+  failing at the sender before the message enters the actor machinery.
+- Cross-type communication between two actor systems through
+  `ConversionRemoteSystem` in both directions: `tell`, `ask` round trips,
+  behavior ids through the bridge, `AskForRef` re-routing, system messages
+  passing through unchanged, and the pinned `AskForRefAsync` raw-ref behavior
+  (finding 3 below).
+
+### Findings
+
+#### 1. Tuple overloads cannot convert their message component
+
+`into` applies to the whole argument, not to components of a tuple argument.
+`actor !(("special", "hello"))` does not compile: the argument tuple's type
+`(String, String)` is fixed before applicability, and element-wise conversions
+are not inserted for `into` components of tuple parameters (both the plain
+tuples on `Actor` and the named tuples on `ActorRef`). A convertible message
+inside a tuple must be converted before the call: `actor !(("special", Text("hello")))`.
+
+Bypassing this with an `into`-typed tuple binding
+(`val t: (String, into[Proto]) = ("special", "hello")`) compiles and converts,
+but triggers the `scala.language.implicitConversions` feature warning, so it
+is not a sanctioned path either. Pinned in `ConversionActorSpec`
+("tell with a behavior id..." and "path-based tell and ask..."), with comments
+stating the limitation.
+
+#### 2. Conformance beats conversion, provably
+
+When the argument already conforms to `Msg`, no conversion is searched at all.
+A `Conversion[Proto, Proto]` given in scope is never selected for a
+`Proto`-typed argument — the compiler reports it as an *unused* local
+definition. This is stronger than "identity preferred": the conversion search
+does not even run. Pinned in `ConversionActorSpec` ("an argument that already
+conforms to Msg is delivered without any conversion"), which keeps the given
+in scope (summoned, to silence the unused warning) and asserts the message
+arrives unconverted.
+
+#### 3. `AskForRefAsync` across a `ConversionRemoteSystem` delivers a raw ref whose sends are silently dropped by ordinary behaviors
+
+The cross-system `AskForRefAsync` handler now delivers the peer's
+`LocalActorRef` with its honest existential type (the old
+`asInstanceOf[ActorRef[Msg]]` lie was removed), but a user-level cast still
+allows sending through it. Such a send bypasses the conversion bridge: the raw
+sender-type message is delivered to the peer's behavior invocation, where a
+normal pattern like `case (m, _)` compiles to a checkcast of `m` to the peer's
+`Msg` type. For a foreign message that cast throws `ClassCastException`, and
+the actor's `Try` failure handling swallows it (`tell` has no promise to
+complete) — so from the outside the message is *silently lost*, not merely
+unmatched. The raw value is observable only through a whole-tuple pattern
+(`case t => t._1`, no cast), which is how the pinned test proves the arriving
+runtime class is the sender's `MsgA` while the actor speaks `MsgB`
+(`ConversionActorSpec`, "AskForRefAsync over the bridge delivers the raw ref;
+sends through it bypass conversion (pinned behavior)").
+
+**Open decision:** either wrap refs delivered across a converted system in a
+converting ref (mirroring `ConversionRemoteSystem`), or document path-based
+routing (`tell`/`ask` with `ActorPath.Remote`) as the only supported cross-type
+mechanism. The path-based route is safe: `AskForRef` (sync) returns a
+`RemoteActorRef` bound to the sender's system, so every send re-routes through
+the sender's registry and converts.
+
+### Summary
+
+`into[Msg]` works as intended across all direct call forms (including through
+refs and across the `ConversionRemoteSystem` bridge), with three pinned
+caveats: tuple arguments need pre-converted elements, already-conforming
+arguments never trigger a conversion search, and cross-type refs from
+`AskForRefAsync` remain the one unsafe path (recommendation in finding 3).
+The whole project suite (551 tests) passes.
+
+**Last Updated:** 2026-10-13
