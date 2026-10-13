@@ -152,7 +152,7 @@ class ConversionActorSpec extends FunSuite {
     val default: PF[Proto, Unit] = { case (p, _) => got.mutate(_ :+ s"D:$p"); None }
     val actor = createWithBehaviors("default" -> default, "special" -> special)
 
-    actor.tell("special", 42)
+    actor.tell(42, "special")
     // NOTE: an `into` parameter converts the whole argument, not the components of a tuple argument,
     // so a convertible message inside a tuple must be converted before the call
     actor !(("special", Text("hello")))
@@ -167,9 +167,9 @@ class ConversionActorSpec extends FunSuite {
     val default: PF[Proto, Unit] = { case (p, _) => Some(Text(s"D:$p")) }
     val actor = createWithBehaviors("default" -> default, "special" -> special)
 
-    assertEquals(resultCF(actor.ask("special", 42)), Text("S:Num(42)"))
+    assertEquals(resultCF(actor.ask(42, "special")), Text("S:Num(42)"))
     // tuple elements are not converted inside the call - the message must be passed as Msg
-    assertEquals(resultCF(actor ? (("special", Text("hello")))), Text("S:Text(hello)"))
+    assertEquals(resultCF(actor.ask("hello", "special")), Text("S:Text(hello)"))
     // regular routing is untouched by the conversions
     assertEquals(resultCF(actor ? Num(1)), Text("D:Num(1)"))
     close(actor)
@@ -182,10 +182,10 @@ class ConversionActorSpec extends FunSuite {
       case (p @ Text(s), _) => got.mutate(_ :+ p); Some(Text(s"T:$s"))
     }
     assertEquals(resultCF(actor.ask(42, ActorPath.Direct, "")), Text("N:42"))
-    assertEquals(resultCF(actor ? ((Text("hi"), ActorPath.Direct, ""))), Text("T:hi"))
+    assertEquals(resultCF(actor.ask("hi", ActorPath.Direct, "")), Text("T:hi"))
 
     actor.tell(7, ActorPath.Direct, "")
-    actor !((Text("eight"), ActorPath.Direct, ""))
+    actor.tell("eight", ActorPath.Direct, "")
 
     waitFor(got, Seq(Num(42), Text("hi"), Num(7), Text("eight")))
     close(actor)

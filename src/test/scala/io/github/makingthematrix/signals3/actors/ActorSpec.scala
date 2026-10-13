@@ -188,7 +188,7 @@ class ActorSpec extends FunSuite {
     awaitCF(cfAdd)
 
     // Message 42 should be handled by the special behavior when using its ID
-    val response = actor.ask("special_42", "42")
+    val response = actor ? ("special_42" -> "42")
     assertEquals(resultCF(response), "Special: 42")
     
     close(actor)
@@ -216,7 +216,7 @@ class ActorSpec extends FunSuite {
     receivedSpecial ! false
     
     // Send via bang with specific behavior ID
-    actor.tell("special", 2)
+    actor.tell(2, "special")
     waitFor(receivedSpecial, true)
     
     // The default behavior should NOT have been triggered

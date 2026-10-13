@@ -124,9 +124,9 @@ final class ActorSystem[Msg, State] private(
 		case Local(`id`)           => msgStream ! (msg, None, behId)
 		case Remote("", `id`)      => msgStream ! (msg, None, behId)
 		case Remote(`id`, `id`)    => msgStream ! (msg, None, behId)
-		case Local(actorId)        => if (actorRefs.contains(actorId)) actorRefs(actorId) ! (msg, behId) else this ! Requeue(actorId, msg, behId)
-		case Remote("", actorId)   => if (actorRefs.contains(actorId)) actorRefs(actorId) ! (msg, behId) else this ! Requeue(actorId, msg, behId)
-		case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId) ! (msg, behId) else this ! Requeue(actorId, msg, behId)
+		case Local(actorId)        => if (actorRefs.contains(actorId)) actorRefs(actorId).tell(msg, behId) else this ! Requeue(actorId, msg, behId)
+		case Remote("", actorId)   => if (actorRefs.contains(actorId)) actorRefs(actorId).tell(msg, behId) else this ! Requeue(actorId, msg, behId)
+		case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId).tell(msg, behId) else this ! Requeue(actorId, msg, behId)
 		case Remote(systemId, _) if systemId != id && systems.contains(systemId)  => systems(systemId).tell(msg, path, behId)
 		case _ => // invalid system or actor id
 	}
@@ -138,9 +138,9 @@ final class ActorSystem[Msg, State] private(
 			case Local(`id`)           => sendToStream()
 			case Remote("", `id`)      => sendToStream()
 			case Remote(`id`, `id`)    => sendToStream()
-			case Local(actorId)        => if (actorRefs.contains(actorId)) actorRefs(actorId) ? (msg, behId) else sendToStream()
-			case Remote("", actorId)   => if (actorRefs.contains(actorId)) actorRefs(actorId) ? (msg, behId) else sendToStream()
-			case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId) ? (msg, behId) else sendToStream()
+			case Local(actorId)        => if (actorRefs.contains(actorId)) actorRefs(actorId).ask(msg, behId) else sendToStream()
+			case Remote("", actorId)   => if (actorRefs.contains(actorId)) actorRefs(actorId).ask(msg, behId) else sendToStream()
+			case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId).ask(msg, behId) else sendToStream()
 			case Remote(systemId, _)   => if (systemId != id && systems.contains(systemId)) systems(systemId).ask(msg, path, behId) else invalidSystemId(systemId)
 		}
 	}

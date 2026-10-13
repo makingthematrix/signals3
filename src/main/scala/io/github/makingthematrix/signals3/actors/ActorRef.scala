@@ -23,8 +23,8 @@ trait ActorRef[Msg] {
 // Local actor reference - direct to Actor instance
 final class LocalActorRef[Msg] private[actors] (private val actor: OtherActor[Msg])
 	extends ActorRef[Msg] {
-	override def tell(msg: into[Msg], behId: String): Unit = actor.tell(behId, msg)
-	override def ask(msg: into[Msg], behId: String): CloseableFuture[Msg] = actor.ask(behId, msg)
+	override def tell(msg: into[Msg], behId: String): Unit = actor.tell(msg, behId)
+	override def ask(msg: into[Msg], behId: String): CloseableFuture[Msg] = actor.ask(msg, behId)
 	override val path: ActorPath = ActorPath.Local(actor.id)
 	override val isLocal: Boolean = true
 }
