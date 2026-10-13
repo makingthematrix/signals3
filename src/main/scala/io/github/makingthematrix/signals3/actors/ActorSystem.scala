@@ -4,6 +4,7 @@ import io.github.makingthematrix.signals3.CloseableFuture
 import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, invalidActorId, unhandledMsg}
 import io.github.makingthematrix.signals3.actors.ActorSystem.invalidSystemId
 
+import scala.Conversion.into
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.reflect.TypeTest
 import scala.util.{Failure, Success}
@@ -118,7 +119,7 @@ final class ActorSystem[Msg, State] private(
 			SystemMsg.NewChild(child)
 		}
 
-	override def tell(msg: Msg, path: ActorPath, behId: String): Unit = path match {
+	override def tell(msg: into[Msg], path: ActorPath, behId: String): Unit = path match {
 		case Direct                => msgStream ! (msg, None, behId)
 		case Local(`id`)           => msgStream ! (msg, None, behId)
 		case Remote("", `id`)      => msgStream ! (msg, None, behId)
@@ -130,7 +131,7 @@ final class ActorSystem[Msg, State] private(
 		case _ => // invalid system or actor id
 	}
 
-	override def ask(msg: Msg, path: ActorPath, behId: String): CloseableFuture[Msg] = {
+	override def ask(msg: into[Msg], path: ActorPath, behId: String): CloseableFuture[Msg] = {
 		inline def sendToStream() = CloseableFuture.from(Promise[Msg]().tap { p => msgStream ! (msg, Some(p), behId) })
 		path match {
 			case Direct                => sendToStream()

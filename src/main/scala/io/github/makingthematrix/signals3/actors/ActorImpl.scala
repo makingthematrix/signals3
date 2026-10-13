@@ -8,6 +8,7 @@ import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Closeable
 
 import java.util.UUID
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
+import scala.Conversion.into
 import scala.collection.mutable
 import scala.collection.mutable.Queue as MQueue
 import scala.concurrent.duration.{DurationLong, FiniteDuration}
@@ -155,7 +156,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 			CloseableFuture.from(p)
 		} else ActorIsClosed[SystemMsg]
 
-	override def ask(msg: Msg, path: ActorPath, behId: String): CloseableFuture[Msg] = if (!isClosed) {
+	override def ask(msg: into[Msg], path: ActorPath, behId: String): CloseableFuture[Msg] = if (!isClosed) {
 		import ActorPath.*
 		inline def sendToStream() = CloseableFuture.from(Promise[Msg]().tap { p => msgStream ! (msg, Some(p), behId) })
 		path match {
@@ -170,7 +171,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 
 	override def tell(msg: SystemMsg): Unit = if (!isClosed) { systemStream ! (msg, None)}
 
-	override def tell(msg: Msg, path: ActorPath, behId: String): Unit = if (!isClosed) {
+	override def tell(msg: into[Msg], path: ActorPath, behId: String): Unit = if (!isClosed) {
 		import ActorPath.*
 		path match {
 			case Direct                                          => msgStream ! (msg, None, behId)

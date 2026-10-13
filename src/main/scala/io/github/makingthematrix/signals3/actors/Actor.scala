@@ -4,6 +4,7 @@ import io.github.makingthematrix.signals3.actors.Actor.*
 import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy.Linear
 import io.github.makingthematrix.signals3.{CloseableFuture, DispatchQueue, Signal, SourceStream, Stream}
 
+import scala.Conversion.into
 import scala.annotation.static
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.{DurationLong, FiniteDuration}
@@ -85,14 +86,14 @@ trait Actor[Msg, State] {
 		* @param msg the message to send to the actor.
 		* @return a `CloseableFuture` containing the response from the actor.
 		*/
-	def ask(msg: Msg, actorPath: ActorPath, behId: String): CloseableFuture[Msg]
-	inline def ask(behId: String, msg: Msg): CloseableFuture[Msg] = ask(msg, ActorPath.Direct, behId)
-	inline def ask(t: (String, Msg)): CloseableFuture[Msg] = ask(t._1, t._2)
-	inline def ask(t: (Msg, ActorPath, String)): CloseableFuture[Msg] = ask(t._1, t._2, t._3)
-	inline def ?(t: (String, Msg)): CloseableFuture[Msg] = ask(t)
-	inline def ?(t: (Msg, ActorPath, String)): CloseableFuture[Msg] = ask(t)
-	inline def ask(msg: Msg): CloseableFuture[Msg] = ask("", msg)
-	inline def ?(msg: Msg): CloseableFuture[Msg] = ask(msg)
+	def ask(msg: into[Msg], actorPath: ActorPath, behId: String): CloseableFuture[Msg]
+	inline def ask(behId: String, msg: into[Msg]): CloseableFuture[Msg] = ask(msg, ActorPath.Direct, behId)
+	inline def ask(t: (String, into[Msg])): CloseableFuture[Msg] = ask(t._1, t._2)
+	inline def ask(t: (into[Msg], ActorPath, String)): CloseableFuture[Msg] = ask(t._1, t._2, t._3)
+	inline def ?(t: (String, into[Msg])): CloseableFuture[Msg] = ask(t)
+	inline def ?(t: (into[Msg], ActorPath, String)): CloseableFuture[Msg] = ask(t)
+	inline def ask(msg: into[Msg]): CloseableFuture[Msg] = ask("", msg)
+	inline def ?(msg: into[Msg]): CloseableFuture[Msg] = ask(msg)
 
 	/**
 		* Sends a system message to the actor.
@@ -118,14 +119,14 @@ trait Actor[Msg, State] {
 		* @param behId An optional parameter for forcing the identified behavior to process the message. Leave out for regular processing.
 		* @param msg The message to be sent to the actor.
 		*/
-	def tell(msg: Msg, actorPath: ActorPath, behId: String): Unit
-	inline def tell(behId: String, msg: Msg): Unit = tell(msg, ActorPath.Direct, behId)
-	inline def tell(t: (String, Msg)): Unit = tell(t._1, t._2)
-	inline def tell(t: (Msg, ActorPath, String)): Unit = tell(t._1, t._2, t._3)
-	inline def !(t: (String, Msg)): Unit = tell(t)
-	inline def tell(msg: Msg): Unit = tell("", msg)
-	inline def !(msg: Msg): Unit = tell(msg)
-	inline def !(t: (Msg, ActorPath, String)): Unit = tell(t)
+	def tell(msg: into[Msg], actorPath: ActorPath, behId: String): Unit
+	inline def tell(behId: String, msg: into[Msg]): Unit = tell(msg, ActorPath.Direct, behId)
+	inline def tell(t: (String, into[Msg])): Unit = tell(t._1, t._2)
+	inline def tell(t: (into[Msg], ActorPath, String)): Unit = tell(t._1, t._2, t._3)
+	inline def !(t: (String, into[Msg])): Unit = tell(t)
+	inline def tell(msg: into[Msg]): Unit = tell("", msg)
+	inline def !(msg: into[Msg]): Unit = tell(msg)
+	inline def !(t: (into[Msg], ActorPath, String)): Unit = tell(t)
 
 	/**
 		* Retrieves the current state of the actor
@@ -207,23 +208,23 @@ object Actor {
 	object OtherActor {
 		inline def apply[Msg](actor: Actor[Msg, ?]): OtherActor[Msg] = actor
 		extension [Msg](oa: OtherActor[Msg]) inline def id: String = oa.id
-		extension [Msg](oa: OtherActor[Msg]) inline def ask(msg: Msg, actorPath: ActorPath, behId: String): CloseableFuture[Msg] = oa.ask(msg, actorPath, behId)
-		extension [Msg](oa: OtherActor[Msg]) inline def ask(behId: String, msg: Msg): CloseableFuture[Msg] = ask(msg, ActorPath.Direct, behId)
-		extension [Msg](oa: OtherActor[Msg]) inline def ask(t: (String, Msg)): CloseableFuture[Msg] = ask(t._1, t._2)
-		extension [Msg](oa: OtherActor[Msg]) inline def ask(t: (Msg, ActorPath, String)): CloseableFuture[Msg] = ask(t._1, t._2, t._3)
-		extension [Msg](oa: OtherActor[Msg]) inline def ?(t: (String, Msg)): CloseableFuture[Msg] = oa.ask(t)
-		extension [Msg](oa: OtherActor[Msg]) inline def ?(t: (Msg, ActorPath, String)): CloseableFuture[Msg] = oa.ask(t)
-		extension [Msg](oa: OtherActor[Msg]) inline def ask(msg: Msg): CloseableFuture[Msg] = ask("", msg)
-		extension [Msg](oa: OtherActor[Msg]) inline def ?(msg: Msg): CloseableFuture[Msg] = oa.ask(msg)
+		extension [Msg](oa: OtherActor[Msg]) inline def ask(msg: into[Msg], actorPath: ActorPath, behId: String): CloseableFuture[Msg] = oa.ask(msg, actorPath, behId)
+		extension [Msg](oa: OtherActor[Msg]) inline def ask(behId: String, msg: into[Msg]): CloseableFuture[Msg] = ask(msg, ActorPath.Direct, behId)
+		extension [Msg](oa: OtherActor[Msg]) inline def ask(t: (String, into[Msg])): CloseableFuture[Msg] = ask(t._1, t._2)
+		extension [Msg](oa: OtherActor[Msg]) inline def ask(t: (into[Msg], ActorPath, String)): CloseableFuture[Msg] = ask(t._1, t._2, t._3)
+		extension [Msg](oa: OtherActor[Msg]) inline def ?(t: (String, into[Msg])): CloseableFuture[Msg] = oa.ask(t)
+		extension [Msg](oa: OtherActor[Msg]) inline def ?(t: (into[Msg], ActorPath, String)): CloseableFuture[Msg] = oa.ask(t)
+		extension [Msg](oa: OtherActor[Msg]) inline def ask(msg: into[Msg]): CloseableFuture[Msg] = ask("", msg)
+		extension [Msg](oa: OtherActor[Msg]) inline def ?(msg: into[Msg]): CloseableFuture[Msg] = oa.ask(msg)
 
-		extension [Msg](oa: OtherActor[Msg]) inline def tell(msg: Msg, actorPath: ActorPath, behId: String): Unit = oa.tell(msg, actorPath, behId)
-		extension [Msg](oa: OtherActor[Msg]) inline def tell(behId: String, msg: Msg): Unit = tell(msg, ActorPath.Direct, behId)
-		extension [Msg](oa: OtherActor[Msg]) inline def tell(t: (String, Msg)): Unit = tell(t._1, t._2)
-		extension [Msg](oa: OtherActor[Msg]) inline def tell(t: (Msg, ActorPath, String)): Unit = tell(t._1, t._2, t._3)
-		extension [Msg](oa: OtherActor[Msg]) inline def !(t: (String, Msg)): Unit = oa.tell(t)
-		extension [Msg](oa: OtherActor[Msg]) inline def tell(msg: Msg): Unit = tell("", msg)
-		extension [Msg](oa: OtherActor[Msg]) inline def !(msg: Msg): Unit = oa.tell(msg)
-		extension [Msg](oa: OtherActor[Msg]) inline def !(t: (Msg, ActorPath, String)): Unit = oa.tell(t)
+		extension [Msg](oa: OtherActor[Msg]) inline def tell(msg: into[Msg], actorPath: ActorPath, behId: String): Unit = oa.tell(msg, actorPath, behId)
+		extension [Msg](oa: OtherActor[Msg]) inline def tell(behId: String, msg: into[Msg]): Unit = tell(msg, ActorPath.Direct, behId)
+		extension [Msg](oa: OtherActor[Msg]) inline def tell(t: (String, into[Msg])): Unit = tell(t._1, t._2)
+		extension [Msg](oa: OtherActor[Msg]) inline def tell(t: (into[Msg], ActorPath, String)): Unit = tell(t._1, t._2, t._3)
+		extension [Msg](oa: OtherActor[Msg]) inline def !(t: (String, into[Msg])): Unit = oa.tell(t)
+		extension [Msg](oa: OtherActor[Msg]) inline def tell(msg: into[Msg]): Unit = tell("", msg)
+		extension [Msg](oa: OtherActor[Msg]) inline def !(msg: into[Msg]): Unit = oa.tell(msg)
+		extension [Msg](oa: OtherActor[Msg]) inline def !(t: (into[Msg], ActorPath, String)): Unit = oa.tell(t)
 	}
 	/**
 		* A special type of a failure indicating that although the message was received via the "?" (ask) operator and it was
