@@ -21,7 +21,7 @@ final class ConversionRemoteSystem[From, To](system: RemoteSystem[To])
 
 	override def ask(msg: From, actorPath: ActorPath, behId: String): CloseableFuture[From] =
 		system.ask(cFrom(msg), actorPath, behId).map(cTo)
-	
+
 	override def tell(msg: SystemMsg): Unit = system.tell(msg)
 
 	override def tell(msg: From, actorPath: ActorPath, behId: String): Unit =

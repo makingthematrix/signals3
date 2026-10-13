@@ -77,8 +77,8 @@ class ActorSystemRemoteSpec extends FunSuite {
     extends ActorImpl[String, Int]("capturing", 0, Actor.defBeat, None, Some(sys)) {
     @volatile var receivedRef: Option[ActorRef[String]] = None
     override protected def processSysEntry(msg: SysEntry): Unit = msg match {
-      case (Ref[String](ref), p) =>
-        receivedRef = Some(ref)
+      case (Ref(ref), p) =>
+        receivedRef = Some(ref.asInstanceOf[ActorRef[String]])
         respond(p, Done)
       case other =>
         super.processSysEntry(other)
@@ -113,8 +113,8 @@ class ActorSystemRemoteSpec extends FunSuite {
     tryResultCF(sys ? Spawn(actorId = "c", behaviors = List("default" -> behavior))) match {
       case Success(NewChild(child)) =>
         tryResultCF(sys ? AskForRef("c")) match {
-          case Success(Ref[String](ref)) =>
-            ref ! "42"
+          case Success(Ref(ref)) =>
+            ref.asInstanceOf[ActorRef[String]] ! "42"
             assert(waitFor(received, 1), "message sent through a fresh ref was dropped")
             close(child)
           case other => fail(s"Unexpected AskForRef response: $other")
@@ -136,8 +136,8 @@ class ActorSystemRemoteSpec extends FunSuite {
     awaitRef(sys, "sender")
     awaitRef(sys, "target")
     tryResultCF(sys ? AskForRef("sender")) match {
-      case Success(Ref[String](senderRef)) =>
-        senderRef ! "42"
+      case Success(Ref(senderRef)) =>
+        senderRef.asInstanceOf[ActorRef[String]] ! "42"
         assert(waitFor(received, 1), "message sent via a Local path from a behavior was not delivered")
       case other => fail(s"Unexpected AskForRef response: $other")
     }
@@ -193,12 +193,12 @@ class ActorSystemRemoteSpec extends FunSuite {
 
     awaitRef(b, "onB")
     tryResultCF(a ? AskForRef("onB", "B")) match {
-      case Success(Ref[String](ref)) =>
+      case Success(Ref(ref)) =>
         assert(!ref.isLocal)
         assertEquals(ref.path, ActorPath.Remote("B", "onB"))
-        ref ! "42"
+        ref.asInstanceOf[ActorRef[String]] ! "42"
         assert(waitFor(received, 1), "cross-system bang was not delivered")
-        assertEquals(resultCF(ref ? "43"), "B: 43")
+        assertEquals(resultCF(ref.asInstanceOf[ActorRef[String]] ? "43"), "B: 43")
       case other => fail(s"Unexpected AskForRef response: $other")
     }
     Try(close(actorOnB)); Try(close(a)); Try(close(b))
@@ -210,8 +210,8 @@ class ActorSystemRemoteSpec extends FunSuite {
     tryResultCF(b ? Spawn(actorId = "spawned", behaviors = List("default" -> behavior))) match {
       case Success(NewChild(child)) =>
         tryResultCF(a ? AskForRef("spawned", "B")) match {
-          case Success(Ref[String](ref)) =>
-            assertEquals(resultCF(ref ? "1"), "B: 1")
+          case Success(Ref(ref)) =>
+            assertEquals(resultCF(ref.asInstanceOf[ActorRef[String]] ? "1"), "B: 1")
             close(child)
           case other => fail(s"Unexpected AskForRef response: $other")
         }
@@ -299,7 +299,7 @@ class ActorSystemRemoteSpec extends FunSuite {
     newActorOn(newA, "onA2", behavior)
     // no awaitRef here: the lookup must queue behind the pending Register
     tryResultCF(b ? AskForRef("onA2", "A")) match {
-      case Success(Ref[String](ref)) => assertEquals(resultCF(ref ? "1"), "A2: 1")
+      case Success(Ref(ref)) => assertEquals(resultCF(ref.asInstanceOf[ActorRef[String]] ? "1"), "A2: 1")
       case other => fail(s"Unexpected AskForRef response: $other")
     }
     a2.foreach(s => Try(close(s))); Try(close(b))
@@ -342,9 +342,9 @@ class ActorSystemRemoteSpec extends FunSuite {
 
     awaitRef(b, "multiB")
     tryResultCF(a ? AskForRef("multiB", "B")) match {
-      case Success(Ref[String](ref)) =>
-        assertEquals(resultCF(ref ? ("1", "upper")), "U:1")
-        assertEquals(resultCF(ref ? ("1", "lower")), "l:1")
+      case Success(Ref(ref)) =>
+        assertEquals(resultCF(ref.asInstanceOf[ActorRef[String]] ? ("1", "upper")), "U:1")
+        assertEquals(resultCF(ref.asInstanceOf[ActorRef[String]] ? ("1", "lower")), "l:1")
       case other => fail(s"Unexpected AskForRef response: $other")
     }
     // path-based ask with a behavior id, remote and local paths
@@ -422,7 +422,7 @@ class ActorSystemRemoteSpec extends FunSuite {
     val futures = (0 until numActors).map { i =>
       Future {
         tryResultCF(a ? AskForRef(s"s$i", "B"))(using 20.seconds) match {
-          case Success(Ref[String](ref)) => assertEquals(resultCF(ref ? i.toString), s"B:$i")
+          case Success(Ref(ref)) => assertEquals(resultCF(ref.asInstanceOf[ActorRef[String]] ? i.toString), s"B:$i")
           case other => fail(s"Unexpected AskForRef response for s$i: $other")
         }
       }
@@ -441,16 +441,16 @@ class ActorSystemRemoteSpec extends FunSuite {
     val (a, b) = crossRegistered()
     val behavior: PF[String, Int] = { case (msg, _) => Some(s"G:$msg") }
     val child: Actor[String, Int] = tryResultCF(b ? Spawn(actorId = "kid")) match {
-      case Success(NewChild[String, Int](child)) => child
+      case Success(NewChild(child)) => child.asInstanceOf[Actor[String, Int]]
       case other => fail(s"Unexpected spawn response: $other")
     }
     val grandchild: Actor[String, Int] = tryResultCF(child ? Spawn(actorId = "grandkid", behaviors = List("default" -> behavior))) match {
-      case Success(NewChild[String, Int](grandchild)) => grandchild
+      case Success(NewChild(grandchild)) => grandchild.asInstanceOf[Actor[String, Int]]
       case other => fail(s"Unexpected spawn response: $other")
     }
     // no awaitRef here: the lookup must queue behind the pending Register
     tryResultCF(a ? AskForRef("grandkid", "B")) match {
-      case Success(Ref[String](ref)) => assertEquals(resultCF(ref ? "1"), "G:1")
+      case Success(Ref(ref)) => assertEquals(resultCF(ref.asInstanceOf[ActorRef[String]] ? "1"), "G:1")
       case other => fail(s"Unexpected AskForRef response: $other")
     }
     close(grandchild); close(child)

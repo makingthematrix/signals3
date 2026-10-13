@@ -2,6 +2,7 @@ package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.actors.Actor.{Beh, HeartBeatStrategy, PF}
 
+import scala.annotation.static
 import scala.concurrent.ExecutionContext
 import scala.reflect.{ClassTag, TypeTest}
 
@@ -75,7 +76,7 @@ object SystemMsg {
 		* @return a `TypeTest[S, T]` which matches any value of the runtime class of `T`
 		*/
 	
-	private[actors] final class SystemMsgTypeTest[S, T](using ct: ClassTag[T]) extends TypeTest[S, T] {
+	@static private[actors] final class SystemMsgTypeTest[S, T](using ct: ClassTag[T]) extends TypeTest[S, T] {
 		override inline def unapply(s: S): Option[s.type & T] =
 			if (ct.runtimeClass.isInstance(s)) Some(s.asInstanceOf[s.type & T]) else None
 	}

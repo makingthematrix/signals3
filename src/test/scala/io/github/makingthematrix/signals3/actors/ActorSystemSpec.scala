@@ -45,7 +45,7 @@ class ActorSystemSpec extends FunSuite {
 
   private def spawn(parent: Actor[String, Int])(data: Spawn[String, Int]): Actor[String, Int] =
     tryResultCF(parent ? data) match {
-      case Success(SystemMsg.NewChild[String, Int](child))             => child
+      case Success(NewChild(child))                              => child.asInstanceOf[Actor[String, Int]]
       case Failure(InvalidIdException(id)) if id == data.actorId => fail(s"Spawn with id $id was rejected as invalid")
       case other                                                 => fail(s"Unexpected spawn response: $other")
     }
@@ -55,7 +55,7 @@ class ActorSystemSpec extends FunSuite {
     while (System.currentTimeMillis() - start < 5000) {
       try {
         tryResultCF(sys ? AskForRef(id)) match {
-          case Success(Ref[String](ref))                 => return ref
+          case Success(Ref(ref))                 => return ref.asInstanceOf[ActorRef[String]]
           case Failure(InvalidIdException(`id`)) => Thread.sleep(50)
           case other                             => fail(s"Unexpected response: $other")
         }
@@ -359,8 +359,8 @@ class ActorSystemSpec extends FunSuite {
       Future {
         (0 until spawnsPerThread).foreach { _ =>
           resultCF(sys ? Spawn()) match {
-            case NewChild[String, Int](c) => children.put(c.id, c)
-            case other => throw new AssertionError(s"Unexpected response: $other")
+            case NewChild(c) => children.put(c.id, c.asInstanceOf[Actor[String, Int]])
+            case other       => throw new AssertionError(s"Unexpected response: $other")
           }
         }
       }
