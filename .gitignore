@@ -28,12 +28,6 @@
 *contextMatrixTest*
 .cache-main
 .cache-tests
-*.odp
-*.odt
-*.gif
-*.png
-*.jpg
-*.svg
 *.bloop*
 *.metals*
 *.bsp
