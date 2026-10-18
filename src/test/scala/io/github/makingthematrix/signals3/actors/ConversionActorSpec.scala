@@ -250,7 +250,7 @@ class ConversionActorSpec extends FunSuite {
         assertEquals(ref.path, ActorPath.Remote("remoteB", "onB"))
 
         ref ! 42
-        ref.tell("hello")
+        ref ! "hello"
         waitFor(got, Seq(Num(42), Text("hello")))
         assertEquals(resultCF(ref ? 7), Text("ok:Num(7)"))
         assertEquals(resultCF(ref.ask("asked")), Text("ok:Text(asked)"))
