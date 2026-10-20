@@ -81,5 +81,5 @@ object SystemMsg {
 			if (ct.runtimeClass.isInstance(s)) Some(s.asInstanceOf[s.type & T]) else None
 	}
 		
-	private[actors] inline def trusted[S, T](using ct: ClassTag[T]): TypeTest[S, T] = new SystemMsgTypeTest[S, T]
+	private[actors] inline def trusted[S, T](using ClassTag[T]): TypeTest[S, T] = new SystemMsgTypeTest[S, T]
 }
