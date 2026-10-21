@@ -2,7 +2,7 @@ package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.actors.Actor.*
 import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy.Linear
-import io.github.makingthematrix.signals3.{CloseableFuture, DispatchQueue, Signal, SourceStream, Stream}
+import io.github.makingthematrix.signals3.{CanBeClosed, CanBeInitialized, CanBePaused, CloseableFuture, DispatchQueue, SourceStream, Stream}
 
 import scala.Conversion.into
 import scala.annotation.static
@@ -28,7 +28,7 @@ import scala.util.{Failure, Success}
 	* @tparam Msg The type of the incoming message
 	* @tparam State The type of the internal state
 	*/
-trait Actor[Msg, State] {
+trait Actor[Msg, State] extends CanBeClosed with CanBePaused with CanBeInitialized {
 	/**
 		* The actor's unique identifier.
 		*/
@@ -135,51 +135,9 @@ trait Actor[Msg, State] {
 	protected def heartbeat: HeartBeatStrategy
 
 	/**
-		* Returns a signal that works on a given [[scala.concurrent.ExecutionContext]]; it starts with the value set to `false` (unless it's
-		* created after the actor is already initialized) and it will be set to `true` when the actor is initialized.
-		*
-		* @return A signal that will be set to `true` when the actor is initialized.
-		*/
-	def isInitializedSignal(using ExecutionContext): Signal[Boolean]
-
-	/**
-		* Returns whether the actor is initialized or not.
-		* Before initialization, the actor cannot receive messages.
-		*/
-	def isInitialized: Boolean
-
-	/**
 		* Returns whether the actor works on a serial dispatch queue.
 		*/
 	val isSerial: Boolean
-
-	/**
-		* Returns whether the actor is closed or not.
-		* A closed actor cannot receive messages and it cannot be reopened.
-		*/
-	def isClosed: Boolean
-
-	/**
-		* Returns a signal that works on a given [[scala.concurrent.ExecutionContext]]; it starts with the value set to `false` (unless it's
-		* created after the actor is already closed) and it will be set to `true` when the actor is closed.
-		*
-		* @return A signal that will be set to `true` when the actor is closed.
-		*/
-	def isClosedSignal(using ExecutionContext): Signal[Boolean]
-
-	/**
-		* Returns whether the actor is paused or not.
-		* A paused actor still can receive messages, but it will not process them until it is unpaused.
-		*/
-	def isPaused: Boolean
-
-	/**
-		* Returns a signal that works on a given [[scala.concurrent.ExecutionContext]]; it starts with the value set to `false` (unless it's
-		* created after the actor is already paused) and it will be set to `true` when the actor is paused.
-		*
-		* @return A signal that will be set to `true` when the actor is paused.
-		*/
-	def isPausedSignal: Signal[Boolean]
 
 	/**
 		* Returns the parent actor of this actor, if any.
@@ -203,13 +161,13 @@ object Actor {
 		inline def apply[Msg](actor: Actor[Msg, ?]): OtherActor[Msg] = actor
 		extension [Msg](oa: OtherActor[Msg]) inline def id: String = oa.id
 		extension [Msg](oa: OtherActor[Msg]) inline def ask(msg: into[Msg], actorPath: ActorPath, behId: String): CloseableFuture[Msg] = oa.ask(msg, actorPath, behId)
-		extension [Msg](oa: OtherActor[Msg]) inline def ask(msg: into[Msg], behId: String): CloseableFuture[Msg] = ask(msg, ActorPath.Direct, behId)
+		extension [Msg](oa: OtherActor[Msg]) inline def ask(msg: into[Msg], behId: String): CloseableFuture[Msg] = oa.ask(msg, ActorPath.Direct, behId)
 	  extension [Msg](oa: OtherActor[Msg]) inline def ?(t: (String, into[Msg])): CloseableFuture[Msg] = oa.ask(t._2, t._1)
 		extension [Msg](oa: OtherActor[Msg]) inline def ask(msg: into[Msg]): CloseableFuture[Msg] = oa.ask(msg)
 		extension [Msg](oa: OtherActor[Msg]) inline def ?(msg: into[Msg]): CloseableFuture[Msg] = oa.ask(msg)
 
 		extension [Msg](oa: OtherActor[Msg]) inline def tell(msg: into[Msg], actorPath: ActorPath, behId: String): Unit = oa.tell(msg, actorPath, behId)
-		extension [Msg](oa: OtherActor[Msg]) inline def tell(msg: into[Msg], behId: String): Unit = tell(msg, ActorPath.Direct, behId)
+		extension [Msg](oa: OtherActor[Msg]) inline def tell(msg: into[Msg], behId: String): Unit = oa.tell(msg, ActorPath.Direct, behId)
 		extension [Msg](oa: OtherActor[Msg]) inline def !(t: (String, into[Msg])): Unit = oa.tell(t._2, t._1)
 		extension [Msg](oa: OtherActor[Msg]) inline def tell(msg: into[Msg]): Unit = oa.tell(msg)
 		extension [Msg](oa: OtherActor[Msg]) inline def !(msg: into[Msg]): Unit = oa.tell(msg)

@@ -145,10 +145,10 @@ final class ActorSystem[Msg, State] private(
 		}
 	}
 
-	override protected[actors] def initialize(): Unit = if (!isInitialized) {
+	override protected def tryInitialize(): Unit = {
 		systems += (id -> this)
 		actorRefs += (id -> LocalActorRef(this)) // register yourself as a valid actor
-		super.initialize()
+		super.tryInitialize()
 	}
 
 	override protected def shutdown(): Future[SystemMsg] = {

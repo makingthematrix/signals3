@@ -1,9 +1,8 @@
 package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.priv.EventSource.NoAutowiring
-import io.github.makingthematrix.signals3.{CloseableFuture, Stream}
+import io.github.makingthematrix.signals3.{CloseableFuture, Initializable, Stream}
 
-import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 import scala.util.chaining.scalaUtilChainingOps
@@ -25,7 +24,7 @@ import scala.util.chaining.scalaUtilChainingOps
   */
 abstract class GeneratorStream[E] protected[signals3] (interval: FiniteDuration | (() => FiniteDuration))
                                                       (using ExecutionContext)
-  extends Stream[E] with NoAutowiring {
+  extends Stream[E] with Initializable with NoAutowiring {
 
   protected lazy val beat: CloseableFuture[Unit] =
     (interval match {
@@ -34,14 +33,15 @@ abstract class GeneratorStream[E] protected[signals3] (interval: FiniteDuration 
     }) {
       onBeat()
     }
+  
+  protected def onBeat(): Unit = if (!isInitialized) initialize()
 
-  private val isInitialized: AtomicBoolean = new AtomicBoolean(false)
-
-  protected def onBeat(): Unit = if (!isInitialized.getAndSet(true)) beat
-
-  protected[signals3] final def initialize(): Unit = {
-    isInitialized.set(true)
+  override protected def tryInitialize(): Unit = {
     beat
+  }
+
+  override protected def onInitializationFailed(t: Throwable): Unit = {
+    println(s"GeneratorStream initialization failed: ${t.getMessage}")
   }
 }
 

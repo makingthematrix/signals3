@@ -1,10 +1,9 @@
 package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.Closeable.CloseableSignal
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Signal}
 import io.github.makingthematrix.signals3.priv.EventSource.NoAutowiring
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Initializable, Signal}
 
-import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 import scala.util.chaining.scalaUtilChainingOps
@@ -28,20 +27,21 @@ import scala.util.chaining.scalaUtilChainingOps
 
 abstract class GeneratorSignal[V] protected[signals3] (init: V, interval: FiniteDuration | (V => FiniteDuration))
                                                       (using ExecutionContext)
-  extends Signal[V](Some(init)) with NoAutowiring {
+  extends Signal[V](Some(init)) with Initializable with NoAutowiring {
 
   protected lazy val beat: CloseableFuture[Unit] = (interval match {
     case intv: FiniteDuration        => CloseableFuture.repeat(intv)(_)
     case intv: (V => FiniteDuration) => CloseableFuture.repeatVariant(() => intv(currentValue.getOrElse(init)))(_)
   }) { onBeat() }
+  
+  protected def onBeat(): Unit = if (!isInitialized) initialize()
 
-  private val isInitialized: AtomicBoolean = new AtomicBoolean(false)
-
-  protected def onBeat(): Unit = if (!isInitialized.getAndSet(true)) beat
-
-  protected[signals3] final def initialize(): Unit = {
-    isInitialized.set(true)
+  override protected def tryInitialize(): Unit = {
     beat
+  }
+
+  override protected def onInitializationFailed(t: Throwable): Unit = {
+    println(s"GeneratorStream initialization failed: ${t.getMessage}")
   }
 }
 

@@ -611,11 +611,10 @@ class ActorSpec extends FunSuite {
   }
 
   test("onInit exception handling with resource cleanup") {
-    // onInit is called during initialization, so if it throws, the exception propagates
-    // during actor construction. The initialize() method now calls closeAndCheck() in a catch block,
-    // ensuring that heartbeat and other resources are properly released even on initialization failure.
-    intercept[RuntimeException] {
-      create[Unit]({ case _ => None }, onInit = { _ => throw new RuntimeException("Init error") })
-    }
+    // onInit is called during initialization, and if it throws an exception, it's caught, logged,
+    // and the external result remains simply that the actor is not initialized, but closed.
+    val actor = create[Unit]({ case _ => None }, onInit = { _ => throw new RuntimeException("Init error") })
+    assert(!actor.isInitialized)
+    assert(actor.isClosed)
   }
 }

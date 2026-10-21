@@ -71,8 +71,11 @@ class PausableSpec extends munit.FunSuite {
     pausable.onPause { callbackCount += 1 }
     
     pausable.pause()
+    pausable.unpause()
     pausable.pause()
+    pausable.unpause()
     pausable.pause()
+    pausable.unpause()
     assertEquals(callbackCount, 3) // Callback is called each time pause() is called
   }
 

@@ -3,8 +3,7 @@ package io.github.makingthematrix.signals3.actors
 import io.github.makingthematrix.signals3.actors.Actor.*
 import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy.{Agitated, Linear, Reactive}
 import io.github.makingthematrix.signals3.generators.GeneratorStream
-import io.github.makingthematrix.signals3.priv.DoneSignal
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, CloseableSourceStream, Pausable, SerialDispatchQueue, Signal, SourceStream, Stream}
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, CloseableSourceStream, Initializable, Pausable, SerialDispatchQueue, SourceStream, Stream}
 
 import java.util.UUID
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
@@ -29,7 +28,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
                                                  override val parent: Option[Actor[Msg, State]] = None,
                                                  override val system: Option[ActorSystem[Msg, State]] = None
                                                 )(using ec: ExecutionContext)
-	extends MutableActor[Msg, State] with Closeable with Pausable {
+	extends MutableActor[Msg, State] with Closeable with Pausable with Initializable {
 
 	protected type MsgEntry = (msg: Msg, rsp: Option[Promise[Msg]], behId: String)
 	protected type SysEntry = (msg: SystemMsg, rsp: Option[Promise[SystemMsg]])
@@ -143,7 +142,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	// adds all new behavior functions in front of the list of behaviors but maintains their own internal order
 	inline private[actors] def addBehaviorPFs(pfs: Iterable[PF[Msg, State]]): Unit =
 		addBehaviors(pfs.map(pf => UUID.randomUUID().toString -> pf))
-	
+
 	private[actors] def addBehaviors(behs: Iterable[Beh[Msg, State]]): Unit = {
 		behaviors = behs.toList ::: behaviors
 		behMap ++= behs.map(b => b.id -> b.pf)
@@ -201,7 +200,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 
 	inline protected def respond(pOpt: Option[Promise[SystemMsg]], rsp: SystemMsg): Unit =
 		pOpt.foreach(p => Try(p.tryComplete(Success(rsp))))
-		
+
 	inline protected def respond(pOpt: Option[Promise[SystemMsg]], rsp: Future[SystemMsg]): Unit =
 		pOpt.foreach(_.completeWith(rsp))
 
@@ -292,32 +291,23 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		while (!isPaused && !isClosed && entries.nonEmpty) processMsgEntry(entries.dequeue())
 	}
 
-	private val initialized: AtomicBoolean = new AtomicBoolean(false)
+	override protected def tryInitialize(): Unit = {
+		beat.foreach(_ => processMessages())
+		system.foreach(s => s ! SystemMsg.Register(this))
+	}
 
-	override def isInitialized: Boolean = initialized.get()
+	override protected def onInitializationFailed(t: Throwable): Unit = {
+		println(s"Failed to initialize actor $id: ${t.getMessage}")
+		close()
+	}
 
-	// Calls the onInit functions and initializes the heartbeat of the actor
-	protected[actors] def initialize(): Unit =
-		if (!isInitialized) try {
-			_onInit.foreach(_(this))
-			_onInit = Nil
-			beat.foreach(_ => processMessages())
-			system.foreach(s => s ! SystemMsg.Register(this))
-			initialized.set(true)
-		} finally {
-			if (!isInitialized) closeAndCheck()
-		}
+	override protected def onPauseFailed(t: Throwable): Unit = {
+		println(s"Failed to pause actor $id: ${t.getMessage}")
+	}
 
-	private var _onInit: List[MutableActor[Msg, State] => Unit] = Nil
-
-	// Registers a function that should be called exactly once when the actor is initialized
-	private[actors] def onInit(f: MutableActor[Msg, State] => Unit): Unit =
-		_onInit ::= f
-
-	override def isInitializedSignal(using ExecutionContext): Signal[Boolean] =
-		DoneSignal().tap { signal =>
-			if (isInitialized) signal.done() else onInit(_ => signal.done())
-		}
+	override protected def onCloseFailed(t: Throwable): Unit = {
+		println(s"Failed to close actor $id: ${t.getMessage}")
+	}
 
 	/**
 		* Closes the actor and performs necessary checks to ensure all messages are completed before finalizing the closure.

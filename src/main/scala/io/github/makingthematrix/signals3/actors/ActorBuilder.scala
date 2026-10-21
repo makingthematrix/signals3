@@ -273,7 +273,7 @@ final class ActorBuilder[Msg, State] (
 
   private def buildActor(state: State, ec: ExecutionContext): Actor[Msg, State] & Closeable & Pausable = {
     val actor = new ActorImpl[Msg, State](id, state, heartbeat, parent, system)(using ec)
-    onInit.foreach(actor.onInit)
+    onInit.foreach(f => actor.onInit(f(actor)))
     actor.addBehaviors(behaviors)
     actor.initialize()
     actor

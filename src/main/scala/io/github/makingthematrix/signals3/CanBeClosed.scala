@@ -23,21 +23,29 @@ trait CanBeClosed {
 
   protected def closeAndCheck(): Boolean =
     if (!closed.getAndSet(true)) {
-      callOnClose()
-      true
+      try {
+        tryClose()
+        _onClose.foreach(_())
+        _onClose = Nil
+        true 
+      } catch {
+        case t: Throwable =>
+          onCloseFailed(t)
+          closed.set(false)
+          false
+      }
     } else false
+
+  protected def tryClose(): Unit = {}
+  
+  protected def onCloseFailed(t: Throwable): Unit = {}
 
   /**
    * Registers a block of code that should be called exactly once when the closeable is being closed.
    * @param body Logic that is going to be executed when the closeable is closed.
    */
   def onClose(body: => Unit): Unit =
-    _onClose ::= (() => body) 
-
-  private final def callOnClose(): Unit = {
-    _onClose.foreach(_())
-    _onClose = Nil
-  }
+    _onClose ::= (() => body)
 
   private var _onClose: List[() => Unit] = Nil
 
