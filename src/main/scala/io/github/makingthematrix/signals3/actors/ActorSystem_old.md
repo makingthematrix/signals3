@@ -1,5 +1,7 @@
 # Actor System & References Implementation Proposal
 
+IMPORTANT: This file is outdated. It is kept here only because it might help in the future in the process of writing specifications. Do not use it as a reference for the current implementation.
+
 **Vibe Session ID:** `fcbf1297-ni0lsm34`  
 **Date:** 2026-09-10  
 **Status:** Proposal (Awaiting Review)

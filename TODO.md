@@ -2,20 +2,18 @@
 
 ## Open
 
-### Actor system & references
-- [ ] The ability to register actors from another actor system
-- [ ] Check if subclasses of `Msg` work, or do we need some type parameter magic with `<:` and `:`
-- [ ] Make use of `into` and `Conversion[From, To]` to enable conversions between messages
-- [ ] Make use of `ClassTag` in `ActorRef` (see the inject project) so that the actor refs' type parameters are not lost in collections (or: [type tests](https://docs.scala-lang.org/scala3/reference/other-new-features/type-test.html))
+### To do
 - [ ] Actors should carry tags (strings), and the actor system can get requests to connect an actor with any other actor that has a given tag
-
-### Lifecycle, observability & configuration
+- [ ] LogActor as a special subclass of ActorImpl
+- [ ] When an actor receives a reference of LogActor, it starts to gather logging and debugging data (not before)
+- [ ] PersistenceActor as a special subclass of ActorImpl
+- [ ] When an actor receives a reference of PersistenceActor, it sends its state to the PersistenceActor at Close
 - [ ] `HealthCheck` system message, sent from the parent to the child; if the child doesn't respond in time, the message is repeated, and then the child is closed
-- [ ] Consider allowing the children to use different types of messages; and then: clusters? persistence?
-- [ ] Maybe think about plugging in a logging functionality so that an unprocessed message can be logged as a warning
-- [ ] Similarly, about metrics
-- [ ] And about the max number of messages processed per heartbeat
+- [ ] The `Restart` system message and logic
+- [ ] The ability to register actors from another actor system
 - [ ] Make constants configurable through environment variables
+- [ ] ReadWriteUpdate rewritten in signals3 with actors
+- [ ] ANN rewritten in signals3 with actors
 
 ## Done
 
@@ -43,3 +41,7 @@
 - [x] `ActorSystem` where you can register new actors with unique ids
 - [x] `ActorRef` (local) retrieved from `ActorSystem`, used to send messages to other actors
 - [x] `RemoteActorRef` should carry the `ActorSystem` id too, to enable communication between different actor systems
+- [x] Check if subclasses of `Msg` work, or do we need some type parameter magic with `<:` and `:`
+- [x] Make use of `into` and `Conversion[From, To]` to enable conversions between messages
+- [x] Make use of `ClassTag` in `ActorRef` (see the inject project) so that the actor refs' type parameters are not lost in collections (or: [type tests](https://docs.scala-lang.org/scala3/reference/other-new-features/type-test.html))
+

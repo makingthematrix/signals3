@@ -23,11 +23,11 @@ import scala.util.{Failure, Success, Try}
 	* @tparam State The type representing the internal state of the actor.
 	*/
 private[actors] class ActorImpl[Msg, State](override val id: String,
-                                                 protected var _state: State,
-                                                 override protected val heartbeat: HeartBeatStrategy = Actor.defBeat,
-                                                 override val parent: Option[Actor[Msg, State]] = None,
-                                                 override val system: Option[ActorSystem[Msg, State]] = None
-                                                )(using ec: ExecutionContext)
+                                            protected var _state: State,
+                                            override protected val heartbeat: HeartBeatStrategy = Actor.defBeat,
+                                            override val parent: Option[Actor[Msg, State]] = None,
+                                            override val system: Option[ActorSystem[Msg, State]] = None
+                                           )(using ec: ExecutionContext)
 	extends MutableActor[Msg, State] with Closeable with Pausable with Initializable {
 
 	protected type MsgEntry = (msg: Msg, rsp: Option[Promise[Msg]], behId: String)
@@ -301,13 +301,11 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		close()
 	}
 
-	override protected def onPauseFailed(t: Throwable): Unit = {
+	override protected def onPauseFailed(t: Throwable): Unit =
 		println(s"Failed to pause actor $id: ${t.getMessage}")
-	}
 
-	override protected def onCloseFailed(t: Throwable): Unit = {
+	override protected def onCloseFailed(t: Throwable): Unit =
 		println(s"Failed to close actor $id: ${t.getMessage}")
-	}
 
 	/**
 		* Closes the actor and performs necessary checks to ensure all messages are completed before finalizing the closure.

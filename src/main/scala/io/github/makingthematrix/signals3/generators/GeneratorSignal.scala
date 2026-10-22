@@ -36,13 +36,10 @@ abstract class GeneratorSignal[V] protected[signals3] (init: V, interval: Finite
   
   protected def onBeat(): Unit = if (!isInitialized) initialize()
 
-  override protected def tryInitialize(): Unit = {
-    beat
-  }
+  override protected def tryInitialize(): Unit = beat
 
-  override protected def onInitializationFailed(t: Throwable): Unit = {
+  override protected def onInitializationFailed(t: Throwable): Unit =
     println(s"GeneratorStream initialization failed: ${t.getMessage}")
-  }
 }
 
 object GeneratorSignal {

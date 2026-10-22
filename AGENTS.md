@@ -5,6 +5,7 @@ This is a Scala project implementing a lightweight event streaming library.
 
 ## Repository Structure
 - `src/main/scala/io/github/makingthematrix/signals3/`: Core implementation
+- `src/main/scala/io/github/makingthematrix/signals3/actors`: The implementation of the Actor model
 - `src/test/scala/io/github/makingthematrix/signals3/`: Unit tests
 
 ## Development Workflow
@@ -14,14 +15,8 @@ This is a Scala project implementing a lightweight event streaming library.
 
 ## Coding Standards
 - Use Scala 3 with braces syntax.
-
-## GitHub Workflow
-- Create a new branch for each feature or bug fix.
-- Use `feature/xxx` for new features.
-- Use `bugfix/xxx` for bug fixes.
-- Commit changes with `git commit -am "[MESSAGE]"`
-- Push changes to the branch with `git push`
-- Don't merge the branch to the main branch directly.
+- Use standard Scala library and collections if possible.
+- Try to re-use existing code and avoid duplicating functionality.
 
 ## AI-Specific Guidelines
 - Read Scaladoc comments attached to every class and method.

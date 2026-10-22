@@ -9,9 +9,7 @@ import scala.util.{Failure, Success, Try}
 	* through overriding `onMessage` and by adding new private fields directly to the new subclass instead of
 	* working with state and behaviors.
 	*
-	* Note that this solution also assumes that you will use the same type for messages and responses.
-	* If you prefer not to use responses at all, simply end processing of each message with `noResponse[Msg]`
-	*
+	* Note that this solution also assumes that you will not use the parent actor and the actor system.
 	*/
 abstract class BaseActor[Msg](override val id: String,
                               override protected val heartbeat: HeartBeatStrategy = Actor.defBeat,
