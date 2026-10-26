@@ -46,23 +46,25 @@ final class ActorSystem[Msg, State] private(
 			respond(p, Ref(ref))
 		} else respond(p, InvalidId)
 
-	private def unregisterSystem(systemId: String, p: Option[Promise[SystemMsg]]): Unit = if (systems.contains(systemId)) {
-		systems -= systemId
-		systemTags.foreach { case (_, buf) =>
-			val index = buf.indexWhere(_.id == systemId)
-			if (index > -1) buf.remove(index)
-		}
-		respond(p, Done)
-	}
+	private def unregisterSystem(systemId: String, p: Option[Promise[SystemMsg]]): Unit =
+		if (systems.contains(systemId)) {
+      systems -= systemId
+      systemTags.foreach { case (_, buf) =>
+        val index = buf.indexWhere(_.id == systemId)
+        if (index > -1) buf.remove(index)
+      }
+      respond(p, Done)
+    } else respond(p, InvalidId)
 
-	private def unregisterActor(actorId: String, p: Option[Promise[SystemMsg]]): Unit = {
+	private def unregisterActor(actorId: String, p: Option[Promise[SystemMsg]]): Unit =
+		if (actorRefs.contains(actorId)) {
 		actorRefs -= actorId
 		actorTags.foreach { case (_, buf) =>
 			val index = buf.indexWhere(_.path.actorId == actorId)
 			if (index > -1) buf.remove(index)
 		}
 		respond(p, Done)
-	}
+	} else respond(p, InvalidId)
 
 	// As in `ActorImpl`, `SystemMsg` cases with type parameters are matched through trusted `TypeTest`
 	// instances created by `SystemMsg.trusted` - the type arguments are erased at runtime, so the tests
@@ -70,6 +72,7 @@ final class ActorSystem[Msg, State] private(
 	private given RegisterT: TypeTest[SystemMsg, Register[Msg, State]] = trusted[SystemMsg, Register[Msg, State]]
 	private given RequeueT: TypeTest[SystemMsg, Requeue[Msg]] = trusted[SystemMsg, Requeue[Msg]]
 	private given RegisterSystemT: TypeTest[SystemMsg, RegisterSystem[Msg]] = trusted[SystemMsg, RegisterSystem[Msg]]
+	private given SysRequeueT: TypeTest[SystemMsg, SysRequeue] = trusted[SystemMsg, SysRequeue]
 
 	override protected def processSysEntry(msg: SysEntry): Unit = msg match {
 		case (SystemClosed(systemId), p) =>
@@ -103,6 +106,12 @@ final class ActorSystem[Msg, State] private(
 			actorRefs.get(rq.actorId) match {
 				case Some(ref)                => ref ! (rq.msg, rq.behId)
 				case None if rq.tryNumber < 2 => this ! Requeue(rq.actorId, rq.msg, rq.behId, rq.tryNumber + 1) // requeue
+				case None                     => respond(p, invalidActorId(rq.actorId).future)
+			}
+		case (SysRequeueT(rq), p) =>
+			actorRefs.get(rq.actorId) match {
+				case Some(ref)                => ref ! rq.msg
+				case None if rq.tryNumber < 2 => this ! SysRequeue(rq.actorId, rq.msg, rq.tryNumber + 1) // requeue
 				case None                     => respond(p, invalidActorId(rq.actorId).future)
 			}
 		case (AskForRef(actorId, systemId, _), p) =>

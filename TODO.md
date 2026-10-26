@@ -6,7 +6,7 @@
 - [ ] System messages carried through actor systems
 - [ ] Actors should carry tags (strings), and the actor system can get requests to connect an actor with any other actor that has a given tag
 - [ ] Create a util package object for common methods in actors unit tests (spawn, close, etc)
-- [ ] System messages Check(f: Actor => Boolean) and WaitFor(f: Actor => Boolean), True and False
+- [ ] Merge heartbeat strategies Agitated and Reactive into a smarter Agitated
 - [ ] LogActor as a special subclass of ActorImpl
 - [ ] When an actor receives a reference of LogActor, it starts to gather logging and debugging data (not before)
 - [ ] PersistenceActor as a special subclass of ActorImpl
