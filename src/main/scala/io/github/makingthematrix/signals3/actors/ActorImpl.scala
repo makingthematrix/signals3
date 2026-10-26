@@ -25,15 +25,15 @@ import scala.util.{Failure, Success, Try}
 private[actors] class ActorImpl[Msg, State](override val id: String,
                                             protected var _state: State,
                                             override protected val heartbeat: HeartBeatStrategy = Actor.defBeat,
-                                            override val parent: Option[Actor[Msg, State]] = None,
-                                            override val system: Option[ActorSystem[Msg, State]] = None
+                                            override val parent: Option[ActorRef[Msg]] = None,
+                                            override val system: Option[RemoteSystem[Msg]] = None
                                            )(using ec: ExecutionContext)
 	extends MutableActor[Msg, State] with Closeable with Pausable with Initializable {
 
 	protected type MsgEntry = (msg: Msg, rsp: Option[Promise[Msg]], behId: String)
 	protected type SysEntry = (msg: SystemMsg, rsp: Option[Promise[SystemMsg]])
 
-	protected var children: Map[String, Actor[Msg, State]] = Map.empty
+	protected var children: Map[String, ActorRef[Msg]] = Map.empty
 
 	// a mutable queue of messages incoming from other actors and other sources; see the ! operator.
 	private val msgs = new AtomicReference[MQueue[MsgEntry]](MQueue.empty)
@@ -276,7 +276,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 				.withOnInitIf(data.onInit.nonEmpty, data.onInit.get)
 			val b2 = data.executionContext.fold(b1)(b1.withParallelDispatch)
 			val b3 = if (data.useSerialDispatch) b2.withSerialDispatch() else b2
-			val child = b3.build()
+			val child = LocalActorRef(b3.build())
 			children = children + (child.id -> child)
 			SystemMsg.NewChild(child)
 		}
@@ -293,7 +293,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 
 	override protected def tryInitialize(): Unit = {
 		beat.foreach(_ => processMessages())
-		system.foreach(s => s ! SystemMsg.Register(this))
+		system.foreach(_.tell(Register(this)))
 	}
 
 	override protected def onInitializationFailed(t: Throwable): Unit = {
@@ -327,9 +327,9 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		beat.closeAndCheck()
 		flushMsgEntries().collect { case (_, Some(p), _) => p }.foreach(_.tryFailure(actorIsClosed))
 		flushSystemEntries().collect { case (_, Some(p)) => p }.foreach(_.tryFailure(actorIsClosed))
-		parent.foreach(p => p ! SystemMsg.ActorClosed(id))
-		system.foreach(s => s ! SystemMsg.ActorClosed(id))
-		beat.isClosedSignal.onTrue.map(_ => SystemMsg.ActorClosed(id))
+		parent.foreach(p => p ! ActorClosed(id))
+		system.foreach(s => s.tell(ActorClosed(id)))
+		beat.isClosedSignal.onTrue.map(_ => ActorClosed(id))
 	}
 
 	override def state: State = _state

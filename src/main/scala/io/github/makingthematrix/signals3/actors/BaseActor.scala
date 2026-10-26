@@ -13,8 +13,8 @@ import scala.util.{Failure, Success, Try}
 	*/
 abstract class BaseActor[Msg](override val id: String,
                               override protected val heartbeat: HeartBeatStrategy = Actor.defBeat,
-                              override val parent: Option[Actor[Msg, Unit]] = None,
-                              override val system: Option[ActorSystem[Msg, Unit]] = None
+                              override val parent: Option[ActorRef[Msg]] = None,
+                              override val system: Option[RemoteSystem[Msg]] = None
                              )(using ExecutionContext)
   extends ActorImpl[Msg, Unit](id, (), heartbeat, parent, system) {
 	inline protected def reply(msg: Msg): Try[Option[Msg]] = Success(Some(msg))

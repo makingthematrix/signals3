@@ -142,36 +142,21 @@ trait Actor[Msg, State] extends CanBeClosed with CanBePaused with CanBeInitializ
 	/**
 		* Returns the parent actor of this actor, if any.
 		*/
-	def parent: Option[Actor[Msg, State]]
+	def parent: Option[ActorRef[Msg]]
 
 	/**
 		* Returns the actor system that this actor belongs to, if any.
 		*/
-	def system: Option[ActorSystem[Msg, State]]
+	def system: Option[RemoteSystem[Msg]]
+	
+	val tags: Set[ActorTag] = Set.empty
 }
 
 object Actor {
 	@static private val noResponse: Failure[Nothing] = Failure[Nothing](new IllegalStateException("No response"))
 	@static private val ignored: Success[Option[Nothing]] = Success[Option[Nothing]](None)
 	@static private[actors] val actorIsClosed = IllegalStateException("Actor is closed")
-
-	opaque type OtherActor[Msg] = Actor[Msg, ?]
-
-	object OtherActor {
-		inline def apply[Msg](actor: Actor[Msg, ?]): OtherActor[Msg] = actor
-		extension [Msg](oa: OtherActor[Msg]) inline def id: String = oa.id
-		extension [Msg](oa: OtherActor[Msg]) inline def ask(msg: into[Msg], actorPath: ActorPath, behId: String): CloseableFuture[Msg] = oa.ask(msg, actorPath, behId)
-		extension [Msg](oa: OtherActor[Msg]) inline def ask(msg: into[Msg], behId: String): CloseableFuture[Msg] = oa.ask(msg, ActorPath.Direct, behId)
-	  extension [Msg](oa: OtherActor[Msg]) inline def ?(t: (String, into[Msg])): CloseableFuture[Msg] = oa.ask(t._2, t._1)
-		extension [Msg](oa: OtherActor[Msg]) inline def ask(msg: into[Msg]): CloseableFuture[Msg] = oa.ask(msg)
-		extension [Msg](oa: OtherActor[Msg]) inline def ?(msg: into[Msg]): CloseableFuture[Msg] = oa.ask(msg)
-
-		extension [Msg](oa: OtherActor[Msg]) inline def tell(msg: into[Msg], actorPath: ActorPath, behId: String): Unit = oa.tell(msg, actorPath, behId)
-		extension [Msg](oa: OtherActor[Msg]) inline def tell(msg: into[Msg], behId: String): Unit = oa.tell(msg, ActorPath.Direct, behId)
-		extension [Msg](oa: OtherActor[Msg]) inline def !(t: (String, into[Msg])): Unit = oa.tell(t._2, t._1)
-		extension [Msg](oa: OtherActor[Msg]) inline def tell(msg: into[Msg]): Unit = oa.tell(msg)
-		extension [Msg](oa: OtherActor[Msg]) inline def !(msg: into[Msg]): Unit = oa.tell(msg)
-	}
+	
 	/**
 		* A special type of a failure indicating that although the message was received via the "?" (ask) operator and it was
 		* processed, no response was given as the result.

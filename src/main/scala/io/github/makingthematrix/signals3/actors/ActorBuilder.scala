@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.{Closeable, DispatchQueue, Pausable}
 import io.github.makingthematrix.signals3.actors.Actor.{Beh, HeartBeatStrategy, PF, defBeat}
+import io.github.makingthematrix.signals3.{Closeable, DispatchQueue, Pausable}
 
 import scala.concurrent.ExecutionContext
 
@@ -35,8 +35,8 @@ final class ActorBuilder[Msg, State] (
   private val onInit: Option[MutableActor[Msg, State] => Unit] = None,
   private val useSerialDispatch: Boolean = false,
   private val executionContext: Option[ExecutionContext] = None,
-  private val parent: Option[Actor[Msg, State]] = None,
-  private val system: Option[ActorSystem[Msg, State]] = None
+  private val parent: Option[ActorRef[Msg]] = None,
+  private val system: Option[RemoteSystem[Msg]] = None
 ) {
 
   /**
@@ -235,12 +235,15 @@ final class ActorBuilder[Msg, State] (
     withParallelDispatch(if (p) ec else orElse)
 
   inline def withParent(parent: Actor[Msg, State]): ActorBuilder[Msg, State] =
+    withParent(LocalActorRef[Msg](parent))
+
+  inline def withParent(parent: ActorRef[Msg]): ActorBuilder[Msg, State] =
     new ActorBuilder(id, state, behaviors, heartbeat, onInit, useSerialDispatch, executionContext, Some(parent), system)
 
-  inline def withParentIf(p: => Boolean, parent: => Actor[Msg, State]): ActorBuilder[Msg, State] =
+  inline def withParentIf(p: => Boolean, parent: => ActorRef[Msg]): ActorBuilder[Msg, State] =
     if (p) withParent(parent) else this
 
-  inline def withParentIf(p: => Boolean, parent: => Actor[Msg, State], orElse: => Actor[Msg, State]): ActorBuilder[Msg, State] =
+  inline def withParentIf(p: => Boolean, parent: => ActorRef[Msg], orElse: => ActorRef[Msg]): ActorBuilder[Msg, State] =
     withParent(if (p) parent else orElse)
 
   inline def withNoParent(): ActorBuilder[Msg, State] =
@@ -249,13 +252,13 @@ final class ActorBuilder[Msg, State] (
   inline def withNoParentIf(p: => Boolean): ActorBuilder[Msg, State] =
     if (p) withNoParent() else this
 
-  inline def withSystem(system: ActorSystem[Msg, State]): ActorBuilder[Msg, State] =
+  inline def withSystem(system: RemoteSystem[Msg]): ActorBuilder[Msg, State] =
     new ActorBuilder(id, state, behaviors, heartbeat, onInit, useSerialDispatch, executionContext, parent, Some(system))
 
-  inline def withSystemIf(p: => Boolean, system: => ActorSystem[Msg, State]): ActorBuilder[Msg, State] =
+  inline def withSystemIf(p: => Boolean, system: => RemoteSystem[Msg]): ActorBuilder[Msg, State] =
     if (p) withSystem(system) else this
 
-  inline def withSystemIf(p: => Boolean, system: => ActorSystem[Msg, State], orElse: => ActorSystem[Msg, State]): ActorBuilder[Msg, State] =
+  inline def withSystemIf(p: => Boolean, system: => RemoteSystem[Msg], orElse: => RemoteSystem[Msg]): ActorBuilder[Msg, State] =
     withSystem(if (p) system else orElse)
 
   inline def withNoSystem(): ActorBuilder[Msg, State] =

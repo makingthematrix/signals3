@@ -29,7 +29,7 @@ import scala.reflect.{ClassTag, TypeTest}
 	* - `Ref(ref)` - a response to `AskForRef` and `AskForRefAsync`; passes another actor's reference to the actor
 	* - `Requeue(actorId, msg, behId, tryNumber)` - requeues a message so it will be processed again
 	*/
-enum SystemMsg{
+enum SystemMsg {
 	case Pause, Unpause, Close, Done, InvalidId
 	case AddBehavior[Msg, State](beh: Beh[Msg, State])
 	case RemoveBehavior(behId: String)
@@ -42,15 +42,16 @@ enum SystemMsg{
 	                       useSerialDispatch: Boolean = false,
 	                       executionContext: Option[ExecutionContext] = None
 	                      )
-	case NewChild[Msg, State](child: Actor[Msg, State])
+	case NewChild[Msg](child: ActorRef[Msg])
 	case ActorClosed(actorId: String)
-	case Register[Msg, State](actor: Actor[Msg, State])
+	case Register[Msg, State](actor: Actor[Msg, ?], tags: List[ActorTag] = Nil)
 	case Unregister(actorId: String)
-	case AskForRef(actorId: String, systemId: String = "")
-	case AskForRefAsync[Msg, State](sender: Actor[Msg, State], actorId: String, systemId: String = "")
+	case AskForRef(actorId: String = "", systemId: String = "", tags: List[ActorTag] = Nil)
+	case AskForRefAsync[Msg](sender: Actor[Msg, ?], actorId: String = "", systemId: String = "", tags: List[ActorTag] = Nil)
 	case Ref[Msg](ref: ActorRef[Msg])
 	case Requeue[Msg](actorId: String, msg: Msg, behId: String, tryNumber: Int = 0)
-	case RegisterSystem[Msg](system: RemoteSystem[Msg])
+	case SysRequeue(actorId: String, msg: SystemMsg, tryNumber: Int = 0)
+	case RegisterSystem[Msg](system: RemoteSystem[Msg], tags: List[ActorTag] = Nil)
 	case SystemClosed(systemId: String)
 	case UnregisterSystem(systemId: String)
 }

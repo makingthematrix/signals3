@@ -44,6 +44,13 @@ class ActorSystemRemoteSpec extends FunSuite {
     waitFor(actor.isClosedSignal, true)
   }
 
+  private def close(actorRef: ActorRef[?]): Unit =
+    tryResultCF(actorRef ? Close) match {
+      case Success(Done) =>
+      case Success(msg) => fail(s"closing ${actorRef.id} failed: $msg")
+      case Failure(ex) => fail(ex.getMessage)
+    }
+
   private def newActorOn(sys: ActorSystem[String, Int], id: String, pf: PF[String, Int]): Actor[String, Int] =
     ActorBuilder[String, Int](0).withId(id).withBehavior("default", pf).withSystem(sys).build()
 
@@ -440,12 +447,12 @@ class ActorSystemRemoteSpec extends FunSuite {
   test("a grandchild spawned on the peer is discoverable through the cross-system registry") {
     val (a, b) = crossRegistered()
     val behavior: PF[String, Int] = { case (msg, _) => Some(s"G:$msg") }
-    val child: Actor[String, Int] = tryResultCF(b ? Spawn(actorId = "kid")) match {
-      case Success(NewChild(child)) => child.asInstanceOf[Actor[String, Int]]
+    val child: ActorRef[String] = tryResultCF(b ? Spawn(actorId = "kid")) match {
+      case Success(NewChild(child)) => child.asInstanceOf[ActorRef[String]]
       case other => fail(s"Unexpected spawn response: $other")
     }
-    val grandchild: Actor[String, Int] = tryResultCF(child ? Spawn(actorId = "grandkid", behaviors = List("default" -> behavior))) match {
-      case Success(NewChild(grandchild)) => grandchild.asInstanceOf[Actor[String, Int]]
+    val grandchild: ActorRef[String] = tryResultCF(child ? Spawn(actorId = "grandkid", behaviors = List("default" -> behavior))) match {
+      case Success(NewChild(grandchild)) => grandchild.asInstanceOf[ActorRef[String]]
       case other => fail(s"Unexpected spawn response: $other")
     }
     // no awaitRef here: the lookup must queue behind the pending Register

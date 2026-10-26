@@ -8,10 +8,12 @@ trait RemoteSystem[Msg] {
 	val id: String
 
 	def ask(msg: SystemMsg): CloseableFuture[SystemMsg]
-	def ask(msg: into[Msg], actorPath: ActorPath, behId: String): CloseableFuture[Msg]
+	def ask(msg: SystemMsg, path: ActorPath): CloseableFuture[SystemMsg]
+	def ask(msg: into[Msg], path: ActorPath, behId: String): CloseableFuture[Msg]
 
 	def tell(msg: SystemMsg): Unit
-	def tell(msg: into[Msg], actorPath: ActorPath, behId: String): Unit
+	def tell(msg: SystemMsg, path: ActorPath): Unit
+	def tell(msg: into[Msg], path: ActorPath, behId: String): Unit
 }
 
 final class ConversionRemoteSystem[Msg, Rsp](system: RemoteSystem[Rsp])
@@ -20,12 +22,14 @@ final class ConversionRemoteSystem[Msg, Rsp](system: RemoteSystem[Rsp])
 	override val id: String = system.id
 
 	override def ask(msg: SystemMsg): CloseableFuture[SystemMsg] = system.ask(msg)
-
-	override def ask(msg: into[Msg], actorPath: ActorPath, behId: String): CloseableFuture[Msg] =
-		system.ask(cMsg(msg), actorPath, behId).map(cRsp)
+	override def ask(msg: SystemMsg, path: ActorPath): CloseableFuture[SystemMsg] = system.ask(msg, path)
+	
+	override def ask(msg: into[Msg], path: ActorPath, behId: String): CloseableFuture[Msg] =
+		system.ask(cMsg(msg), path, behId).map(cRsp)
 
 	override def tell(msg: SystemMsg): Unit = system.tell(msg)
+	override def tell(msg: SystemMsg, path: ActorPath): Unit = system.tell(msg, path)
 
-	override def tell(msg: into[Msg], actorPath: ActorPath, behId: String): Unit =
-		system.tell(cMsg(msg), actorPath, behId)
+	override def tell(msg: into[Msg], path: ActorPath, behId: String): Unit =
+		system.tell(cMsg(msg), path, behId)
 }

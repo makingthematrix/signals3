@@ -155,7 +155,7 @@ class ConversionActorSpec extends FunSuite {
     actor.tell(42, "special")
     // NOTE: an `into` parameter converts the whole argument, not the components of a tuple argument,
     // so a convertible message inside a tuple must be converted before the call
-    actor !(("special", Text("hello")))
+    actor ! ("special" -> Text("hello"))
 
     // both messages were converted and routed to the special behavior, not the default one
     waitFor(got, Seq("S:Num(42)", "S:Text(hello)"))
@@ -199,12 +199,11 @@ class ConversionActorSpec extends FunSuite {
       case (p, _)         => got.mutate(_ :+ p); None
     }
     val receiver = createWithBehaviors("bid" -> bid)
-    val other = Actor.OtherActor(receiver)
     val sender = create { case _ =>
-      other ! 42
-      (other ? 7).pipeTo(asked)
-      other.tell("hello")
-      other.tell("bid", "tagged")
+      receiver ! 42
+      (receiver ? 7).pipeTo(asked)
+      receiver.tell("hello")
+      receiver.tell("bid", "tagged")
       None
     }
     sender ! Num(0)
@@ -224,12 +223,12 @@ class ConversionActorSpec extends FunSuite {
 
     ref ! 42
     ref.tell("hello")
-    ref !((Text("hello2"), "default"))
+    ref !(Text("hello2"), "default")
     waitFor(got, Seq(Num(42), Text("hello"), Text("hello2")))
 
     assertEquals(resultCF(ref ? 7), Text("ok:Num(7)"))
     assertEquals(resultCF(ref.ask("asked")), Text("ok:Text(asked)"))
-    assertEquals(resultCF(ref ?((Text("asked2"), "default"))), Text("ok:Text(asked2)"))
+    assertEquals(resultCF(ref ? (Text("asked2"), "default")), Text("ok:Text(asked2)"))
     close(target)
     close(sys)
   }
@@ -254,7 +253,7 @@ class ConversionActorSpec extends FunSuite {
         waitFor(got, Seq(Num(42), Text("hello")))
         assertEquals(resultCF(ref ? 7), Text("ok:Num(7)"))
         assertEquals(resultCF(ref.ask("asked")), Text("ok:Text(asked)"))
-        assertEquals(resultCF(ref ?((Text("asked2"), "default"))), Text("ok:Text(asked2)"))
+        assertEquals(resultCF(ref ? (Text("asked2"), "default")), Text("ok:Text(asked2)"))
       case other => fail(s"Unexpected AskForRef response: $other")
     }
     close(onB)

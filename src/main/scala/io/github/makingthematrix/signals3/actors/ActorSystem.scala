@@ -1,14 +1,16 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.CloseableFuture
-import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, invalidActorId, unhandledMsg}
+import io.github.makingthematrix.signals3.actors.Actor.*
 import io.github.makingthematrix.signals3.actors.ActorSystem.invalidSystemId
 
 import scala.Conversion.into
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.reflect.TypeTest
-import scala.util.{Failure, Success}
 import scala.util.chaining.scalaUtilChainingOps
+import scala.util.{Failure, Success}
+
+import scala.collection.mutable
 
 final class ActorSystem[Msg, State] private(
   override val id: String,
@@ -18,12 +20,48 @@ final class ActorSystem[Msg, State] private(
 	import ActorPath.*
 	import SystemMsg.*
 
-	@volatile private var actorRefs: Map[String, ActorRef[Msg]] = Map.empty
-	@volatile private var systems: Map[String, RemoteSystem[Msg]] = Map.empty
+	private val actorRefs  = new mutable.HashMap[String, ActorRef[Msg]]()
+	private val actorTags  = new mutable.HashMap[ActorTag, mutable.ArrayBuffer[ActorRef[Msg]]]()
+	private val systems    = new mutable.HashMap[String, RemoteSystem[Msg]]
+	private val systemTags = new mutable.HashMap[ActorTag, mutable.ArrayBuffer[RemoteSystem[Msg]]]()
 
-	inline private def unregister(systemId: String) = {
+	private def register(system: RemoteSystem[Msg], tags: List[ActorTag], p: Option[Promise[SystemMsg]]): Unit =
+		if (!systems.contains(system.id)) {
+			systems += (system.id -> system)
+			tags.foreach { tag =>
+				val buf = systemTags.getOrElseUpdate(tag, new mutable.ArrayBuffer[RemoteSystem[Msg]]())
+				buf.addOne(system)
+			}
+			respond(p, Done)
+		} else respond(p, InvalidId)
+
+	private def register(actor: Actor[Msg, ?], tags: List[ActorTag], p: Option[Promise[SystemMsg]]): Unit =
+		if (!actorRefs.contains(actor.id)) {
+			val ref = new LocalActorRef(actor)
+			actorRefs += (actor.id -> ref)
+			tags.foreach { tag =>
+				val buf = actorTags.getOrElseUpdate(tag, new mutable.ArrayBuffer[ActorRef[Msg]]())
+				buf.addOne(ref)
+			}
+			respond(p, Ref(ref))
+		} else respond(p, InvalidId)
+
+	private def unregisterSystem(systemId: String, p: Option[Promise[SystemMsg]]): Unit = if (systems.contains(systemId)) {
 		systems -= systemId
-		CloseableFuture.successful(Done)
+		systemTags.foreach { case (_, buf) =>
+			val index = buf.indexWhere(_.id == systemId)
+			if (index > -1) buf.remove(index)
+		}
+		respond(p, Done)
+	}
+
+	private def unregisterActor(actorId: String, p: Option[Promise[SystemMsg]]): Unit = {
+		actorRefs -= actorId
+		actorTags.foreach { case (_, buf) =>
+			val index = buf.indexWhere(_.path.actorId == actorId)
+			if (index > -1) buf.remove(index)
+		}
+		respond(p, Done)
 	}
 
 	// As in `ActorImpl`, `SystemMsg` cases with type parameters are matched through trusted `TypeTest`
@@ -31,33 +69,28 @@ final class ActorSystem[Msg, State] private(
 	// verify only the runtime class of the message and take the type arguments on trust.
 	private given RegisterT: TypeTest[SystemMsg, Register[Msg, State]] = trusted[SystemMsg, Register[Msg, State]]
 	private given RequeueT: TypeTest[SystemMsg, Requeue[Msg]] = trusted[SystemMsg, Requeue[Msg]]
+	private given RegisterSystemT: TypeTest[SystemMsg, RegisterSystem[Msg]] = trusted[SystemMsg, RegisterSystem[Msg]]
 
 	override protected def processSysEntry(msg: SysEntry): Unit = msg match {
 		case (SystemClosed(systemId), p) =>
-			systems -= systemId
-			respond(p, Done)
+			unregisterSystem(systemId, p)
 		case (UnregisterSystem(systemId), p) =>
-			systems -= systemId
-			respond(p, Done)
-		case (RegisterSystem(system), p) =>
-			systems += (system.id -> system.asInstanceOf[RemoteSystem[Msg]])
-			respond(p, Done)
+			unregisterSystem(systemId, p)
+		case (RegisterSystemT(reg), p) =>
+			register(reg.system, reg.tags, p)
 		case (RegisterT(reg), p) =>
-			val ref = LocalActorRef(reg.actor)
-			actorRefs += (reg.actor.id -> ref)
-			respond(p, Ref(ref))
+			register(reg.actor, reg.tags, p)
 		case (Unregister(actorId), p) =>
-			actorRefs -= actorId
-			respond(p, Done)
-		case (ActorClosed(actorId), _) =>
-			actorRefs -= actorId
+			unregisterActor(actorId, p)
+		case (ActorClosed(actorId), p) =>
+			unregisterActor(actorId, p)
 			super.processSysEntry(msg)
-		case (AskForRef(actorId, systemId), p) if systemId == "" || systemId == id =>
+		case (AskForRef(actorId, systemId, _), p) if systemId == "" || systemId == id =>
 			actorRefs.get(actorId) match {
 				case Some(ref) => respond(p, Ref(ref))
 				case None => respond(p, invalidActorId(actorId).future)
 			}
-		case (AskForRefAsync(sender, actorId, systemId), p) if systemId == "" || systemId == id =>
+		case (AskForRefAsync(sender, actorId, systemId, _), p) if systemId == "" || systemId == id =>
 			actorRefs.get(actorId) match {
 				case Some(ref) =>
 					sender ! Ref(ref)
@@ -72,7 +105,7 @@ final class ActorSystem[Msg, State] private(
 				case None if rq.tryNumber < 2 => this ! Requeue(rq.actorId, rq.msg, rq.behId, rq.tryNumber + 1) // requeue
 				case None                     => respond(p, invalidActorId(rq.actorId).future)
 			}
-		case (AskForRef(actorId, systemId), p) =>
+		case (AskForRef(actorId, systemId, _), p) =>
 			systems.get(systemId) match {
 				case None => respond(p, invalidSystemId(systemId).future)
 				case Some(system) =>
@@ -82,7 +115,7 @@ final class ActorSystem[Msg, State] private(
 						case _ => invalidActorId(actorId) // Handle unexpected responses
 					}.future)
 			}
-		case (AskForRefAsync(sender, actorId, systemId), p) =>
+		case (AskForRefAsync(sender, actorId, systemId, _), p) =>
 			systems.get(systemId) match {
 				case None =>
 					respond(p, invalidSystemId(systemId).future)
@@ -114,12 +147,24 @@ final class ActorSystem[Msg, State] private(
 				.withOnInitIf(data.onInit.nonEmpty, data.onInit.get)
 			val b2 = data.executionContext.fold(b1)(b1.withParallelDispatch)
 			val b3 = if (data.useSerialDispatch) b2.withSerialDispatch() else b2
-			val child = b3.build()
+			val child = LocalActorRef(b3.build())
 			children = children + (child.id -> child)
-			SystemMsg.NewChild(child)
+			NewChild(child)
 		}
 
-	override def tell(msg: into[Msg], path: ActorPath, behId: String): Unit = path match {
+	override def tell(msg: SystemMsg, path: ActorPath): Unit = if (!isClosed) path match {
+		case Direct                => systemStream ! (msg, None)
+		case Local(`id`)           => systemStream ! (msg, None)
+		case Remote("", `id`)      => systemStream ! (msg, None)
+		case Remote(`id`, `id`)    => systemStream ! (msg, None)
+		case Local(actorId)        => if (actorRefs.contains(actorId)) actorRefs(actorId).tell(msg) else this ! SysRequeue(actorId, msg)
+		case Remote("", actorId)   => if (actorRefs.contains(actorId)) actorRefs(actorId).tell(msg) else this ! SysRequeue(actorId, msg)
+		case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId).tell(msg) else this ! SysRequeue(actorId, msg)
+		case Remote(systemId, _) if systemId != id && systems.contains(systemId)  => systems(systemId).tell(msg, path)
+		case _ => // invalid system or actor id
+	}
+
+	override def tell(msg: into[Msg], path: ActorPath, behId: String): Unit = if (!isClosed) path match {
 		case Direct                => msgStream ! (msg, None, behId)
 		case Local(`id`)           => msgStream ! (msg, None, behId)
 		case Remote("", `id`)      => msgStream ! (msg, None, behId)
@@ -131,7 +176,21 @@ final class ActorSystem[Msg, State] private(
 		case _ => // invalid system or actor id
 	}
 
-	override def ask(msg: into[Msg], path: ActorPath, behId: String): CloseableFuture[Msg] = {
+	override def ask(msg: SystemMsg, path: ActorPath): CloseableFuture[SystemMsg] = if (!isClosed) {
+		inline def sendToStream() = CloseableFuture.from(Promise[SystemMsg]().tap { p => systemStream ! (msg, Some(p)) })
+		path match {
+			case Direct => sendToStream()
+			case Local(`id`) => sendToStream()
+			case Remote("", `id`) => sendToStream()
+			case Remote(`id`, `id`) => sendToStream()
+			case Local(actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId).ask(msg) else sendToStream()
+			case Remote("", actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId).ask(msg) else sendToStream()
+			case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId).ask(msg) else sendToStream()
+			case Remote(systemId, _) => if (systemId != id && systems.contains(systemId)) systems(systemId).ask(msg, path) else invalidSystemId(systemId)
+		}
+	} else ActorIsClosed[SystemMsg]
+
+	override def ask(msg: into[Msg], path: ActorPath, behId: String): CloseableFuture[Msg] = if (!isClosed) {
 		inline def sendToStream() = CloseableFuture.from(Promise[Msg]().tap { p => msgStream ! (msg, Some(p), behId) })
 		path match {
 			case Direct                => sendToStream()
@@ -143,7 +202,7 @@ final class ActorSystem[Msg, State] private(
 			case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId).ask(msg, behId) else sendToStream()
 			case Remote(systemId, _)   => if (systemId != id && systems.contains(systemId)) systems(systemId).ask(msg, path, behId) else invalidSystemId(systemId)
 		}
-	}
+	} else ActorIsClosed[Msg]
 
 	override protected def tryInitialize(): Unit = {
 		systems += (id -> this)
