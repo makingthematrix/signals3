@@ -453,14 +453,10 @@ class ConversionActorSpec extends FunSuite {
     Try(close(b))
   }
 
-  test("AskForRefAsync over the bridge delivers the raw ref; sends through it bypass conversion (pinned behavior)") {
+  test("a ref from cross-system AskForRefAsync over the bridge routes back through the sender system and converts") {
     val (a, b) = convertedBridge()
-    // The recorder matches the whole entry tuple instead of binding the message. A pattern like
-    // `case (m, _)` compiles to a cast of `m` to MsgB; for a foreign message that cast throws and the
-    // actor's failure handling swallows it, so the message would be silently dropped. Matching the
-    // whole tuple lets us observe the raw value that actually arrives.
-    val gotRaw = Signal(Seq.empty[MsgB])
-    val onB = newActorOn(b, "onB2", "default" -> { case t => gotRaw.mutate(_ :+ t._1); None })
+    val got = Signal(Seq.empty[MsgB])
+    val onB = newActorOn(b, "onB2", "default" -> { case (m, _) => got.mutate(_ :+ m); None })
     awaitRef(b, "onB2")
     val capturer = CapturingActorImpl(a)
     capturer.initialize()
@@ -470,17 +466,14 @@ class ConversionActorSpec extends FunSuite {
         val start = System.currentTimeMillis()
         while (System.currentTimeMillis() - start < 5000 && capturer.receivedRef.isEmpty) Thread.sleep(50)
         capturer.receivedRef match {
-          case Some(ref) =>
-            // The ref is B's own LocalActorRef, honest about its existential type.
-            // After a user-level cast, a send through it does NOT go through the bridge:
-            val typedRef = ref.asInstanceOf[ActorRef[MsgA]]
-            typedRef ! MsgA(7)
-            val start2 = System.currentTimeMillis()
-            while (System.currentTimeMillis() - start2 < 5000 && gotRaw.currentValue.exists(_.isEmpty)) Thread.sleep(50)
-            val recorded = gotRaw.currentValue.getOrElse(Seq.empty[MsgB])
-            assertEquals(recorded.size, 1)
-            assert(recorded.head.getClass == classOf[MsgA],
-              s"a send through a ref delivered by AskForRefAsync across the bridge bypasses the conversion and arrives as the raw MsgA, got ${recorded.head.getClass}")
+          case Some(ref0) =>
+            // like the ref from the sync AskForRef, the delivered ref is bound to A:
+            // every send re-routes through A's registry and converts
+            val ref = ref0.asInstanceOf[ActorRef[MsgA]]
+            assert(!ref.isLocal, "the sender received a local ref to an actor behind a conversion bridge")
+            assertEquals(ref.path, ActorPath.Remote("B", "onB2"))
+            ref ! MsgA(7) // MsgA(7) -> MsgB(14)
+            waitFor(got, Seq(MsgB(14)))
           case None => fail("sender actor never received the remote Ref")
         }
       case other => fail(s"Unexpected AskForRefAsync response: $other")

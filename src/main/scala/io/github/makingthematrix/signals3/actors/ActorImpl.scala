@@ -198,12 +198,15 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		}
 	}
 
-	inline protected def respond(pOpt: Option[Promise[SystemMsg]], rsp: SystemMsg): Unit =
+	inline final protected def respond(pOpt: Option[Promise[SystemMsg]], rsp: SystemMsg): Unit =
 		pOpt.foreach(p => Try(p.tryComplete(Success(rsp))))
 
-	inline protected def respond(pOpt: Option[Promise[SystemMsg]], rsp: Future[SystemMsg]): Unit =
+	inline final protected def respond(pOpt: Option[Promise[SystemMsg]], rsp: Future[SystemMsg]): Unit =
 		pOpt.foreach(_.completeWith(rsp))
 
+	inline final protected def respond(pOpt: Option[Promise[SystemMsg]], rsp: CloseableFuture[SystemMsg]): Unit =
+		respond(pOpt, rsp.future)
+		
 	// Processes system messages; should NOT be called directly - always from `processMessages`
 	private def processSystemMessages(): Unit = {
 		val entries = flushSystemEntries()
@@ -229,7 +232,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		case (AddBehaviorPFT(ab), p) => addBehaviorPF(ab.pf); respond(p, Done)
 		case (SpawnT(data), p)       =>
 			val rsp = spawn(data)
-			if (rsp != SystemMsg.InvalidId) respond(p, rsp) else respond(p, Actor.invalidActorId(data.actorId).future)
+			if (rsp != SystemMsg.InvalidId) respond(p, rsp) else respond(p, Actor.invalidActorId(data.actorId))
 		case (ActorClosed(id), p)    => removeChild(id); respond(p, Done)
 		case _ => // @todo: log the unhandled messages
 	}

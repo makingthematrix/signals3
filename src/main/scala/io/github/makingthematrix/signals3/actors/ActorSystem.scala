@@ -20,50 +20,32 @@ final class ActorSystem[Msg, State] private(
 	import ActorPath.*
 	import SystemMsg.*
 
-	private val actorRefs  = new mutable.HashMap[String, ActorRef[Msg]]()
-	private val actorTags  = new mutable.HashMap[ActorTag, mutable.ArrayBuffer[ActorRef[Msg]]]()
-	private val systems    = new mutable.HashMap[String, RemoteSystem[Msg]]
-	private val systemTags = new mutable.HashMap[ActorTag, mutable.ArrayBuffer[RemoteSystem[Msg]]]()
+	private val actorRefs  = new mutable.HashMap[String, (ActorRef[Msg], Set[ActorTag])]()
+	private val systems    = new mutable.HashMap[String, (RemoteSystem[Msg], Set[ActorTag])]
 
-	private def register(system: RemoteSystem[Msg], tags: List[ActorTag], p: Option[Promise[SystemMsg]]): Unit =
+	private def register(system: RemoteSystem[Msg], tags: Set[ActorTag], p: Option[Promise[SystemMsg]]): Unit =
 		if (!systems.contains(system.id)) {
-			systems += (system.id -> system)
-			tags.foreach { tag =>
-				val buf = systemTags.getOrElseUpdate(tag, new mutable.ArrayBuffer[RemoteSystem[Msg]]())
-				buf.addOne(system)
-			}
+			systems += (system.id -> (system, tags))
 			respond(p, Done)
 		} else respond(p, InvalidId)
 
-	private def register(actor: Actor[Msg, ?], tags: List[ActorTag], p: Option[Promise[SystemMsg]]): Unit =
+	private def register(actor: Actor[Msg, ?], tags: Set[ActorTag], p: Option[Promise[SystemMsg]]): Unit =
 		if (!actorRefs.contains(actor.id)) {
 			val ref = new LocalActorRef(actor)
-			actorRefs += (actor.id -> ref)
-			tags.foreach { tag =>
-				val buf = actorTags.getOrElseUpdate(tag, new mutable.ArrayBuffer[ActorRef[Msg]]())
-				buf.addOne(ref)
-			}
+			actorRefs += (actor.id -> (ref, tags))
 			respond(p, Ref(ref))
 		} else respond(p, InvalidId)
 
 	private def unregisterSystem(systemId: String, p: Option[Promise[SystemMsg]]): Unit =
 		if (systems.contains(systemId)) {
       systems -= systemId
-      systemTags.foreach { case (_, buf) =>
-        val index = buf.indexWhere(_.id == systemId)
-        if (index > -1) buf.remove(index)
-      }
       respond(p, Done)
     } else respond(p, InvalidId)
 
 	private def unregisterActor(actorId: String, p: Option[Promise[SystemMsg]]): Unit =
 		if (actorRefs.contains(actorId)) {
-		actorRefs -= actorId
-		actorTags.foreach { case (_, buf) =>
-			val index = buf.indexWhere(_.path.actorId == actorId)
-			if (index > -1) buf.remove(index)
-		}
-		respond(p, Done)
+			actorRefs -= actorId
+			respond(p, Done)
 	} else respond(p, InvalidId)
 
 	// As in `ActorImpl`, `SystemMsg` cases with type parameters are matched through trusted `TypeTest`
@@ -88,58 +70,101 @@ final class ActorSystem[Msg, State] private(
 		case (ActorClosed(actorId), p) =>
 			unregisterActor(actorId, p)
 			super.processSysEntry(msg)
-		case (AskForRef(actorId, systemId, _), p) if systemId == "" || systemId == id =>
+		case (AskForRef(actorId, systemId, _), p) if (systemId == "" || systemId == id) && actorId.nonEmpty =>
 			actorRefs.get(actorId) match {
+				case Some((ref, _)) => respond(p, Ref(ref))
+				case None => respond(p, invalidActorId(actorId))
+			}
+		case (AskForRef("", systemId, tags), p) if (systemId == "" || systemId == id) && tags.nonEmpty =>
+			val refOpt = actorRefs.values.collectFirst { case (ref, ts) if tags.forall(ts.contains) => ref }
+			refOpt match {
 				case Some(ref) => respond(p, Ref(ref))
-				case None => respond(p, invalidActorId(actorId).future)
+				case None      => respond(p, noRefFound(tags))
 			}
-		case (AskForRefAsync(sender, actorId, systemId, _), p) if systemId == "" || systemId == id =>
-			actorRefs.get(actorId) match {
-				case Some(ref) =>
-					sender ! Ref(ref)
-					respond(p, Done)
-				case None =>
-					// Don't send InvalidId to sender - just fail the promise consistently
-					respond(p, invalidActorId(actorId).future)
-			}
-		case (RequeueT(rq), p) =>
-			actorRefs.get(rq.actorId) match {
-				case Some(ref)                => ref ! (rq.msg, rq.behId)
-				case None if rq.tryNumber < 2 => this ! Requeue(rq.actorId, rq.msg, rq.behId, rq.tryNumber + 1) // requeue
-				case None                     => respond(p, invalidActorId(rq.actorId).future)
-			}
-		case (SysRequeueT(rq), p) =>
-			actorRefs.get(rq.actorId) match {
-				case Some(ref)                => ref ! rq.msg
-				case None if rq.tryNumber < 2 => this ! SysRequeue(rq.actorId, rq.msg, rq.tryNumber + 1) // requeue
-				case None                     => respond(p, invalidActorId(rq.actorId).future)
-			}
-		case (AskForRef(actorId, systemId, _), p) =>
+		case (AskForRef(actorId, systemId, _), p) if systemId.nonEmpty && systemId != id =>
 			systems.get(systemId) match {
-				case None => respond(p, invalidSystemId(systemId).future)
-				case Some(system) =>
+				case None => respond(p, invalidSystemId(systemId))
+				case Some((system, _)) =>
 					respond(p, system.ask(AskForRef(actorId)).flatMap {
 						case Ref(ref) =>
 							CloseableFuture.successful(Ref(RemoteActorRef(ActorPath.Remote(systemId, actorId), this)))
 						case _ => invalidActorId(actorId) // Handle unexpected responses
-					}.future)
+					})
 			}
-		case (AskForRefAsync(sender, actorId, systemId, _), p) =>
+		case (AskForSystem(systemId, tags), p) if (systemId == "" && tags.isEmpty) || systemId == id =>
+			respond(p, Ref(LocalActorRef(this)))
+		case (AskForSystem(systemId, tags), p) if systemId.nonEmpty =>
+			systems.get(systemId) match {
+				case Some((ref, _)) => respond(p, Ref(RemoteActorRef(ActorPath.Remote(systemId, systemId), ref)))
+				case None          => respond(p, invalidSystemId(systemId))
+			}
+		case (AskForSystem("", tags), p) if tags.nonEmpty =>
+			val refOpt = systems.values.collectFirst { case (ref, ts) if tags.forall(ts.contains) => ref }
+			refOpt match {
+				case Some(ref) => respond(p, Ref(RemoteActorRef(ActorPath.Remote(ref.id, ref.id), ref)))
+				case None      => respond(p, noRefFound(tags))
+			}
+		case (AskForRefAsync(sender, actorId, systemId, _), p) if (systemId == "" || systemId == id) && actorId.nonEmpty =>
+			actorRefs.get(actorId) match {
+				case Some((ref, _)) =>
+					sender ! Ref(ref)
+					respond(p, Done)
+				case None =>
+					// Don't send InvalidId to sender - just fail the promise consistently
+					respond(p, invalidActorId(actorId))
+			}
+		case (AskForRefAsync(sender, "", systemId, tags), p) if (systemId == "" || systemId == id) && tags.nonEmpty =>
+			val refOpt = actorRefs.values.collectFirst { case (ref, ts) if tags.forall(ts.contains) => ref }
+			refOpt match {
+				case Some(ref) => sender ! Ref(ref); respond(p, Done)
+				case None      => respond(p, noRefFound(tags))
+			}
+		case (AskForRefAsync(sender, actorId, systemId, _), p) if systemId.nonEmpty && systemId != id  =>
 			systems.get(systemId) match {
 				case None =>
-					respond(p, invalidSystemId(systemId).future)
-				case Some(system) =>
+					respond(p, invalidSystemId(systemId))
+				case Some((system, _)) =>
 					system.ask(AskForRef(actorId)).onComplete {
 						case Success(Ref(ref)) =>
-							sender ! Ref(ref)
+							sender ! Ref(RemoteActorRef(ActorPath.Remote(systemId, actorId), this))
 							respond(p, Done)
 						case Success(msg) =>
-							respond(p, unhandledMsg[SystemMsg](msg.toString).future) // the only successful response should be RemoteSystemMsg.Ref
+							respond(p, unhandledMsg[SystemMsg](msg.toString)) // the only successful response should be RemoteSystemMsg.Ref
 						case Failure(_: Actor.InvalidIdException) =>
-							respond(p, invalidActorId(actorId).future)
+							respond(p, invalidActorId(actorId))
 						case Failure(t) =>
 							p.foreach(_.failure(t))
 					}
+			}
+		case (AskForSystemAsync(sender, systemId, tags), p) if (systemId == "" && tags.isEmpty) || systemId == id =>
+			sender ! Ref(LocalActorRef(this))
+			respond(p, Done)
+		case (AskForSystemAsync(sender, systemId, tags), p) if systemId.nonEmpty =>
+			systems.get(systemId) match {
+				case Some((ref, _)) =>
+					sender ! Ref(RemoteActorRef(ActorPath.Remote(systemId, systemId), ref))
+					respond(p, Done)
+				case None => respond(p, invalidSystemId(systemId))
+			}
+		case (AskForSystemAsync(sender, "", tags), p) if tags.nonEmpty =>
+			val refOpt = systems.values.collectFirst { case (ref, ts) if tags.forall(ts.contains) => ref }
+			refOpt match {
+				case Some(ref) =>
+					sender ! Ref(RemoteActorRef(ActorPath.Remote(ref.id, ref.id), ref))
+					respond(p, Done)
+				case None      => respond(p, noRefFound(tags))
+			}
+		case (RequeueT(rq), p) =>
+			actorRefs.get(rq.actorId) match {
+				case Some((ref, _))           => ref ! (rq.msg, rq.behId)
+				case None if rq.tryNumber < 2 => this ! Requeue(rq.actorId, rq.msg, rq.behId, rq.tryNumber + 1) // requeue
+				case None                     => respond(p, invalidActorId(rq.actorId))
+			}
+		case (SysRequeueT(rq), p) =>
+			actorRefs.get(rq.actorId) match {
+				case Some((ref, _))           => ref ! rq.msg
+				case None if rq.tryNumber < 2 => this ! SysRequeue(rq.actorId, rq.msg, rq.tryNumber + 1) // requeue
+				case None                     => respond(p, invalidActorId(rq.actorId))
 			}
 		case _ =>
 			super.processSysEntry(msg)
@@ -166,10 +191,10 @@ final class ActorSystem[Msg, State] private(
 		case Local(`id`)           => systemStream ! (msg, None)
 		case Remote("", `id`)      => systemStream ! (msg, None)
 		case Remote(`id`, `id`)    => systemStream ! (msg, None)
-		case Local(actorId)        => if (actorRefs.contains(actorId)) actorRefs(actorId).tell(msg) else this ! SysRequeue(actorId, msg)
-		case Remote("", actorId)   => if (actorRefs.contains(actorId)) actorRefs(actorId).tell(msg) else this ! SysRequeue(actorId, msg)
-		case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId).tell(msg) else this ! SysRequeue(actorId, msg)
-		case Remote(systemId, _) if systemId != id && systems.contains(systemId)  => systems(systemId).tell(msg, path)
+		case Local(actorId)        => if (actorRefs.contains(actorId)) actorRefs(actorId)._1.tell(msg) else this ! SysRequeue(actorId, msg)
+		case Remote("", actorId)   => if (actorRefs.contains(actorId)) actorRefs(actorId)._1.tell(msg) else this ! SysRequeue(actorId, msg)
+		case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId)._1.tell(msg) else this ! SysRequeue(actorId, msg)
+		case Remote(systemId, _) if systemId != id && systems.contains(systemId)  => systems(systemId)._1.tell(msg, path)
 		case _ => // invalid system or actor id
 	}
 
@@ -178,10 +203,10 @@ final class ActorSystem[Msg, State] private(
 		case Local(`id`)           => msgStream ! (msg, None, behId)
 		case Remote("", `id`)      => msgStream ! (msg, None, behId)
 		case Remote(`id`, `id`)    => msgStream ! (msg, None, behId)
-		case Local(actorId)        => if (actorRefs.contains(actorId)) actorRefs(actorId).tell(msg, behId) else this ! Requeue(actorId, msg, behId)
-		case Remote("", actorId)   => if (actorRefs.contains(actorId)) actorRefs(actorId).tell(msg, behId) else this ! Requeue(actorId, msg, behId)
-		case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId).tell(msg, behId) else this ! Requeue(actorId, msg, behId)
-		case Remote(systemId, _) if systemId != id && systems.contains(systemId)  => systems(systemId).tell(msg, path, behId)
+		case Local(actorId)        => if (actorRefs.contains(actorId)) actorRefs(actorId)._1.tell(msg, behId) else this ! Requeue(actorId, msg, behId)
+		case Remote("", actorId)   => if (actorRefs.contains(actorId)) actorRefs(actorId)._1.tell(msg, behId) else this ! Requeue(actorId, msg, behId)
+		case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId)._1.tell(msg, behId) else this ! Requeue(actorId, msg, behId)
+		case Remote(systemId, _) if systemId != id && systems.contains(systemId)  => systems(systemId)._1.tell(msg, path, behId)
 		case _ => // invalid system or actor id
 	}
 
@@ -192,10 +217,10 @@ final class ActorSystem[Msg, State] private(
 			case Local(`id`) => sendToStream()
 			case Remote("", `id`) => sendToStream()
 			case Remote(`id`, `id`) => sendToStream()
-			case Local(actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId).ask(msg) else sendToStream()
-			case Remote("", actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId).ask(msg) else sendToStream()
-			case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId).ask(msg) else sendToStream()
-			case Remote(systemId, _) => if (systemId != id && systems.contains(systemId)) systems(systemId).ask(msg, path) else invalidSystemId(systemId)
+			case Local(actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId)._1.ask(msg) else sendToStream()
+			case Remote("", actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId)._1.ask(msg) else sendToStream()
+			case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId)._1.ask(msg) else sendToStream()
+			case Remote(systemId, _) => if (systemId != id && systems.contains(systemId)) systems(systemId)._1.ask(msg, path) else invalidSystemId(systemId)
 		}
 	} else ActorIsClosed[SystemMsg]
 
@@ -206,21 +231,21 @@ final class ActorSystem[Msg, State] private(
 			case Local(`id`)           => sendToStream()
 			case Remote("", `id`)      => sendToStream()
 			case Remote(`id`, `id`)    => sendToStream()
-			case Local(actorId)        => if (actorRefs.contains(actorId)) actorRefs(actorId).ask(msg, behId) else sendToStream()
-			case Remote("", actorId)   => if (actorRefs.contains(actorId)) actorRefs(actorId).ask(msg, behId) else sendToStream()
-			case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId).ask(msg, behId) else sendToStream()
-			case Remote(systemId, _)   => if (systemId != id && systems.contains(systemId)) systems(systemId).ask(msg, path, behId) else invalidSystemId(systemId)
+			case Local(actorId)        => if (actorRefs.contains(actorId)) actorRefs(actorId)._1.ask(msg, behId) else sendToStream()
+			case Remote("", actorId)   => if (actorRefs.contains(actorId)) actorRefs(actorId)._1.ask(msg, behId) else sendToStream()
+			case Remote(`id`, actorId) => if (actorRefs.contains(actorId)) actorRefs(actorId)._1.ask(msg, behId) else sendToStream()
+			case Remote(systemId, _)   => if (systemId != id && systems.contains(systemId)) systems(systemId)._1.ask(msg, path, behId) else invalidSystemId(systemId)
 		}
 	} else ActorIsClosed[Msg]
 
 	override protected def tryInitialize(): Unit = {
-		systems += (id -> this)
-		actorRefs += (id -> LocalActorRef(this)) // register yourself as a valid actor
+		systems += (id -> (this, Set(ActorTag.System)))
+		actorRefs += (id -> (LocalActorRef(this), Set(ActorTag.System))) // register yourself as a valid actor
 		super.tryInitialize()
 	}
 
 	override protected def shutdown(): Future[SystemMsg] = {
-		systems.foreach { (systemId, sys) => if (systemId != id) sys.tell(SystemClosed(id)) }
+		systems.foreach { case (systemId, (sys, _)) => if (systemId != id) sys.tell(SystemClosed(id)) }
 		super.shutdown()
 	}
 }

@@ -44,16 +44,19 @@ enum SystemMsg {
 	                      )
 	case NewChild[Msg](child: ActorRef[Msg])
 	case ActorClosed(actorId: String)
-	case Register[Msg, State](actor: Actor[Msg, ?], tags: List[ActorTag] = Nil)
+	case Register[Msg, State](actor: Actor[Msg, ?], tags: Set[ActorTag] = Set.empty)
 	case Unregister(actorId: String)
-	case AskForRef(actorId: String = "", systemId: String = "", tags: List[ActorTag] = Nil)
-	case AskForRefAsync[Msg](sender: Actor[Msg, ?], actorId: String = "", systemId: String = "", tags: List[ActorTag] = Nil)
+	case AskForRef(actorId: String = "", systemId: String = "", tags: Set[ActorTag] = Set.empty)
+	case AskForRefAsync[Msg](sender: Actor[Msg, ?], actorId: String = "", systemId: String = "", tags: Set[ActorTag] = Set.empty)
 	case Ref[Msg](ref: ActorRef[Msg])
 	case Requeue[Msg](actorId: String, msg: Msg, behId: String, tryNumber: Int = 0)
 	case SysRequeue(actorId: String, msg: SystemMsg, tryNumber: Int = 0)
-	case RegisterSystem[Msg](system: RemoteSystem[Msg], tags: List[ActorTag] = Nil)
+	case RegisterSystem[Msg](system: RemoteSystem[Msg], tags: Set[ActorTag] = Set.empty)
 	case SystemClosed(systemId: String)
 	case UnregisterSystem(systemId: String)
+	case AskForSystem(systemId: String = "", tags: Set[ActorTag] = Set.empty)
+	case AskForSystemAsync[Msg](sender: Actor[Msg, ?], systemId: String = "", tags: Set[ActorTag] = Set.empty)
+	case RemoteRef[Msg](ref: RemoteSystem[Msg])
 }
 
 object SystemMsg {
