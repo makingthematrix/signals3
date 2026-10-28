@@ -13,8 +13,11 @@
 - [ ] The `Restart` system message and logic
 - [ ] The ability to register actors from another actor system
 - [ ] Make constants configurable through environment variables
+- [ ] Write specs and Scaladoc
+- [ ] Refactor for safety and performance
 - [ ] ReadWriteUpdate rewritten in signals3 with actors
 - [ ] ANN rewritten in signals3 with actors
+- [ ] Look into what other features can be added
 
 ## Done
 

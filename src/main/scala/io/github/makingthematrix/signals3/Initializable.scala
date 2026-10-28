@@ -14,8 +14,7 @@ trait CanBeInitialized {
 		* Before initialization, the actor cannot receive messages.
 		*/
 	def isInitialized: Boolean = initialized.get()
-
-
+	
 	protected var _onInit: List[() => Unit] = Nil
 
 	// Registers a function that should be called exactly once when the actor is initialized

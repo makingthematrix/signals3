@@ -12,16 +12,13 @@ import scala.util.{Failure, Success}
 
 import scala.collection.mutable
 
-// the user may subclass ActorSystem to provide modified logic for handling actor systems
-// note: the constructor parameter must not be called `tags` and must not be a `val` -
-// it would shadow the `tags` member inherited from `ActorImpl`, which is this set unioned with `ActorTag.System`
-class ActorSystem[Msg, State] (
+final class ActorSystem[Msg, State] private (
   override val id: String,
   state: State,
   override protected val heartbeat: HeartBeatStrategy,
-  _tags: Set[ActorTag]
+  override val tags: Set[ActorTag]
 )(using ExecutionContext)
-	extends ActorImpl[Msg, State](id, state, heartbeat, _tags + ActorTag.System)
+	extends ActorImpl[Msg, State](id, state, heartbeat, tags)
 		with RemoteSystem[Msg] {
 	import ActorPath.*
 	import SystemMsg.*
@@ -266,12 +263,12 @@ object ActorSystem {
 	def apply[Msg, State](id: String, state: State, heartbeat: HeartBeatStrategy, tags: Set[ActorTag])
 	                     (using ExecutionContext): ActorSystem[Msg, State] = {
 		assert(id != "")
-		new ActorSystem(id, state, heartbeat, tags).tap { _.initialize() }
+		new ActorSystem(id, state, heartbeat, tags + ActorTag.System).tap { _.initialize() }
 	}
 
 	inline def apply[Msg, State](id: String, state: State, heartbeat: HeartBeatStrategy)
 	                        (using ExecutionContext): ActorSystem[Msg, State] =
-		apply(id, state, heartbeat, tags = Set(ActorTag.System))
+		apply(id, state, heartbeat, Set.empty)
 
 	inline def apply[Msg, State](state: State, heartbeat: HeartBeatStrategy)
 	                            (using ExecutionContext): ActorSystem[Msg, State] =
