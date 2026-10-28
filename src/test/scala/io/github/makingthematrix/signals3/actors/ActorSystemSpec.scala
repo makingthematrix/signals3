@@ -122,7 +122,7 @@ class ActorSystemSpec extends FunSuite {
 
   /** An actor that captures the Ref delivered by AskForRefAsync in a system message. */
   private class CapturingActorImpl(sys: ActorSystem[String, Int])(using ExecutionContext)
-    extends ActorImpl[String, Int]("capturing", 0, Actor.defBeat, None, Some(sys)) {
+    extends ActorImpl[String, Int]("capturing", 0, Actor.defBeat, Set.empty, None, Some(sys)) {
     @volatile var receivedRef: Option[ActorRef[String]] = None
     @volatile var receivedCount: Int = 0
     override protected def processSysEntry(msg: SysEntry): Unit = msg match {
@@ -153,6 +153,20 @@ class ActorSystemSpec extends FunSuite {
       case Ref(ref) => ref.asInstanceOf[ActorRef[String]]
       case other    => fail(s"Expected a Ref for tags ${tags.map(_.name).mkString(",")}, got $other")
     }
+
+  /** Polls a tag query until an actor registered with the given tags is found -
+    * registration is asynchronous with respect to actor creation. */
+  private def awaitRefByTags(sys: ActorSystem[String, Int], tags: ActorTag*): ActorRef[String] = {
+    val start = System.currentTimeMillis()
+    while (System.currentTimeMillis() - start < 5000) {
+      tryResultCF(sys ? AskForRef(tags = tags.toSet)) match {
+        case Success(Ref(ref)) => return ref.asInstanceOf[ActorRef[String]]
+        case Failure(_)       => Thread.sleep(50) // not registered (yet)
+        case other            => fail(s"Unexpected AskForRef response: $other")
+      }
+    }
+    fail(s"No actor with tags ${tags.map(_.name).mkString(",")} was registered within 5 seconds")
+  }
 
   /** Looks up a system by id or by tags. */
   private def systemRef(sys: ActorSystem[String, Int], msg: SystemMsg): ActorRef[String] =
@@ -1287,6 +1301,136 @@ class ActorSystemSpec extends FunSuite {
       Await.result(Future.sequence(futures), 30.seconds)
     } finally {
       actors.values.foreach(act => Try(close(act)))
+      Try(close(sys))
+    }
+  }
+
+  // ============================================================================
+  // 21. Tags on actors created with ActorBuilder
+  // ============================================================================
+
+  test("withTags on the builder is used when the actor auto-registers on its system") {
+    val sys = newSystem()
+    val a = ActorBuilder[String, Int](0)
+      .withId("built")
+      .withBehavior("default", { case (msg, _) => Some(s"built: $msg") })
+      .withTags(Set(ActorTag.Log))
+      .withSystem(sys)
+      .build()
+    try {
+      val ref = awaitRefByTags(sys, ActorTag.Log)
+      assertEquals(ref.id, "built")
+      assertEquals(resultCF(ref ? "1"), "built: 1")
+    } finally {
+      Try(close(a)); Try(close(sys))
+    }
+  }
+
+  test("addTag and removeTag accumulate and remove tags on the builder") {
+    val sys = newSystem()
+    val a = ActorBuilder[String, Int](0)
+      .withId("acc")
+      .withBehavior("default", { case (msg, _) => Some(s"acc: $msg") })
+      .withTags(Set(ActorTag.Log))
+      .addTag(ActorTag.Stats)
+      .addTag(Custom)
+      .removeTag(ActorTag.Log)
+      .withSystem(sys)
+      .build()
+    try {
+      assertEquals(awaitRefByTags(sys, ActorTag.Stats, Custom).id, "acc")
+      assertEquals(awaitRefByTags(sys, ActorTag.Stats).id, "acc") // a subset query matches
+      tryResultCF(sys ? AskForRef(tags = Set(ActorTag.Log))) match {
+        case Failure(NoRefFound(_)) => ()
+        case other => fail(s"Log was removed on the builder, expected NoRefFound, got $other")
+      }
+    } finally {
+      Try(close(a)); Try(close(sys))
+    }
+  }
+
+  test("withNoTags clears the tags previously set on the builder") {
+    val sys = newSystem()
+    val a = ActorBuilder[String, Int](0)
+      .withId("cleared")
+      .withBehavior("default", { case (msg, _) => Some(s"cleared: $msg") })
+      .withTags(Set(ActorTag.Log))
+      .withNoTags()
+      .withSystem(sys)
+      .build()
+    try {
+      awaitRef(sys, "cleared") // registered, but with an empty tag set
+      tryResultCF(sys ? AskForRef(tags = Set(ActorTag.Log))) match {
+        case Failure(NoRefFound(_)) => ()
+        case other => fail(s"expected NoRefFound after withNoTags, got $other")
+      }
+    } finally {
+      Try(close(a)); Try(close(sys))
+    }
+  }
+
+  // ============================================================================
+  // 22. Tags of actor systems
+  // ============================================================================
+
+  test("a system with custom tags is discoverable by them and still by the System tag") {
+    val sys = ActorSystem[String, Int]("custom", 0, Actor.defBeat, Set(ActorTag.Log, ActorTag.Stats))
+    try {
+      // the system registers itself in its own actorRefs with its custom tags
+      assertEquals(refByTags(sys, ActorTag.Log, ActorTag.Stats).id, "custom")
+      // the constructor always unions the System tag with the user-provided tags
+      assertEquals(refByTags(sys, ActorTag.System).id, "custom")
+      assertEquals(refByTags(sys, ActorTag.System, ActorTag.Log).id, "custom")
+      // and in its own systems map
+      assertEquals(systemRef(sys, AskForSystem(tags = Set(ActorTag.Stats))).id, "custom")
+      assertEquals(systemRef(sys, AskForSystem(tags = Set(ActorTag.System, ActorTag.Log))).id, "custom")
+    } finally {
+      Try(close(sys))
+    }
+  }
+
+  // ============================================================================
+  // 23. Tags inherited by spawned actors
+  // ============================================================================
+
+  test("children spawned by a tagged actor inherit its tags plus the Child tag") {
+    val sys = newSystem()
+    val parent = ActorBuilder[String, Int](0)
+      .withId("parent")
+      .withBehavior("default", { case (msg, _) => Some(s"parent: $msg") })
+      .withTags(Set(ActorTag.Log))
+      .withSystem(sys)
+      .build()
+    try {
+      val child = spawn(parent)(SystemMsg.Spawn())
+      // the parent has Log but not Child, so {Log, Child} uniquely identifies the child
+      assertEquals(awaitRefByTags(sys, ActorTag.Log, ActorTag.Child).id, child.id)
+      assertEquals(awaitRefByTags(sys, ActorTag.Child).id, child.id)
+      // a plain Log query matches both the parent and the child
+      val logId = awaitRefByTags(sys, ActorTag.Log).id
+      assert(Set("parent", child.id).contains(logId), s"the Log query returned an unexpected actor: $logId")
+
+      // the grandchild inherits the same set - Child is not duplicated
+      val grandchild = spawn(child)(SystemMsg.Spawn())
+      val gcId = awaitRefByTags(sys, ActorTag.Log, ActorTag.Child).id
+      assert(Set(child.id, grandchild.id).contains(gcId),
+        s"the {Log, Child} query returned an unexpected actor: $gcId")
+    } finally {
+      Try(close(parent)); Try(close(sys))
+    }
+  }
+
+  test("children spawned by the system inherit its tags plus the Child tag") {
+    val sys = ActorSystem[String, Int]("sys", 0, Actor.defBeat, Set(ActorTag.Stats))
+    try {
+      val child = spawn(sys)(SystemMsg.Spawn())
+      // the system's member tags are {Stats, System} (System is unioned in), so the child gets {Stats, System, Child}
+      assertEquals(awaitRefByTags(sys, ActorTag.Stats, ActorTag.Child).id, child.id)
+      assertEquals(awaitRefByTags(sys, ActorTag.Child).id, child.id)
+      // consequence of the symmetric inheritance: a System-tag query matches both the system and its children
+      val sysId = awaitRefByTags(sys, ActorTag.System).id
+      assert(Set(sys.id, child.id).contains(sysId), s"the System query returned an unexpected actor: $sysId")
+    } finally {
       Try(close(sys))
     }
   }

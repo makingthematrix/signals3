@@ -81,7 +81,7 @@ class ActorSystemRemoteSpec extends FunSuite {
 
   /** An actor that captures the Ref delivered by AskForRefAsync in a system message. */
   private class CapturingActorImpl(sys: ActorSystem[String, Int])(using ExecutionContext)
-    extends ActorImpl[String, Int]("capturing", 0, Actor.defBeat, None, Some(sys)) {
+    extends ActorImpl[String, Int]("capturing", 0, Actor.defBeat, Set.empty, None, Some(sys)) {
     @volatile var receivedRef: Option[ActorRef[String]] = None
     override protected def processSysEntry(msg: SysEntry): Unit = msg match {
       case (Ref(ref), p) =>

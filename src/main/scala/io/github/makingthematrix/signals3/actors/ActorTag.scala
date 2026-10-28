@@ -7,4 +7,5 @@ object ActorTag {
   case object Log    extends ActorTag("log")
 	case object Stats  extends ActorTag("stats")
 	case object System extends ActorTag("system")
+	case object Child  extends ActorTag("child")
 }

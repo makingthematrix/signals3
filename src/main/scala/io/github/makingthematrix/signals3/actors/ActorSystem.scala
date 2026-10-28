@@ -12,11 +12,17 @@ import scala.util.{Failure, Success}
 
 import scala.collection.mutable
 
-final class ActorSystem[Msg, State] private(
+// the user may subclass ActorSystem to provide modified logic for handling actor systems
+// note: the constructor parameter must not be called `tags` and must not be a `val` -
+// it would shadow the `tags` member inherited from `ActorImpl`, which is this set unioned with `ActorTag.System`
+class ActorSystem[Msg, State] (
   override val id: String,
   state: State,
-  override protected val heartbeat: HeartBeatStrategy
-)(using ExecutionContext) extends ActorImpl[Msg, State](id, state, heartbeat) with RemoteSystem[Msg] {
+  override protected val heartbeat: HeartBeatStrategy,
+  _tags: Set[ActorTag]
+)(using ExecutionContext)
+	extends ActorImpl[Msg, State](id, state, heartbeat, _tags + ActorTag.System)
+		with RemoteSystem[Msg] {
 	import ActorPath.*
 	import SystemMsg.*
 
@@ -76,7 +82,7 @@ final class ActorSystem[Msg, State] private(
 				case None => respond(p, invalidActorId(actorId))
 			}
 		case (AskForRef("", systemId, tags), p) if (systemId == "" || systemId == id) && tags.nonEmpty =>
-			val refOpt = actorRefs.values.collectFirst { case (ref, ts) if tags.forall(ts.contains) => ref }
+			val refOpt = actorRefs.values.collectFirst { case (ref, ts) if tags.subsetOf(ts) => ref }
 			refOpt match {
 				case Some(ref) => respond(p, Ref(ref))
 				case None      => respond(p, noRefFound(tags))
@@ -99,7 +105,7 @@ final class ActorSystem[Msg, State] private(
 				case None          => respond(p, invalidSystemId(systemId))
 			}
 		case (AskForSystem("", tags), p) if tags.nonEmpty =>
-			val refOpt = systems.values.collectFirst { case (ref, ts) if tags.forall(ts.contains) => ref }
+			val refOpt = systems.values.collectFirst { case (ref, ts) if tags.subsetOf(ts) => ref }
 			refOpt match {
 				case Some(ref) => respond(p, Ref(RemoteActorRef(ActorPath.Remote(ref.id, ref.id), ref)))
 				case None      => respond(p, noRefFound(tags))
@@ -176,6 +182,7 @@ final class ActorSystem[Msg, State] private(
 				.withIdIf(data.actorId.nonEmpty, data.actorId)
 				.withBehaviorsIf(data.behaviors.nonEmpty, data.behaviors, this.behaviors)
 				.withHeartbeat(data.heartbeat.getOrElse(this.heartbeat))
+				.withTags(tags + ActorTag.Child)
 				.withParent(this)
 				.withSystem(this)
 				.withOnInitIf(data.onInit.nonEmpty, data.onInit.get)
@@ -239,8 +246,8 @@ final class ActorSystem[Msg, State] private(
 	} else ActorIsClosed[Msg]
 
 	override protected def tryInitialize(): Unit = {
-		systems += (id -> (this, Set(ActorTag.System)))
-		actorRefs += (id -> (LocalActorRef(this), Set(ActorTag.System))) // register yourself as a valid actor
+		systems += (id -> (this, tags))
+		actorRefs += (id -> (LocalActorRef(this), tags)) // register yourself as a valid actor
 		super.tryInitialize()
 	}
 
@@ -256,11 +263,17 @@ object ActorSystem {
 	inline def invalidSystemId[Msg](systemId: String)(using ExecutionContext): CloseableFuture[Msg] =
 		CloseableFuture.failed(InvalidSystemIdException(systemId))
 
-	def apply[Msg, State](id: String, state: State, heartbeat: HeartBeatStrategy)(using ExecutionContext): ActorSystem[Msg, State] = {
+	def apply[Msg, State](id: String, state: State, heartbeat: HeartBeatStrategy, tags: Set[ActorTag])
+	                     (using ExecutionContext): ActorSystem[Msg, State] = {
 		assert(id != "")
-		new ActorSystem(id, state, heartbeat).tap { _.initialize() }
+		new ActorSystem(id, state, heartbeat, tags).tap { _.initialize() }
 	}
 
-	inline def apply[Msg, State](state: State, heartbeat: HeartBeatStrategy)(using ExecutionContext): ActorSystem[Msg, State] =
+	inline def apply[Msg, State](id: String, state: State, heartbeat: HeartBeatStrategy)
+	                        (using ExecutionContext): ActorSystem[Msg, State] =
+		apply(id, state, heartbeat, tags = Set(ActorTag.System))
+
+	inline def apply[Msg, State](state: State, heartbeat: HeartBeatStrategy)
+	                            (using ExecutionContext): ActorSystem[Msg, State] =
 		apply(IdGenerator.generate("system"), state, heartbeat)
 }

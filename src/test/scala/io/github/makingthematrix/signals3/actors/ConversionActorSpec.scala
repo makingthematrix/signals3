@@ -112,7 +112,7 @@ class ConversionActorSpec extends FunSuite {
 
   /** An actor that captures the Ref delivered by AskForRefAsync in a system message. */
   private class CapturingActorImpl(sys: ActorSystem[MsgA, Int])(using ExecutionContext)
-    extends ActorImpl[MsgA, Int]("capturing", 0, Actor.defBeat, None, Some(sys)) {
+    extends ActorImpl[MsgA, Int]("capturing", 0, Actor.defBeat, Set.empty, None, Some(sys)) {
     @volatile var receivedRef: Option[ActorRef[?]] = None
     override protected def processSysEntry(msg: SysEntry): Unit = msg match {
       case (Ref(ref), p) =>

@@ -25,6 +25,7 @@ import scala.util.{Failure, Success, Try}
 private[actors] class ActorImpl[Msg, State](override val id: String,
                                             protected var _state: State,
                                             override protected val heartbeat: HeartBeatStrategy = Actor.defBeat,
+                                            override val tags: Set[ActorTag] = Set.empty,
                                             override val parent: Option[ActorRef[Msg]] = None,
                                             override val system: Option[RemoteSystem[Msg]] = None
                                            )(using ec: ExecutionContext)
@@ -206,7 +207,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 
 	inline final protected def respond(pOpt: Option[Promise[SystemMsg]], rsp: CloseableFuture[SystemMsg]): Unit =
 		respond(pOpt, rsp.future)
-		
+
 	// Processes system messages; should NOT be called directly - always from `processMessages`
 	private def processSystemMessages(): Unit = {
 		val entries = flushSystemEntries()
@@ -274,6 +275,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 				.withIdIf(data.actorId.nonEmpty, data.actorId)
 				.withBehaviorsIf(data.behaviors.nonEmpty, data.behaviors, this.behaviors)
 				.withHeartbeat(data.heartbeat.getOrElse(this.heartbeat))
+				.withTags(tags + ActorTag.Child)
 				.withParent(this)
 				.withSystemIf(system.nonEmpty, system.get)
 				.withOnInitIf(data.onInit.nonEmpty, data.onInit.get)
@@ -296,7 +298,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 
 	override protected def tryInitialize(): Unit = {
 		beat.foreach(_ => processMessages())
-		system.foreach(_.tell(Register(this)))
+		system.foreach(_.tell(Register(this, tags)))
 	}
 
 	override protected def onInitializationFailed(t: Throwable): Unit = {
