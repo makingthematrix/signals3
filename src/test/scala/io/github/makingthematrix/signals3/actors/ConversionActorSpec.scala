@@ -119,8 +119,8 @@ class ConversionActorSpec extends FunSuite {
   }
 
   test("ask converts the argument and returns the response typed as Msg") {
-    val actor = create {
-      case (Num(n), _)   => Some(Text(s"N:$n"))
+    val actor = create[Proto] {
+      case (Num(n), _)  => Some(Text(s"N:$n"))
       case (Text(s), _) => Some(Text(s"T:$s"))
     }
     assertEquals(resultCF(actor ? 42), Text("N:42"))
@@ -159,7 +159,7 @@ class ConversionActorSpec extends FunSuite {
 
   test("path-based tell and ask convert the argument") {
     val got = Signal(Seq.empty[Proto])
-    val actor = create {
+    val actor = create[Proto] {
       case (p @ Num(n), _)  => got.mutate(_ :+ p); Some(Text(s"N:$n"))
       case (p @ Text(s), _) => got.mutate(_ :+ p); Some(Text(s"T:$s"))
     }
@@ -253,7 +253,7 @@ class ConversionActorSpec extends FunSuite {
     // it is never selected for arguments that already conform
     given Conversion[Proto, Proto] = p => Text(s"converted:${p.toString}")
     locally(summon[Conversion[Proto, Proto]])
-    val actor = create { case (p, _) => Some(Text(s"got:$p")) }
+    val actor = create[Proto] { case (p, _) => Some(Text(s"got:$p")) }
     assertEquals(resultCF(actor ? Num(1)), Text("got:Num(1)"))
     assertEquals(resultCF(actor ? Text("x")), Text("got:Text(x)"))
     // convertible types still convert in the same scope
@@ -264,7 +264,7 @@ class ConversionActorSpec extends FunSuite {
   test("the conversion is applied exactly once across direct, LocalActorRef, and RemoteActorRef chains") {
     // the Tag conversion appends one '#'; a message passing through a chain of nested `into` parameters
     // (ref -> system -> actor) must still contain exactly one
-    val direct = create { case (Text(s), _) => Some(Text(s)) }
+    val direct = create[Proto] { case (Text(s), _) => Some(Text(s)) }
     assertEquals(resultCF(direct ? Tag("direct")), Text("direct#"))
     close(direct)
 
