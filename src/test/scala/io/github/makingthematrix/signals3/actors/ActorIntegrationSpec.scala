@@ -25,44 +25,11 @@ class ActorIntegrationSpec extends FunSuite {
 
   override def afterEach(context: AfterEach): Unit =
     eventContext.stop()
-
-  private def close(actor: Actor[?, ?] & Closeable): Unit = {
-    actor.close()
-    waitFor(actor.isClosedSignal, true)
-  }
-
-  private def close(actorRef: ActorRef[?]): Unit = {
-    awaitCF(actorRef ? Close)
-  }
-
-  private def create[Msg](pf: PF[Msg, Unit]): Actor[Msg, Unit] & Closeable & Pausable =
-    ActorBuilder[Msg]()
-      .withBehaviorPF(pf)
-      .build()
-
-  private def create[Msg, State](state: State, pf: PF[Msg, State]): Actor[Msg, State] & Closeable & Pausable =
-    ActorBuilder[Msg, State](state)
-      .withBehaviorPF(pf)
-      .build()
-
+  
   import SystemMsg.*
-
-  @unchecked private def spawn[Msg, State](parent: Actor[Msg, ?])(data: SystemMsg.Spawn[Msg, State]): ActorRef[Msg] = {
-    tryResultCF(parent ? data) match {
-      case Success(NewChild(child)) => child.asInstanceOf[ActorRef[Msg]]
-      case Failure(InvalidIdException(id)) if id == data.actorId => fail(s"Spawn with id $id was rejected as invalid")
-      case other => fail(s"Unexpected spawn response: $other")
-    }
-  }
-
-  @unchecked private def spawn[Msg, State](parent: ActorRef[Msg])(data: SystemMsg.Spawn[Msg, State]): ActorRef[Msg] = {
-    tryResultCF(parent ? data) match {
-      case Success(NewChild(child)) => child.asInstanceOf[ActorRef[Msg]]
-      case Failure(InvalidIdException(id)) if id == data.actorId => fail(s"Spawn with id $id was rejected as invalid")
-      case other => fail(s"Unexpected spawn response: $other")
-    }
-  }
-
+  import Utils.*
+  import Utils.MyMsg.*
+  
   // ============================================================================
   // Thread Safety Tests for Behavior Modifications
   // ============================================================================
@@ -194,20 +161,7 @@ class ActorIntegrationSpec extends FunSuite {
   // ============================================================================
   // Message Processing During Behavior Modification Tests
   // ============================================================================
-
-  enum MyMsg{
-    case MyInt(n: Int)
-    case MyStr(str: String)
-  }
   
-  object MyMsg {
-    def apply(n: Int): MyMsg = MyInt(n)
-    def apply(str: String): MyMsg = MyStr(str)
-  }
-
-  import MyMsg.*
-
-
   /**
    * Test that behavior modifications don't cause message loss.
    */
@@ -223,9 +177,8 @@ class ActorIntegrationSpec extends FunSuite {
         receivedCount.mutate(_ + 1)
         Some(MyStr(s"Recorded: $n"))
     }
-    actor.ask(SystemMsg.AddBehavior("recorder", recordingBehavior))
-    // Wait for behavior to be added
-    Thread.sleep(100)
+    
+    awaitCF(actor ? SystemMsg.AddBehavior("recorder", recordingBehavior))
     assert(actor.getBehavior("recorder").isDefined)
     
     // Send messages

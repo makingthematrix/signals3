@@ -1,14 +1,14 @@
 package io.github.makingthematrix.signals3
 
-import java.util.concurrent.atomic.AtomicReference
+import io.github.makingthematrix.signals3.CloseableFuture.toFuture
 
 import java.util.Random
-import scala.concurrent.duration.*
+import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.tailrec
+import scala.concurrent.duration.*
 import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
-import scala.util.{Failure, Success, Try}
-import CloseableFuture.toFuture
 import scala.language.implicitConversions
+import scala.util.{Failure, Success, Try}
 
 package object testutils {
   private val localRandom: ThreadLocal[Random] = new ThreadLocal[Random] {

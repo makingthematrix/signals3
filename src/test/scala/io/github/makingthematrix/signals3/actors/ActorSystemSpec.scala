@@ -1,14 +1,15 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.testutils.*
 import io.github.makingthematrix.signals3.*
-import io.github.makingthematrix.signals3.actors.SystemMsg.*
 import io.github.makingthematrix.signals3.actors.Actor.{InvalidIdException, NoRefFound}
 import io.github.makingthematrix.signals3.actors.ActorSystem.InvalidSystemIdException
+import io.github.makingthematrix.signals3.actors.SystemMsg.*
+import io.github.makingthematrix.signals3.testutils.*
 import munit.FunSuite
 
+import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration.*
-import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
+import scala.concurrent.{Await, Future}
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -16,6 +17,8 @@ import scala.util.{Failure, Success, Try}
  * spawn integration, cross-actor communication through the registry, and concurrency.
  */
 class ActorSystemSpec extends FunSuite {
+  import Utils.*
+  
   private val eventContext = EventContext()
   import Threading.defaultContext
 
@@ -26,173 +29,13 @@ class ActorSystemSpec extends FunSuite {
 
   override def afterEach(context: AfterEach): Unit =
     eventContext.stop()
-
-  // ============================================================================
-  // Helpers
-  // ============================================================================
-
-  private def newSystem(): ActorSystem[String, Int] = newSystem("sys")
-
-  private def newSystem(id: String): ActorSystem[String, Int] =
-    ActorSystem[String, Int](id, 0, Actor.defBeat)
-
-  private def newActor(sys: ActorSystem[String, Int], id: String,
-                       pf: Actor.PF[String, Int]): Actor[String, Int] =
-    ActorBuilder[String, Int](0)
-      .withId(id).withState(0).withBehavior("default", pf).withSystem(sys).build()
-
-  private def close(actor: Actor[?, ?]): Unit = {
-    actor.asInstanceOf[Closeable].close()
-    waitFor(actor.isClosedSignal, true)
-  }
-
-  private def close(actorRef: ActorRef[?]): Unit =
-    tryResultCF(actorRef ? Close) match {
-      case Success(Done) =>
-      case Success(msg) => fail(s"closing ${actorRef.id} failed: $msg")
-      case Failure(ex) => fail(ex.getMessage)
-    }
-
-  @unchecked private def spawn[Msg, State](parent: Actor[Msg, ?])(data: SystemMsg.Spawn[Msg, State]): ActorRef[Msg] = {
-    tryResultCF(parent ? data) match {
-      case Success(NewChild(child)) => child.asInstanceOf[ActorRef[Msg]]
-      case Failure(InvalidIdException(id)) if id == data.actorId => fail(s"Spawn with id $id was rejected as invalid")
-      case other => fail(s"Unexpected spawn response: $other")
-    }
-  }
-
-  @unchecked private def spawn[Msg, State](parent: ActorRef[Msg])(data: SystemMsg.Spawn[Msg, State]): ActorRef[Msg] = {
-    tryResultCF(parent ? data) match {
-      case Success(NewChild(child)) => child.asInstanceOf[ActorRef[Msg]]
-      case Failure(InvalidIdException(id)) if id == data.actorId => fail(s"Spawn with id $id was rejected as invalid")
-      case other => fail(s"Unexpected spawn response: $other")
-    }
-  }
-
-  private def awaitRef(sys: ActorSystem[String, Int], id: String): ActorRef[String] = {
-    val start = System.currentTimeMillis()
-    while (System.currentTimeMillis() - start < 5000) {
-      try {
-        tryResultCF(sys ? AskForRef(id)) match {
-          case Success(Ref(ref))                 => return ref.asInstanceOf[ActorRef[String]]
-          case Failure(InvalidIdException(`id`)) => Thread.sleep(50)
-          case other                             => fail(s"Unexpected response: $other")
-        }
-      } catch {
-        case _: TimeoutException => Thread.sleep(50)
-      }
-    }
-    fail(s"Actor '$id' was not registered within 5 seconds")
-  }
-
-  private def awaitInvalid(sys: ActorSystem[String, Int], id: String): Unit = {
-    val start = System.currentTimeMillis()
-    while (System.currentTimeMillis() - start < 5000) {
-      try {
-        tryResultCF[SystemMsg](sys ? AskForRef(id)) match {
-          case Failure(InvalidIdException(`id`)) => return
-          case Success(Ref(_)) => Thread.sleep(50)
-          case other => throw new AssertionError(s"Unexpected response: $other")
-        }
-      } catch {
-        case _: TimeoutException => Thread.sleep(50)
-      }
-    }
-    fail(s"Actor '$id' was still registered after 5 seconds")
-  }
-
-  /** Two cross-registered systems: each one holds the other in its `systems` map. */
-  private def crossRegistered(systemAId: String = "A", systemBId: String = "B"): (ActorSystem[String, Int], ActorSystem[String, Int]) = {
-    val a = newSystem(systemAId)
-    val b = newSystem(systemBId)
-    awaitCF(a ? RegisterSystem(b))
-    awaitCF(b ? RegisterSystem(a))
-    (a, b)
-  }
-
-  /** Looks up an actor on a peer system and returns the (remote) ref. */
-  private def remoteRef(sys: ActorSystem[String, Int], actorId: String, systemId: String): ActorRef[String] =
-    tryResultCF(sys ? AskForRef(actorId, systemId)) match {
-      case Success(Ref(ref)) => ref.asInstanceOf[ActorRef[String]]
-      case other            => fail(s"Unexpected AskForRef response: $other")
-    }
-
-  /** A user-defined tag - verifies that `ActorTag` is genuinely extensible. */
-  private case object Custom extends ActorTag("custom")
-
-  /** An actor that captures the Ref delivered by AskForRefAsync in a system message. */
-  private class CapturingActorImpl(sys: ActorSystem[String, Int])(using ExecutionContext)
-    extends ActorImpl[String, Int]("capturing", 0, Actor.defBeat, Set.empty, None, Some(sys)) {
-    @volatile var receivedRef: Option[ActorRef[String]] = None
-    @volatile var receivedCount: Int = 0
-    override protected def processSysEntry(msg: SysEntry): Unit = msg match {
-      case (Ref(ref), p) =>
-        receivedRef = Some(ref.asInstanceOf[ActorRef[String]])
-        receivedCount += 1
-        respond(p, Done)
-      case other =>
-        super.processSysEntry(other)
-    }
-  }
-
-  /** An actor built without a system and registered manually with the given tags. */
-  private def newTaggedActor(sys: ActorSystem[String, Int], id: String, tags: ActorTag*): Actor[String, Int] = {
-    val a = ActorBuilder[String, Int](0)
-      .withId(id)
-      .withBehavior("default", { case (msg, _) => Some(s"$id: $msg") })
-      .build()
-    resultCF(sys ? Register(a, tags.toSet)) match {
-      case Ref(_) => a
-      case other  => fail(s"registering '$id' with tags ${tags.map(_.name).mkString(",")} failed: $other")
-    }
-  }
-
-  /** Looks up an actor by tags - all tags in the query must match. */
-  private def refByTags(sys: ActorSystem[String, Int], tags: ActorTag*): ActorRef[String] =
-    resultCF(sys ? AskForRef(tags = tags.toSet)) match {
-      case Ref(ref) => ref.asInstanceOf[ActorRef[String]]
-      case other    => fail(s"Expected a Ref for tags ${tags.map(_.name).mkString(",")}, got $other")
-    }
-
-  /** Polls a tag query until an actor registered with the given tags is found -
-    * registration is asynchronous with respect to actor creation. */
-  private def awaitRefByTags(sys: ActorSystem[String, Int], tags: ActorTag*): ActorRef[String] = {
-    val start = System.currentTimeMillis()
-    while (System.currentTimeMillis() - start < 5000) {
-      tryResultCF(sys ? AskForRef(tags = tags.toSet)) match {
-        case Success(Ref(ref)) => return ref.asInstanceOf[ActorRef[String]]
-        case Failure(_)       => Thread.sleep(50) // not registered (yet)
-        case other            => fail(s"Unexpected AskForRef response: $other")
-      }
-    }
-    fail(s"No actor with tags ${tags.map(_.name).mkString(",")} was registered within 5 seconds")
-  }
-
-  /** Looks up a system by id or by tags. */
-  private def systemRef(sys: ActorSystem[String, Int], msg: SystemMsg): ActorRef[String] =
-    resultCF(sys ? msg) match {
-      case Ref(ref) => ref.asInstanceOf[ActorRef[String]]
-      case other    => fail(s"Expected a Ref of a system, got $other")
-    }
-
-  /** Waits until the capturing actor receives a Ref. */
-  private def awaitCaptured(capturer: CapturingActorImpl): ActorRef[String] = {
-    val start = System.currentTimeMillis()
-    while (System.currentTimeMillis() - start < 5000) {
-      capturer.receivedRef match {
-        case Some(ref) => return ref
-        case None     => Thread.sleep(50)
-      }
-    }
-    fail("the sender actor did not receive the Ref within 5 seconds")
-  }
-
+  
   // ============================================================================
   // 1. Construction and initialization
   // ============================================================================
 
   test("ActorSystem.apply is initialized and has the given id") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     assert(sys.isInitialized)
     assertEquals(sys.id, "sys")
     assert(!sys.isClosed)
@@ -204,7 +47,7 @@ class ActorSystemSpec extends FunSuite {
   // ============================================================================
 
   test("Register via ? stores the actor and returns Ref") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     
     val a = ActorBuilder[String, Int](0)
       .withId("manual")
@@ -219,7 +62,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("Register with a duplicate id fails and does not overwrite the previous entry") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val a = ActorBuilder[String, Int](0)
       .withId("dup")
       .withBehavior("default", { case (msg, _) => Some(s"A: $msg") })
@@ -255,7 +98,7 @@ class ActorSystemSpec extends FunSuite {
   // ============================================================================
 
   test("Spawned child auto-registers on the system") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val child = spawn(sys)(Spawn(actorId = "c"))
     val ref = awaitRef(sys, "c")
     assertEquals(ref.path.actorId, "c")
@@ -264,7 +107,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("Grandchild auto-registers on the same system") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val child = spawn(sys)(SystemMsg.Spawn())
     val grandchild = spawn(child)(Spawn())
     awaitRef(sys, grandchild.id)
@@ -276,7 +119,7 @@ class ActorSystemSpec extends FunSuite {
   // ============================================================================
 
   test("AskForRef returns InvalidId for an unknown id") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     
     val rsp = tryResultCF(sys ? AskForRef("nonexistent"))
     assertEquals(rsp, Failure(InvalidIdException("nonexistent")))
@@ -284,7 +127,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("AskForRef with the system's own id behaves as a local lookup") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     
     val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
     awaitRef(sys, "a")
@@ -300,7 +143,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("AskForRef returns InvalidId after the actor is closed") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
     awaitRef(sys, "a")
     close(a)
@@ -313,7 +156,7 @@ class ActorSystemSpec extends FunSuite {
   // ============================================================================
 
   test("ActorClosed via ? removes the actor from the registry") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     
     val a = ActorBuilder[String, Int](0)
       .withId("x")
@@ -328,7 +171,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("ActorClosed for a non-existent id is safe and returns InvalidId") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     
     val rsp = resultCF(sys ? ActorClosed("nope"))
     assertEquals(rsp, InvalidId)
@@ -336,7 +179,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("ActorClosed on system cascades to removeChild") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     
     val child = spawn(sys)(Spawn(actorId = "c"))
     awaitRef(sys, "c")
@@ -349,7 +192,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("Closing a spawned child does not deregister its siblings") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     
     val c1 = spawn(sys)(Spawn(actorId = "c1"))
     val c2 = spawn(sys)(Spawn(actorId = "c2"))
@@ -368,7 +211,7 @@ class ActorSystemSpec extends FunSuite {
   // ============================================================================
 
   test("Ref from AskForRef is usable for ? (ask)") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
     val ref = awaitRef(sys, "a")
     assertEquals(resultCF(ref ? "42"), "A: 42")
@@ -377,7 +220,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("Ref from AskForRef is usable for ! (bang)") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val received = SourceSignal(0)
     val a = ActorBuilder[String, Int](0)
       .withId("a")
@@ -391,7 +234,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("LocalActorRef.path is ActorPath.Local(actor.id)") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
     val ref = awaitRef(sys, "a")
     assert(ref.isLocal)
@@ -406,7 +249,7 @@ class ActorSystemSpec extends FunSuite {
   // ============================================================================
 
   test("Two actors communicate via AskForRef") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
     val b = newActor(sys, "b", { case (msg, _) => Some(s"B: $msg") })
     awaitRef(sys, "a")
@@ -424,10 +267,10 @@ class ActorSystemSpec extends FunSuite {
   // ============================================================================
 
   test("Concurrent registrations from multiple threads are thread-safe") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val numThreads = 10
     val actorsPerThread = 5
-    val actors = scala.collection.concurrent.TrieMap.empty[String, Actor[String, Int]]
+    val actors = TrieMap.empty[String, Actor[String, Int] & Closeable]
 
     val futures: Seq[Future[Unit]] = (0 until numThreads).map { t =>
       Future {
@@ -447,7 +290,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("Concurrent AskForRef queries during registration are safe") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val numActors = 50
     val actors = (0 until numActors).map { i =>
       newActor(sys, s"a$i", { case (msg, _) => Some(s"a$i: $msg") })
@@ -463,12 +306,12 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("Concurrent spawning on the system registers all children") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     
     val numThreads = 10
     val spawnsPerThread = 5
     val expected = numThreads * spawnsPerThread
-    val children = scala.collection.concurrent.TrieMap.empty[String, ActorRef[String]]
+    val children = TrieMap.empty[String, ActorRef[String]]
 
     val futures: Seq[Future[Unit]] = (0 until numThreads).map { _ =>
       Future {
@@ -493,7 +336,7 @@ class ActorSystemSpec extends FunSuite {
   // ============================================================================
 
   test("Path-based bang to not-yet-registered actor should be queued and delivered") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val received = SourceSignal(0)
     
     // Create a child with a behavior that updates received signal
@@ -626,7 +469,7 @@ class ActorSystemSpec extends FunSuite {
 
   test("cross-system AskForRefAsync for an actor missing on the peer fails with InvalidIdException") {
     val (a, b) = crossRegistered()
-    val capturer = new CapturingActorImpl(a)
+    val capturer = new CapturingActor(a)
     capturer.initialize()
     try {
       tryResultCF(a ? AskForRefAsync(capturer, "nonexistent", "B")) match {
@@ -645,7 +488,7 @@ class ActorSystemSpec extends FunSuite {
   // ============================================================================
 
   test("SystemMsg via self-addressed path forms reaches the system itself") {
-    val sys = newSystem("sys")
+    val sys = newSystem[String]("sys")
     try {
       val selfPaths = List(ActorPath.Direct, ActorPath.Local("sys"), ActorPath.Remote("", "sys"), ActorPath.Remote("sys", "sys"))
       selfPaths.foreach { path =>
@@ -664,7 +507,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("SystemMsg ask via a Remote path naming the own system and a registered actor is delivered by the actor") {
-    val sys = newSystem("sys")
+    val sys = newSystem[String]("sys")
     val act = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
     try {
       awaitRef(sys, "a")
@@ -679,7 +522,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("a SystemMsg bang to a not-yet-registered local actor is requeued and delivered") {
-    val sys = newSystem("sys")
+    val sys = newSystem[String]("sys")
     val received = SourceSignal(0)
     try {
       // the actor does not exist yet: the system message must be requeued (SysRequeue), not dropped
@@ -701,7 +544,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("a SystemMsg bang to a never-registered actor is dropped after retries without affecting the system") {
-    val sys = newSystem("sys")
+    val sys = newSystem[String]("sys")
     try {
       sys.tell(Pause, ActorPath.Remote("sys", "missing"))
       Thread.sleep(500) // longer than the ~3-heartbeat requeue window (defBeat = 100 ms)
@@ -721,7 +564,7 @@ class ActorSystemSpec extends FunSuite {
   // ============================================================================
 
   test("SystemMsg tell to an unknown system id is silently dropped") {
-    val sys = newSystem("sys")
+    val sys = newSystem[String]("sys")
     try {
       sys.tell(Pause, ActorPath.Remote("UNKNOWN", "x"))
       Thread.sleep(200)
@@ -735,7 +578,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("SystemMsg ask to an unknown system id fails with InvalidSystemIdException") {
-    val sys = newSystem("sys")
+    val sys = newSystem[String]("sys")
     try {
       tryResultCF(sys.ask(Pause, ActorPath.Remote("UNKNOWN", "x"))) match {
         case Failure(InvalidSystemIdException("UNKNOWN")) => ()
@@ -804,7 +647,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("Unregister removes a registered actor and returns InvalidId for unknown ids") {
-    val sys = newSystem("sys")
+    val sys = newSystem[String]("sys")
     val act = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
     try {
       awaitRef(sys, "a")
@@ -817,7 +660,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("tell is a no-op and ask fails on a closed system") {
-    val sys = newSystem("sys")
+    val sys = newSystem[String]("sys")
     close(sys)
     sys.tell(Pause, ActorPath.Direct)      // must not throw
     sys.tell("42", ActorPath.Direct, "")   // must not throw
@@ -887,7 +730,7 @@ class ActorSystemSpec extends FunSuite {
   // ============================================================================
 
   test("Register with tags makes the actor findable by a tag query") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val a = newTaggedActor(sys, "a", ActorTag.Log, ActorTag.Stats)
     try {
       val byLog = refByTags(sys, ActorTag.Log)
@@ -901,7 +744,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("Register with a duplicate id returns InvalidId and keeps the original entry with its tags") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val a = newTaggedActor(sys, "dup", ActorTag.Log)
     val b = ActorBuilder[String, Int](0)
       .withId("dup")
@@ -920,7 +763,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("user-defined tags can be used to register and find actors") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val a = newTaggedActor(sys, "a", Custom)
     try {
       assertEquals(refByTags(sys, Custom).id, "a")
@@ -938,7 +781,7 @@ class ActorSystemSpec extends FunSuite {
   // ============================================================================
 
   test("a tag query matches only if all tags in the query are registered") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val a = newTaggedActor(sys, "a", ActorTag.Log, ActorTag.Stats)
     val b = newTaggedActor(sys, "b", ActorTag.Log)
     try {
@@ -956,7 +799,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("a tag query matching several actors returns one of them") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val a1 = newTaggedActor(sys, "a1", ActorTag.Log)
     val a2 = newTaggedActor(sys, "a2", ActorTag.Log)
     try {
@@ -968,7 +811,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("a tag query with no matching actor fails with NoRefFound") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     // auto-registration on the system uses an empty tag set
     val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
     try {
@@ -983,7 +826,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("a tag query with the System tag finds the system itself registered as an actor") {
-    val sys = newSystem("sys")
+    val sys = newSystem[String]("sys")
     try {
       val ref = refByTags(sys, ActorTag.System)
       assertEquals(ref.id, "sys")
@@ -997,7 +840,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("a tag query with the system's own id behaves as a local query") {
-    val sys = newSystem("sys")
+    val sys = newSystem[String]("sys")
     val a = newTaggedActor(sys, "a", ActorTag.Log)
     try {
       resultCF(sys ? AskForRef("", "sys", Set(ActorTag.Log))) match {
@@ -1014,9 +857,9 @@ class ActorSystemSpec extends FunSuite {
   // ============================================================================
 
   test("AskForRefAsync with tags delivers the Ref to the sender and returns Done") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val a = newTaggedActor(sys, "a", ActorTag.Log)
-    val capturer = new CapturingActorImpl(sys)
+    val capturer = new CapturingActor(sys)
     capturer.initialize()
     try {
       assertEquals(resultCF(sys ? AskForRefAsync(capturer, tags = Set(ActorTag.Log))), Done)
@@ -1029,8 +872,8 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("AskForRefAsync with tags and no match fails with NoRefFound and sends nothing to the sender") {
-    val sys = newSystem()
-    val capturer = new CapturingActorImpl(sys)
+    val sys = newSystem[String]("sys")
+    val capturer = new CapturingActor(sys)
     capturer.initialize()
     try {
       tryResultCF(sys ? AskForRefAsync(capturer, tags = Set(ActorTag.Log))) match {
@@ -1047,7 +890,7 @@ class ActorSystemSpec extends FunSuite {
   test("AskForRefAsync for a remote actor delivers a RemoteActorRef to the sender") {
     val (a, b) = crossRegistered()
     val onB = newActor(b, "onB", { case (msg, _) => Some(s"B: $msg") })
-    val capturer = new CapturingActorImpl(a)
+    val capturer = new CapturingActor(a)
     capturer.initialize()
     try {
       awaitRef(b, "onB")
@@ -1066,7 +909,7 @@ class ActorSystemSpec extends FunSuite {
   // ============================================================================
 
   test("AskForSystem with an empty id or the system's own id returns the system itself as a usable ref") {
-    val sys = newSystem("sys")
+    val sys = newSystem[String]("sys")
     try {
       List(AskForSystem(), AskForSystem("sys")).foreach { q =>
         val ref = systemRef(sys, q)
@@ -1099,7 +942,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("AskForSystem for an unknown system id fails with InvalidSystemIdException") {
-    val sys = newSystem("sys")
+    val sys = newSystem[String]("sys")
     try {
       tryResultCF(sys ? AskForSystem("UNKNOWN")) match {
         case Failure(InvalidSystemIdException("UNKNOWN")) => ()
@@ -1111,7 +954,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("AskForSystem by tags returns the tagged system") {
-    val a = newSystem("A")
+    val a = newSystem[String]("A")
     val b = newSystem("B")
     try {
       awaitCF(a ? RegisterSystem(b, Set(ActorTag.Stats)))
@@ -1131,7 +974,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("AskForSystem by tags with no match fails with NoRefFound") {
-    val sys = newSystem("sys")
+    val sys = newSystem[String]("sys")
     try {
       tryResultCF(sys ? AskForSystem(tags = Set(ActorTag.Log))) match {
         case Failure(NoRefFound(_)) => ()
@@ -1143,8 +986,8 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("AskForSystemAsync with an empty id delivers a ref to the system itself to the sender") {
-    val sys = newSystem("sys")
-    val capturer = new CapturingActorImpl(sys)
+    val sys = newSystem[String]("sys")
+    val capturer = new CapturingActor(sys)
     capturer.initialize()
     try {
       assertEquals(resultCF(sys ? AskForSystemAsync(capturer)), Done)
@@ -1161,7 +1004,7 @@ class ActorSystemSpec extends FunSuite {
 
   test("AskForSystemAsync for a registered remote system delivers a RemoteActorRef to the sender") {
     val (a, b) = crossRegistered()
-    val capturer = new CapturingActorImpl(a)
+    val capturer = new CapturingActor(a)
     capturer.initialize()
     try {
       assertEquals(resultCF(a ? AskForSystemAsync(capturer, "B")), Done)
@@ -1177,8 +1020,8 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("AskForSystemAsync for an unknown system id fails with InvalidSystemIdException and sends nothing to the sender") {
-    val sys = newSystem("sys")
-    val capturer = new CapturingActorImpl(sys)
+    val sys = newSystem[String]("sys")
+    val capturer = new CapturingActor(sys)
     capturer.initialize()
     try {
       tryResultCF(sys ? AskForSystemAsync(capturer, "UNKNOWN")) match {
@@ -1195,7 +1038,7 @@ class ActorSystemSpec extends FunSuite {
   test("AskForSystemAsync by tags delivers the tagged system's ref to the sender") {
     val a = newSystem("A")
     val b = newSystem("B")
-    val capturer = new CapturingActorImpl(a)
+    val capturer = new CapturingActor(a)
     capturer.initialize()
     try {
       awaitCF(a ? RegisterSystem(b, Set(ActorTag.Stats)))
@@ -1213,8 +1056,8 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("AskForSystemAsync by tags with no match fails with NoRefFound and sends nothing to the sender") {
-    val sys = newSystem("sys")
-    val capturer = new CapturingActorImpl(sys)
+    val sys = newSystem[String]("sys")
+    val capturer = new CapturingActor(sys)
     capturer.initialize()
     try {
       tryResultCF(sys ? AskForSystemAsync(capturer, tags = Set(ActorTag.Log))) match {
@@ -1233,7 +1076,7 @@ class ActorSystemSpec extends FunSuite {
   // ============================================================================
 
   test("a tag query returns NoRefFound after the tagged actor is unregistered") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val a = newTaggedActor(sys, "a", ActorTag.Log)
     try {
       assertEquals(refByTags(sys, ActorTag.Log).id, "a")
@@ -1248,8 +1091,8 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("a tag query over systems returns NoRefFound after the peer is unregistered") {
-    val a = newSystem("A")
-    val b = newSystem("B")
+    val a = newSystem[String]("A")
+    val b = newSystem[String]("B")
     try {
       awaitCF(a ? RegisterSystem(b, Set(ActorTag.Stats)))
       assertEquals(systemRef(a, AskForSystem(tags = Set(ActorTag.Stats))).id, "B")
@@ -1264,11 +1107,11 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("concurrent tagged registrations and tag queries are safe") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val numThreads = 8
     val perThread = 5
     val queriesPerThread = 10
-    val actors = scala.collection.concurrent.TrieMap.empty[String, Actor[String, Int]]
+    val actors = TrieMap.empty[String, Actor[String, Int] & Closeable]
     try {
       val futures: Seq[Future[Unit]] = (0 until numThreads).map { t =>
         Future {
@@ -1310,7 +1153,7 @@ class ActorSystemSpec extends FunSuite {
   // ============================================================================
 
   test("withTags on the builder is used when the actor auto-registers on its system") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val a = ActorBuilder[String, Int](0)
       .withId("built")
       .withBehavior("default", { case (msg, _) => Some(s"built: $msg") })
@@ -1327,7 +1170,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("addTag and removeTag accumulate and remove tags on the builder") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val a = ActorBuilder[String, Int](0)
       .withId("acc")
       .withBehavior("default", { case (msg, _) => Some(s"acc: $msg") })
@@ -1350,7 +1193,7 @@ class ActorSystemSpec extends FunSuite {
   }
 
   test("withNoTags clears the tags previously set on the builder") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val a = ActorBuilder[String, Int](0)
       .withId("cleared")
       .withBehavior("default", { case (msg, _) => Some(s"cleared: $msg") })
@@ -1394,7 +1237,7 @@ class ActorSystemSpec extends FunSuite {
   // ============================================================================
 
   test("children spawned by a tagged actor inherit its tags plus the Child tag") {
-    val sys = newSystem()
+    val sys = newSystem[String]("sys")
     val parent = ActorBuilder[String, Int](0)
       .withId("parent")
       .withBehavior("default", { case (msg, _) => Some(s"parent: $msg") })

@@ -2,19 +2,15 @@ package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, PF}
 import io.github.makingthematrix.signals3.testutils.*
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, EventContext, Pausable, Signal, SourceStream, Stream, Threading}
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, EventContext, Signal, SourceStream, Stream, Threading}
 import munit.FunSuite
 
 import scala.concurrent.duration.*
 import scala.util.Try
 
 class ActorSpec extends FunSuite {
-  enum MyMsg{
-    case MyInt(n: Int)
-    case MyStr(str: String)
-  }
-
-  import MyMsg.*
+  import Utils.*
+  import Utils.MyMsg.*
 
   private val eventContext = EventContext()
   import Threading.defaultContext
@@ -26,39 +22,6 @@ class ActorSpec extends FunSuite {
 
   override def afterEach(context: AfterEach): Unit =
     eventContext.stop()
-
-  private def close(actor: Actor[?, ?] & Closeable): Unit = {
-    actor.close()
-    waitFor(actor.isClosedSignal, true)
-  }
-
-  private def create[Msg](pf: PF[Msg, Unit]): Actor[Msg, Unit] & Closeable & Pausable =
-    ActorBuilder[Msg]()
-      .withBehaviorPF(pf)
-      .build()
-
-  private def create[Msg, State](state: State, pf: PF[Msg, State]): Actor[Msg, State] & Closeable & Pausable =
-    ActorBuilder[Msg, State](state)
-      .withBehaviorPF(pf)
-      .build()
-
-  private def create[Msg](pf: PF[Msg, Unit], hbs: HeartBeatStrategy): Actor[Msg, Unit] & Closeable & Pausable =
-    ActorBuilder[Msg, Unit](())
-      .withBehaviorPF(pf)
-      .withHeartbeat(hbs)
-      .build()
-
-  private def create[Msg, State](state: State, pf: PF[Msg, State], onInit: MutableActor[Msg, State] => Unit): Actor[Msg, State] & Closeable & Pausable =
-    ActorBuilder[Msg, State](state)
-      .withBehaviorPF(pf)
-      .withOnInit(onInit)
-      .build()
-
-  private def create[Msg](pf: PF[Msg, Unit], onInit: MutableActor[Msg, Unit] => Unit): Actor[Msg, Unit] & Closeable & Pausable =
-    ActorBuilder[Msg, Unit](())
-      .withBehaviorPF(pf)
-      .withOnInit(onInit)
-      .build()
 
   test("Request-response message sending") {
     val actor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Default: $msg")) })
@@ -310,11 +273,9 @@ class ActorSpec extends FunSuite {
     val behavior: PF[String, Unit] = { case ("42", _) => Some("Special: 42") }
     
     actor ! SystemMsg.AddBehavior("testId", behavior)
-    Thread.sleep(200)
     assertEquals(resultCF(actor ? "42"), "Special: 42")
     
     actor ! SystemMsg.RemoveBehavior("testId")
-    Thread.sleep(200)
     assertEquals(resultCF(actor ? "42"), "Default: 42")
     
     close(actor)

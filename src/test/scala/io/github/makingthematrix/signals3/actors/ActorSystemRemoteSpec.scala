@@ -1,14 +1,13 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.testutils.*
 import io.github.makingthematrix.signals3.*
 import io.github.makingthematrix.signals3.actors.Actor.{InvalidIdException, PF}
 import io.github.makingthematrix.signals3.actors.ActorSystem.InvalidSystemIdException
-import io.github.makingthematrix.signals3.actors.SystemMsg.* 
-
+import io.github.makingthematrix.signals3.actors.SystemMsg.*
+import io.github.makingthematrix.signals3.testutils.*
 import munit.FunSuite
 
-import scala.concurrent.{ExecutionContext, Future, TimeoutException}
+import scala.concurrent.Future
 import scala.concurrent.duration.*
 import scala.util.{Failure, Success, Try}
 
@@ -21,6 +20,7 @@ import scala.util.{Failure, Success, Try}
  * RegisterSystem, which is the same code path a real network transport would use.
  */
 class ActorSystemRemoteSpec extends FunSuite {
+  import Utils.*
   
   private val eventContext = EventContext()
   import Threading.defaultContext
@@ -32,66 +32,7 @@ class ActorSystemRemoteSpec extends FunSuite {
 
   override def afterEach(context: AfterEach): Unit =
     eventContext.stop()
-
-  // ============================================================================
-  // Helpers
-  // ============================================================================
-
-  private def newSystem(id: String): ActorSystem[String, Int] = ActorSystem[String, Int](id, 0, Actor.defBeat)
-
-  private def close(actor: Actor[?, ?]): Unit = {
-    actor.asInstanceOf[Closeable].close()
-    waitFor(actor.isClosedSignal, true)
-  }
-
-  private def close(actorRef: ActorRef[?]): Unit =
-    tryResultCF(actorRef ? Close) match {
-      case Success(Done) =>
-      case Success(msg) => fail(s"closing ${actorRef.id} failed: $msg")
-      case Failure(ex) => fail(ex.getMessage)
-    }
-
-  private def newActorOn(sys: ActorSystem[String, Int], id: String, pf: PF[String, Int]): Actor[String, Int] =
-    ActorBuilder[String, Int](0).withId(id).withBehavior("default", pf).withSystem(sys).build()
-
-  private def awaitRef(sys: ActorSystem[String, Int], id: String): ActorRef[String] = {
-    val start = System.currentTimeMillis()
-    while (System.currentTimeMillis() - start < 5000) {
-      try {
-        tryResultCF(sys ? AskForRef(id)) match {
-          case Success(Ref(ref))                 => return ref.asInstanceOf[ActorRef[String]]
-          case Failure(InvalidIdException(`id`)) => Thread.sleep(50)
-          case other                             => fail(s"Unexpected response: $other")
-        }
-      } catch {
-        case _: TimeoutException => Thread.sleep(50)
-      }
-    }
-    fail(s"Actor '$id' was not registered within 5 seconds")
-  }
-
-  /** Two cross-registered systems: each one holds the other in its `systems` map. */
-  private def crossRegistered(systemAId: String = "A", systemBId: String = "B"): (ActorSystem[String, Int], ActorSystem[String, Int]) = {
-    val a = newSystem(systemAId)
-    val b = newSystem(systemBId)
-    awaitCF(a ? RegisterSystem(b))
-    awaitCF(b ? RegisterSystem(a))
-    (a, b)
-  }
-
-  /** An actor that captures the Ref delivered by AskForRefAsync in a system message. */
-  private class CapturingActorImpl(sys: ActorSystem[String, Int])(using ExecutionContext)
-    extends ActorImpl[String, Int]("capturing", 0, Actor.defBeat, Set.empty, None, Some(sys)) {
-    @volatile var receivedRef: Option[ActorRef[String]] = None
-    override protected def processSysEntry(msg: SysEntry): Unit = msg match {
-      case (Ref(ref), p) =>
-        receivedRef = Some(ref.asInstanceOf[ActorRef[String]])
-        respond(p, Done)
-      case other =>
-        super.processSysEntry(other)
-    }
-  }
-
+  
   // ============================================================================
   // 1. Routing to invalid ids must not recurse
   // ============================================================================
@@ -133,13 +74,13 @@ class ActorSystemRemoteSpec extends FunSuite {
   }
 
   test("a Local path sent from inside a behavior is routed through the system") {
-    val sys = newSystem("sys")
+    val sys = newSystem[String]("sys")
     val received = SourceSignal(0)
     val senderBehavior: PF[String, Int] = { case (msg, a) => a.tell(msg, ActorPath.Local("target"), ""); Some("sent") }
     val targetBehavior: PF[String, Int] = { case (msg, _) => received.mutate(_ + 1); Some(s"T: $msg") }
 
-    val sender = newActorOn(sys, "sender", senderBehavior)
-    val target = newActorOn(sys, "target", targetBehavior)
+    val sender = newActor(sys, "sender", senderBehavior)
+    val target = newActor(sys, "target", targetBehavior)
     awaitRef(sys, "sender")
     awaitRef(sys, "target")
     tryResultCF(sys ? AskForRef("sender")) match {
@@ -169,7 +110,7 @@ class ActorSystemRemoteSpec extends FunSuite {
 
   test("AskForRefAsync with an unknown system id completes the asker with a failure instead of hanging") {
     val (a, b) = crossRegistered()
-    val capturer = new CapturingActorImpl(a)
+    val capturer = new CapturingActor(a)
     capturer.initialize()
     tryResultCF(a ? AskForRefAsync(capturer, "someActor", "UNKNOWN")) match {
       case Failure(InvalidSystemIdException("UNKNOWN")) => ()
@@ -196,7 +137,7 @@ class ActorSystemRemoteSpec extends FunSuite {
     val (a, b) = crossRegistered()
     val received = SourceSignal(0)
     val behavior: PF[String, Int] = { case (msg, _) => received.mutate(_ + 1); Some(s"B: $msg") }
-    val actorOnB = newActorOn(b, "onB", behavior)
+    val actorOnB = newActor(b, "onB", behavior)
 
     awaitRef(b, "onB")
     tryResultCF(a ? AskForRef("onB", "B")) match {
@@ -230,8 +171,8 @@ class ActorSystemRemoteSpec extends FunSuite {
   test("cross-system AskForRefAsync delivers a usable Ref to the sender actor") {
     val (a, b) = crossRegistered()
     val behavior: PF[String, Int] = { case (msg, _) => Some(s"B: $msg") }
-    val actorOnB = newActorOn(b, "onB2", behavior)
-    val capturer = new CapturingActorImpl(a)
+    val actorOnB = newActor(b, "onB2", behavior)
+    val capturer = new CapturingActor(a)
     capturer.initialize()
     awaitRef(a, "capturing")
     tryResultCF(a ? AskForRefAsync(capturer, "onB2", "B")) match {
@@ -251,8 +192,8 @@ class ActorSystemRemoteSpec extends FunSuite {
     val (a, b) = crossRegistered()
     val gotOnA = SourceSignal(0)
     val gotOnB = SourceSignal(0)
-    val xa = newActorOn(a, "sameid", { case (_, _) => gotOnA.mutate(_ + 1); Some("A-x") })
-    val xb = newActorOn(b, "sameid", { case (_, _) => gotOnB.mutate(_ + 1); Some("B-x") })
+    val xa = newActor(a, "sameid", { case (_, _) => gotOnA.mutate(_ + 1); Some("A-x") })
+    val xb = newActor(b, "sameid", { case (_, _) => gotOnB.mutate(_ + 1); Some("B-x") })
 
     awaitRef(a, "sameid")
     awaitRef(b, "sameid")
@@ -271,7 +212,7 @@ class ActorSystemRemoteSpec extends FunSuite {
   test("closing a system makes its peers unregister it") {
     val (a, b) = crossRegistered()
     val behavior: PF[String, Int] = { case (msg, _) => Some(s"A: $msg") }
-    val actorOnA = newActorOn(a, "onA", behavior)
+    val actorOnA = newActor(a, "onA", behavior)
 
     awaitRef(a, "onA")
     tryResultCF(b ? AskForRef("onA", "A")) match {
@@ -300,10 +241,10 @@ class ActorSystemRemoteSpec extends FunSuite {
     val behavior: PF[String, Int] = { case (msg, _) => Some(s"A2: $msg") }
 
     close(a)
-    val newA = newSystem("A")
+    val newA = newSystem[String]("A")
     a2 = Some(newA)
     awaitCF(b ? RegisterSystem(newA))
-    newActorOn(newA, "onA2", behavior)
+    newActor(newA, "onA2", behavior)
     // no awaitRef here: the lookup must queue behind the pending Register
     tryResultCF(b ? AskForRef("onA2", "A")) match {
       case Success(Ref(ref)) => assertEquals(resultCF(ref.asInstanceOf[ActorRef[String]] ? "1"), "A2: 1")
@@ -315,7 +256,7 @@ class ActorSystemRemoteSpec extends FunSuite {
   test("UnregisterSystem removes the peer and makes it unroutable") {
     val (a, b) = crossRegistered()
     val behavior: PF[String, Int] = { case (msg, _) => Some(s"A: $msg") }
-    val actorOnA = newActorOn(a, "onA3", behavior)
+    val actorOnA = newActor(a, "onA3", behavior)
 
     awaitRef(a, "onA3")
     tryResultCF[SystemMsg](b ? AskForRef("onA3", "A")) match {
@@ -381,10 +322,10 @@ class ActorSystemRemoteSpec extends FunSuite {
   }
 
   test("banging a system with a non-SystemClosed RemoteSystemMsg is ignored and harmless") {
-    val sys = newSystem("sys")
+    val sys = newSystem[String]("sys")
     val behavior: PF[String, Int] = { case (msg, _) => Some(s"A: $msg") }
     sys ! AskForRef("whatever")
-    val a = newActorOn(sys, "a", behavior)
+    val a = newActor(sys, "a", behavior)
     val ref = awaitRef(sys, "a")
     assertEquals(resultCF(ref ? "1"), "A: 1")
     close(a)
@@ -397,7 +338,7 @@ class ActorSystemRemoteSpec extends FunSuite {
   // ============================================================================
 
   test("bang to a missing actor or system is silently dropped") {
-    val sys = newSystem("sys")
+    val sys = newSystem[String]("sys")
     sys.tell("42", ActorPath.Remote("sys", "missing"), "")
     sys.tell("42", ActorPath.Local("missing"), "")
     sys.tell("42", ActorPath.Remote("UNKNOWN", "missing"), "")
@@ -406,7 +347,7 @@ class ActorSystemRemoteSpec extends FunSuite {
   }
 
   test("ask to a missing actor on the own system fails without hanging") {
-    val sys = newSystem("sys")
+    val sys = newSystem[String]("sys")
     val cfRemote = sys.ask("42", ActorPath.Remote("sys", "missing"), "")
     val cfLocal = sys.ask("42", ActorPath.Local("missing"), "")
     awaitCF(cfRemote)
@@ -425,7 +366,7 @@ class ActorSystemRemoteSpec extends FunSuite {
     val (a, b) = crossRegistered()
     val numActors = 30
     val behavior: PF[String, Int] = { case (msg, _) => Some(s"B:$msg") }
-    val actors = (0 until numActors).map(i => newActorOn(b, s"s$i", behavior))
+    val actors = (0 until numActors).map(i => newActor(b, s"s$i", behavior))
     val futures = (0 until numActors).map { i =>
       Future {
         tryResultCF(a ? AskForRef(s"s$i", "B"))(using 20.seconds) match {
