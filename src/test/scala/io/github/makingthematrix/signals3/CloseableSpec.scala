@@ -6,7 +6,7 @@ import scala.language.implicitConversions
 import scala.util.chaining.scalaUtilChainingOps
 import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration.*
-import testutils.*
+import Utils.*
 import io.github.makingthematrix.signals3.Closeable.{CloseableSignal, CloseableStream}
 
 class CloseableSpec extends munit.FunSuite {

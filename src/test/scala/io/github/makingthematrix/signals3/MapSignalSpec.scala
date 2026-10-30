@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import testutils.waitForResult
+import Utils.waitForResult
 
 class MapSignalSpec extends munit.FunSuite {
   import EventContext.Implicits.global

@@ -1,9 +1,13 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.{CanBeClosed, *}
-import io.github.makingthematrix.signals3.actors.Actor.{InvalidIdException, PF}
-import io.github.makingthematrix.signals3.actors.SystemMsg.Close
-import io.github.makingthematrix.signals3.testutils.*
+import io.github.makingthematrix.signals3.*
+import actors.Actor.{InvalidIdException, PF}
+import Utils.*
+
+import SystemMsg.*
+import actors.Utils.*
+import actors.Utils.MyMsg.*
+
 import munit.FunSuite
 
 import scala.concurrent.duration.*
@@ -25,10 +29,6 @@ class ActorIntegrationSpec extends FunSuite {
 
   override def afterEach(context: AfterEach): Unit =
     eventContext.stop()
-  
-  import SystemMsg.*
-  import Utils.*
-  import Utils.MyMsg.*
   
   // ============================================================================
   // Thread Safety Tests for Behavior Modifications

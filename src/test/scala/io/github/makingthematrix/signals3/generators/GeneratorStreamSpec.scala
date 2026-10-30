@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.generators
 
-import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, waitFor}
+import io.github.makingthematrix.signals3.Utils.{awaitAllTasks, waitFor}
 import io.github.makingthematrix.signals3.{DispatchQueue, EventContext, FlagSignal, SerialDispatchQueue, Signal}
 
 import java.util.concurrent.TimeUnit

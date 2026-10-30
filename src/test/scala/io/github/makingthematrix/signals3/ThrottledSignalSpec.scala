@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3
 
 import java.util.concurrent.atomic.AtomicReference
-import testutils.*
+import Utils.*
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.*
 import Threading.defaultContext

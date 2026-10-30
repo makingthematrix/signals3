@@ -10,7 +10,7 @@ import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
 import scala.language.implicitConversions
 import scala.util.{Failure, Success, Try}
 
-package object testutils {
+object Utils {
   private val localRandom: ThreadLocal[Random] = new ThreadLocal[Random] {
     override def initialValue: Random = new Random
   }
@@ -93,11 +93,11 @@ package object testutils {
     * Very useful for checking that something DOESN'T happen (e.g., ensure that a signal doesn't get updated after
     * performing a series of actions)
     */
-  def awaitAllTasks(using timeout: FiniteDuration = DefaultTimeout, dq: DispatchQueue): Unit =
+  def awaitAllTasks(using dq: DispatchQueue, timeout: FiniteDuration = DefaultTimeout): Unit =
     if (!tasksCompletedAfterWait)
       throw new TimeoutException(s"Background tasks didn't complete in ${timeout.toSeconds} seconds")
 
-  private def tasksCompletedAfterWait(using timeout: FiniteDuration = DefaultTimeout, dq: DispatchQueue) = {
+  private def tasksCompletedAfterWait(using dq: DispatchQueue, timeout: FiniteDuration) = {
     val start = System.currentTimeMillis()
     val before = start + timeout.toMillis
     while (dq.hasRemainingTasks && System.currentTimeMillis() < before) Thread.sleep(50)

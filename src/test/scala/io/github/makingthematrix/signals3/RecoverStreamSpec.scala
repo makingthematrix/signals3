@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 import io.github.makingthematrix.signals3.priv.DoneSignal
-import testutils.{awaitAllTasks, waitFor}
+import Utils.{awaitAllTasks, waitFor}
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 

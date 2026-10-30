@@ -2,7 +2,7 @@ package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.Closeable.CloseableStream
 import io.github.makingthematrix.signals3.Finite.FiniteStream
-import io.github.makingthematrix.signals3.testutils.{awaitAllTasks, result, waitFor}
+import io.github.makingthematrix.signals3.Utils.{awaitAllTasks, result, waitFor}
 
 import scala.collection.mutable
 import scala.concurrent.Future

@@ -5,7 +5,7 @@ import io.github.makingthematrix.signals3.priv.Subscription
 
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, CyclicBarrier, TimeUnit}
-import testutils.*
+import Utils.*
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -1182,9 +1182,9 @@ class SignalSpec extends munit.FunSuite {
       resPromise.success(event)
     }
 
-    testutils.withDelay(promise.success(1))
+    Utils.withDelay(promise.success(1))
 
-    assertEquals(testutils.result(resPromise.future), 1)
+    assertEquals(Utils.result(resPromise.future), 1)
   }
   
   test("don't update the signal when a future is completed with a failure") {
@@ -1195,7 +1195,7 @@ class SignalSpec extends munit.FunSuite {
 
     promise.failure(new IllegalArgumentException)
 
-    assert(testutils.tryResult(resPromise.future)(using 1 seconds).isFailure)
+    assert(Utils.tryResult(resPromise.future)(using 1 seconds).isFailure)
   }
 
   test("Don't send updates through a closed signal") {

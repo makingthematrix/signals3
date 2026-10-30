@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, PF}
-import io.github.makingthematrix.signals3.testutils.*
+import io.github.makingthematrix.signals3.Utils.*
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, EventContext, Signal, SourceStream, Stream, Threading}
 import munit.FunSuite
 

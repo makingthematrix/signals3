@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import testutils.result
+import Utils.result
 
 class FilterSignalSpec extends munit.FunSuite {
 

@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import testutils.{awaitAllTasks, waitForResult}
+import Utils.{awaitAllTasks, waitForResult}
 
 class FlatMapStreamSpec extends munit.FunSuite {
   import EventContext.Implicits.global

@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import io.github.makingthematrix.signals3.testutils.*
+import io.github.makingthematrix.signals3.Utils.*
 
 class PausableSpec extends munit.FunSuite {
   import EventContext.Implicits.global

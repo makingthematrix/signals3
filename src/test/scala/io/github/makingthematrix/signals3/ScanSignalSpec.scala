@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import testutils.{result, waitForResult}
+import Utils.{result, waitForResult}
 
 class ScanSignalSpec extends munit.FunSuite {
 

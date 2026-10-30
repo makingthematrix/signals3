@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import testutils.{awaitAllTasks, result, waitForResult}
+import Utils.{awaitAllTasks, result, waitForResult}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.*
@@ -73,9 +73,9 @@ class StreamSpec extends munit.FunSuite {
       resPromise.success(event)
     }
 
-    testutils.withDelay(promise.success(1))
+    Utils.withDelay(promise.success(1))
 
-    assertEquals(testutils.result(resPromise.future), 1)
+    assertEquals(Utils.result(resPromise.future), 1)
   }
 
   test("don't emit an event when a future is completed with a failure") {
@@ -86,7 +86,7 @@ class StreamSpec extends munit.FunSuite {
 
     promise.failure(new IllegalArgumentException)
 
-    assert(testutils.tryResult(resPromise.future)(using 1 seconds).isFailure)
+    assert(Utils.tryResult(resPromise.future)(using 1 seconds).isFailure)
   }
 
   test("Join two streams and emit an event coming from either of them") {

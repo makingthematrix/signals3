@@ -1,10 +1,11 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.*
-import io.github.makingthematrix.signals3.actors.Actor.{InvalidIdException, PF}
-import io.github.makingthematrix.signals3.actors.ActorSystem.InvalidSystemIdException
-import io.github.makingthematrix.signals3.actors.SystemMsg.*
-import io.github.makingthematrix.signals3.testutils.*
+import Actor.{InvalidIdException, PF}
+import ActorSystem.InvalidSystemIdException
+import SystemMsg.*
+import io.github.makingthematrix.signals3.Utils.*
+import actors.Utils.*
 import munit.FunSuite
 
 import scala.concurrent.Future
@@ -20,7 +21,7 @@ import scala.util.{Failure, Success, Try}
  * RegisterSystem, which is the same code path a real network transport would use.
  */
 class ActorSystemRemoteSpec extends FunSuite {
-  import Utils.*
+  
   
   private val eventContext = EventContext()
   import Threading.defaultContext

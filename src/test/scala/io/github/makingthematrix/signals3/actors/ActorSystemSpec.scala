@@ -1,10 +1,10 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.*
-import io.github.makingthematrix.signals3.actors.Actor.{InvalidIdException, NoRefFound}
-import io.github.makingthematrix.signals3.actors.ActorSystem.InvalidSystemIdException
-import io.github.makingthematrix.signals3.actors.SystemMsg.*
-import io.github.makingthematrix.signals3.testutils.*
+import Actor.{InvalidIdException, NoRefFound}
+import ActorSystem.InvalidSystemIdException
+import SystemMsg.*
+import actors.Utils.*
 import munit.FunSuite
 
 import scala.collection.concurrent.TrieMap

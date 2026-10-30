@@ -1,4 +1,4 @@
-package io.github.makingthematrix.signals3.testutils
+package io.github.makingthematrix.signals3
 
 import java.io.{PrintWriter, StringWriter}
 

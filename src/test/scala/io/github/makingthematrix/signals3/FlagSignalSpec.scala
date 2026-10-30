@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.Finite.FiniteSignal
-import testutils.*
+import Utils.*
 
 import scala.collection.mutable
 
@@ -17,7 +17,7 @@ class FlagSignalSpec extends munit.FunSuite {
     // Emit just one change to reach 2 taken values (initial false, then true)
     a.set()   // false -> true
     waitForResult(taken, true)
-    assertEquals(testutils.result(last), true)
+    assertEquals(Utils.result(last), true)
     waitForResult(taken.isClosedSignal, true)
 
     // Further changes should not be delivered to 'taken'

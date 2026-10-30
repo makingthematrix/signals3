@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.priv.DoneSignal
-import testutils.*
+import Utils.*
 
 class DoneSignalSpec extends munit.FunSuite {
   import Threading.defaultContext

@@ -1,10 +1,9 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, InvalidIdException, PF}
-import io.github.makingthematrix.signals3.actors.{Actor, ActorBuilder, ActorImpl, ActorRef, ActorSystem, MutableActor}
+import Actor.{HeartBeatStrategy, InvalidIdException, PF}
 import SystemMsg.*
 import io.github.makingthematrix.signals3.{Closeable, Pausable}
-import io.github.makingthematrix.signals3.testutils.*
+import io.github.makingthematrix.signals3.Utils.*
 
 import scala.concurrent.{ExecutionContext, TimeoutException}
 import scala.concurrent.duration.FiniteDuration

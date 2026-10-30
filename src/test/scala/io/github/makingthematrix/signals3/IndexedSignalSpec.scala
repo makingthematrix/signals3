@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import testutils.*
+import Utils.*
 
 import scala.collection.mutable
 import scala.concurrent.duration.{DurationInt, FiniteDuration}

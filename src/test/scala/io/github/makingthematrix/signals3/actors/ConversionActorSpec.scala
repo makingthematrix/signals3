@@ -1,9 +1,10 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.actors.Actor.PF
-import io.github.makingthematrix.signals3.actors.SystemMsg.*
-import io.github.makingthematrix.signals3.testutils.*
+import Actor.PF
+import SystemMsg.*
+import io.github.makingthematrix.signals3.Utils.*
 import io.github.makingthematrix.signals3.*
+import actors.Utils.*
 import munit.FunSuite
 
 import scala.concurrent.duration.*
@@ -67,30 +68,7 @@ class ConversionActorSpec extends FunSuite {
 
   override def afterEach(context: AfterEach): Unit =
     eventContext.stop()
-/*
-  private def close(actor: Actor[?, ?]): Unit = {
-    actor.asInstanceOf[Closeable].close()
-    waitFor(actor.isClosedSignal, true)
-  }
-
-  private def create(pf: PF[Proto, Unit]): Actor[Proto, Unit] & Closeable & Pausable =
-    ActorBuilder[Proto]().withBehaviorPF(pf).build()
-
-  /** Builds an actor with named behaviors; the first behavior in the list is the first one tried. */
-  private def createWithBehaviors(behaviors: (String, PF[Proto, Unit])*): Actor[Proto, Unit] & Closeable & Pausable =
-    behaviors.foldRight(ActorBuilder[Proto]())((beh, b) => b.withBehavior(beh._1, beh._2)).build()
-
-  private def newSystem[Msg](id: String): ActorSystem[Msg, Int] =
-    ActorSystem[Msg, Int](id, 0, Actor.defBeat)
-
-  /** Creates an actor registered on the given system; the first behavior in the list is the first one tried. */
-  private def newActorOn[Msg](sys: ActorSystem[Msg, Int], id: String, behaviors: (String, PF[Msg, Int])*): Actor[Msg, Int] =
-    behaviors.foldRight(ActorBuilder[Msg, Int](0).withId(id))((beh, b) => b.withBehavior(beh._1, beh._2))
-      .withSystem(sys).build()
-*/
-
-  import Utils.*
-
+  
   private def newActor[Msg](sys: ActorSystem[Msg, Int], id: String, behaviors: (String, PF[Msg, Int])*): Actor[Msg, Int] & Closeable =
     behaviors.foldRight(ActorBuilder[Msg, Int](0).withId(id))((beh, b) => b.withBehavior(beh._1, beh._2))
       .withSystem(sys).build()
