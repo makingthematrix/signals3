@@ -9,6 +9,7 @@ import scala.concurrent.duration.*
 import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
 import scala.language.implicitConversions
 import scala.util.{Failure, Success, Try}
+import munit.Assertions.*
 
 object Utils {
   private val localRandom: ThreadLocal[Random] = new ThreadLocal[Random] {
@@ -48,7 +49,16 @@ object Utils {
     }
 
   inline def tryResultCF[A](cf: CloseableFuture[A])(using d: FiniteDuration = DefaultTimeout): Try[A] = tryResult(cf.future)
-  
+  inline def expectSuccess[A](future: Future[A], expected: A)(using d: FiniteDuration = DefaultTimeout): Unit = 
+    assertEquals(tryResult(future), Success(expected))
+  inline def expectFailure[A](future: Future[A], expected: Throwable)(using d: FiniteDuration = DefaultTimeout): Unit = 
+    assertEquals(tryResult(future), Failure(expected))
+  inline def expectSuccessCF[A](future: CloseableFuture[A], expected: A)(using d: FiniteDuration = DefaultTimeout): Unit =
+    assertEquals(tryResult(future), Success(expected))
+  inline def expectFailureCF[A](future: CloseableFuture[A], expected: Throwable)(using d: FiniteDuration = DefaultTimeout): Unit =
+    assertEquals(tryResult(future), Failure(expected))
+
+
   def waitFor[V](signal: Signal[V], expected: V)(using ec: ExecutionContext, duration: FiniteDuration): Boolean =
     waitForResult(signal, expected, duration)(using ec)
   

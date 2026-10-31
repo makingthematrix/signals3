@@ -40,13 +40,20 @@ object Utils {
 		}
 	}
 	
-	def close(actor: Actor[?, ?] & Closeable)(using ec: ExecutionContext, timeout: FiniteDuration = DefaultTimeout): Unit = {
-		actor.close()
-		waitFor(actor.isClosedSignal, true)
-	}
+	def close(actors: Actor[?, ?] & Closeable *)(using ec: ExecutionContext, timeout: FiniteDuration = DefaultTimeout): Unit =
+		actors.foreach { actor =>
+			actor.close()
+			waitFor(actor.isClosedSignal, true)
+		}
 
 	def create[Msg](pf: PF[Msg, Unit])(using ExecutionContext): Actor[Msg, Unit] & Closeable & Pausable =
 		ActorBuilder[Msg]()
+			.withBehaviorPF(pf)
+			.build()
+
+	def create[Msg](id: String)(pf: PF[Msg, Unit])(using ExecutionContext): Actor[Msg, Unit] & Closeable & Pausable =
+		ActorBuilder[Msg]()
+			.withId(id)
 			.withBehaviorPF(pf)
 			.build()
 
@@ -55,6 +62,14 @@ object Utils {
 		ActorBuilder[Msg, State](state)
 			.withBehaviorPF(pf)
 			.build()
+
+	def create[Msg, State](id: String, state: State, pf: PF[Msg, State])
+	                      (using ExecutionContext): Actor[Msg, State] & Closeable & Pausable =
+		ActorBuilder[Msg, State](state)
+			.withId(id)
+			.withBehaviorPF(pf)
+			.build()
+
 
 	def create[Msg](pf: PF[Msg, Unit], hbs: HeartBeatStrategy)
 	               (using ExecutionContext): Actor[Msg, Unit] & Closeable & Pausable =

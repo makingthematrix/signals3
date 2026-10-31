@@ -231,10 +231,8 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		case (AddBehaviorT(ab), p)   => addBehavior(ab.beh); respond(p, Done)
 		case (RemoveBehavior(id), p) => removeBehavior(id); respond(p, Done)
 		case (AddBehaviorPFT(ab), p) => addBehaviorPF(ab.pf); respond(p, Done)
-		case (SpawnT(data), p)       =>
-			val rsp = spawn(data)
-			if (rsp != SystemMsg.InvalidId) respond(p, rsp) else respond(p, Actor.invalidActorId(data.actorId))
-		case (ActorClosed(id), p)    => removeChild(id); respond(p, Done)
+		case (SpawnT(data), p)       => spawn(data, p)
+		case (ActorClosed(id), p)    => removeChild(id, p)
 		case _ => // @todo: log the unhandled messages
 	}
 
@@ -265,12 +263,14 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 
 	protected def onMessage(msg: Msg): Try[Option[Msg]] = onMessage(msg, "")
 
-	private def removeChild(id: String): Unit = {
-		children = children - id
-	}
+	protected def removeChild(id: String, p: Option[Promise[SystemMsg]] = None): Unit =
+		if (children.contains(id)) {
+			children = children - id
+			respond(p, Done)
+		} else respond(p, invalidId(id))
 
-	protected def spawn(data: SystemMsg.Spawn[Msg, State]): SystemMsg =
-		if (children.contains(data.actorId)) SystemMsg.InvalidId else {
+	protected def spawn(data: SystemMsg.Spawn[Msg, State], p: Option[Promise[SystemMsg]] = None): Unit = {
+		if (children.contains(data.actorId)) respond(p, invalidId(data.actorId)) else {
 			val b1 = ActorBuilder[Msg, State](data.state.getOrElse(this.state))
 				.withIdIf(data.actorId.nonEmpty, data.actorId)
 				.withBehaviorsIf(data.behaviors.nonEmpty, data.behaviors, this.behaviors)
@@ -283,8 +283,9 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 			val b3 = if (data.useSerialDispatch) b2.withSerialDispatch() else b2
 			val child = LocalActorRef(b3.build())
 			children = children + (child.id -> child)
-			SystemMsg.NewChild(child)
+			respond(p, NewChild(child))
 		}
+	}
 
 	// Processes regular messages; should NOT be called directly - always from `processMessages`
 	// Note: A message may result in altering the list of behaviors, but the new behaviors will be used only in the next processing

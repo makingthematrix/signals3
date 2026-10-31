@@ -179,13 +179,13 @@ object Actor {
 	/**
 		* A special type of failure indicating that the actor ID is invalid
 		*/
-	final case class InvalidIdException(actorId: String) extends IllegalArgumentException(s"Invalid actor id: $actorId")
+	final case class InvalidIdException(actorId: String) extends IllegalArgumentException(s"Invalid id: $actorId")
 	
 	/**
 		* A special type of response, indicating that an invalid actor ID was provided.
 		* @return a failed `CloseableFuture` with an `InvalidIdException`.
 		*/
-	inline def invalidActorId[Msg](actorId: String)(using ExecutionContext): CloseableFuture[Msg] =
+	inline def invalidId[Msg](actorId: String)(using ExecutionContext): CloseableFuture[Msg] =
 		CloseableFuture.failed(InvalidIdException(actorId))
 	
 		

@@ -2,7 +2,6 @@ package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.*
 import Actor.{InvalidIdException, PF}
-import ActorSystem.InvalidSystemIdException
 import SystemMsg.*
 import io.github.makingthematrix.signals3.Utils.*
 import actors.Utils.*
@@ -102,7 +101,7 @@ class ActorSystemRemoteSpec extends FunSuite {
     val (a, b) = crossRegistered()
     val cf: CloseableFuture[SystemMsg] = a ? AskForRef("someActor", "UNKNOWN")
     cf.onComplete {
-      case Failure(InvalidSystemIdException("UNKNOWN")) => ()
+      case Failure(InvalidIdException("UNKNOWN")) => ()
       case other => fail(s"expected InvalidSystemIdException failure, got $other")
     }
     awaitCF(cf)
@@ -114,7 +113,7 @@ class ActorSystemRemoteSpec extends FunSuite {
     val capturer = new CapturingActor(a)
     capturer.initialize()
     tryResultCF(a ? AskForRefAsync(capturer, "someActor", "UNKNOWN")) match {
-      case Failure(InvalidSystemIdException("UNKNOWN")) => ()
+      case Failure(InvalidIdException("UNKNOWN")) => ()
       case Success(m) => fail(s"expected failure, got $m")
       case _ => fail("AskForRefAsync with unknown system id never completes")
     }
