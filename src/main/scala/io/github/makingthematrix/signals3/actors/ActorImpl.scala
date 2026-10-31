@@ -233,7 +233,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		case (AddBehaviorPFT(ab), p) => addBehaviorPF(ab.pf); respond(p, Done)
 		case (SpawnT(data), p)       => spawn(data, p)
 		case (ActorClosed(id), p)    => removeChild(id, p)
-		case _ => // @todo: log the unhandled messages
+		case (other, p)              => respond(p, unhandledMsg(other.toString))
 	}
 
 	private def processMsgEntry(entry: MsgEntry): Unit = {
