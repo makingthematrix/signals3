@@ -9,7 +9,7 @@ import munit.FunSuite
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration.*
 import scala.concurrent.{Await, Future}
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 
 /**
  * Unit tests for ActorSystem functionality: registration, lookup, deregistration,
@@ -469,39 +469,33 @@ class ActorSystemSpec extends FunSuite {
   test("a SystemMsg bang to a not-yet-registered local actor is requeued and delivered") {
     val sys = newSystem[String]("sys")
     val received = SourceSignal(0)
-    try {
-      // the actor does not exist yet: the system message must be requeued (SysRequeue), not dropped
-      sys.tell(Pause, ActorPath.Remote("sys", "late"))
-      val late = newActor(sys, "late", { case (msg, _) => received.mutate(_ + 1); Some(s"L: $msg") })
-      assert(waitFor(late.isPausedSignal, true), "the requeued Pause was not delivered to the late actor")
 
-      val ref = awaitRef(sys, "late")
-      ref ! "1"
-      Thread.sleep(300)
-      assertEquals(received.currentValue, Some(0), "the paused actor processed a message")
+    // the actor does not exist yet: the system message must be requeued (SysRequeue), not dropped
+    sys.tell(Pause, ActorPath.Remote("sys", "late"))
+    val late = newActor(sys, "late", { case (msg, _) => received.mutate(_ + 1); Some(s"L: $msg") })
+    assert(waitFor(late.isPausedSignal, true), "the requeued Pause was not delivered to the late actor")
 
-      assertEquals(resultCF(sys.ask(Unpause, ActorPath.Remote("sys", "late"))), Done)
-      assert(waitFor(received, 1), "the message sent while paused was not processed after Unpause")
-      close(late)
-    } finally {
-      Try(close(sys))
-    }
+    val ref = awaitRef(sys, "late")
+    ref ! "1"
+    Thread.sleep(300)
+    assertEquals(received.currentValue, Some(0), "the paused actor processed a message")
+
+    expectSuccessCF(sys.ask(Unpause, ActorPath.Remote("sys", "late")), Done)
+    assert(waitFor(received, 1), "the message sent while paused was not processed after Unpause")
+    close(late, sys)
   }
 
   test("a SystemMsg bang to a never-registered actor is dropped after retries without affecting the system") {
     val sys = newSystem[String]("sys")
-    try {
-      sys.tell(Pause, ActorPath.Remote("sys", "missing"))
-      Thread.sleep(500) // longer than the ~3-heartbeat requeue window (defBeat = 100 ms)
-      assert(!sys.isPaused, "the requeued message affected the system itself")
 
-      // the system remains fully functional
-      val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
-      assertEquals(resultCF(awaitRef(sys, "a") ? "1"), "A: 1")
-      close(a)
-    } finally {
-      Try(close(sys))
-    }
+    sys.tell(Pause, ActorPath.Remote("sys", "missing"))
+    Thread.sleep(500) // longer than the ~3-heartbeat requeue window (defBeat = 100 ms)
+    assert(!sys.isPaused, "the requeued message affected the system itself")
+
+    // the system remains fully functional
+    val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
+    expectSuccessCF(awaitRef(sys, "a") ? "1", "A: 1")
+    close(a, sys)
   }
 
   // ============================================================================
@@ -510,28 +504,19 @@ class ActorSystemSpec extends FunSuite {
 
   test("SystemMsg tell to an unknown system id is silently dropped") {
     val sys = newSystem[String]("sys")
-    try {
-      sys.tell(Pause, ActorPath.Remote("UNKNOWN", "x"))
-      Thread.sleep(200)
-      assert(!sys.isPaused, "the system itself was paused by a message to an unknown system")
-      val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
-      assertEquals(resultCF(awaitRef(sys, "a") ? "1"), "A: 1")
-      close(a)
-    } finally {
-      Try(close(sys))
-    }
+
+    sys.tell(Pause, ActorPath.Remote("UNKNOWN", "x"))
+    Thread.sleep(200)
+    assert(!sys.isPaused, "the system itself was paused by a message to an unknown system")
+    val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
+    expectSuccessCF(awaitRef(sys, "a") ? "1", "A: 1")
+    close(a, sys)
   }
 
   test("SystemMsg ask to an unknown system id fails with InvalidSystemIdException") {
     val sys = newSystem[String]("sys")
-    try {
-      tryResultCF(sys.ask(Pause, ActorPath.Remote("UNKNOWN", "x"))) match {
-        case Failure(InvalidIdException("UNKNOWN")) => ()
-        case other => fail(s"expected InvalidSystemIdException failure, got $other")
-      }
-    } finally {
-      Try(close(sys))
-    }
+    expectFailureCF(sys.ask(Pause, ActorPath.Remote("UNKNOWN", "x")), InvalidIdException("UNKNOWN"))
+    close(sys)
   }
 
   test("SystemMsg ask to a missing actor on a known peer falls through to the peer's own stream") {
@@ -658,15 +643,12 @@ class ActorSystemSpec extends FunSuite {
   test("Register with tags makes the actor findable by a tag query") {
     val sys = newSystem[String]("sys")
     val a = newTaggedActor(sys, "a", ActorTag.Log, ActorTag.Stats)
-    try {
-      val byLog = refByTags(sys, ActorTag.Log)
-      assertEquals(byLog.id, "a")
-      assertEquals(byLog.path, ActorPath.Local("a"))
-      assertEquals(refByTags(sys, ActorTag.Log, ActorTag.Stats).id, "a")
-      assertEquals(resultCF(byLog ? "ping"), "a: ping")
-    } finally {
-      Try(close(a)); Try(close(sys))
-    }
+    val byLog = refByTags(sys, ActorTag.Log)
+    assertEquals(byLog.id, "a")
+    assertEquals(byLog.path, ActorPath.Local("a"))
+    assertEquals(refByTags(sys, ActorTag.Log, ActorTag.Stats).id, "a")
+    expectSuccessCF(byLog ? "ping", "a: ping")
+    close(a, sys)
   }
 
   test("Register with a duplicate id returns InvalidId and keeps the original entry with its tags") {
@@ -683,15 +665,9 @@ class ActorSystemSpec extends FunSuite {
   test("user-defined tags can be used to register and find actors") {
     val sys = newSystem[String]("sys")
     val a = newTaggedActor(sys, "a", Custom)
-    try {
-      assertEquals(refByTags(sys, Custom).id, "a")
-      tryResultCF(sys ? AskForRef(tags = Set(ActorTag.Log))) match {
-        case Failure(NoRefFound(_)) => ()
-        case other => fail(s"expected NoRefFound for a tag the actor does not have, got $other")
-      }
-    } finally {
-      Try(close(a)); Try(close(sys))
-    }
+    assertEquals(refByTags(sys, Custom).id, "a")
+    expectFailureCF(sys ? AskForRef(tags = Set(ActorTag.Log)), NoRefFound(Set(ActorTag.Log)))
+    close(a, sys)
   }
 
   // ============================================================================
@@ -702,72 +678,52 @@ class ActorSystemSpec extends FunSuite {
     val sys = newSystem[String]("sys")
     val a = newTaggedActor(sys, "a", ActorTag.Log, ActorTag.Stats)
     val b = newTaggedActor(sys, "b", ActorTag.Log)
-    try {
-      assertEquals(refByTags(sys, ActorTag.Log, ActorTag.Stats).id, "a")
-      // a subset query matches both actors, and collectFirst over a HashMap has no defined order
-      assert(Set("a", "b").contains(refByTags(sys, ActorTag.Log).id),
-        "the subset tag query returned an unexpected actor")
-      tryResultCF(sys ? AskForRef(tags = Set(ActorTag.Log, ActorTag.Stats, Custom))) match {
-        case Failure(NoRefFound(_)) => ()
-        case other => fail(s"expected NoRefFound when the query has a tag no actor has, got $other")
-      }
-    } finally {
-      Try(close(a)); Try(close(b)); Try(close(sys))
-    }
+    assertEquals(refByTags(sys, ActorTag.Log, ActorTag.Stats).id, "a")
+    // a subset query matches both actors, and collectFirst over a HashMap has no defined order
+    assert(Set("a", "b").contains(refByTags(sys, ActorTag.Log).id),
+      "the subset tag query returned an unexpected actor")
+    expectFailureCF(sys ? AskForRef(tags = Set(ActorTag.Log, ActorTag.Stats, Custom)),
+      NoRefFound(Set(ActorTag.Log, ActorTag.Stats, Custom)))
+    close(a, b, sys)
   }
 
   test("a tag query matching several actors returns one of them") {
     val sys = newSystem[String]("sys")
     val a1 = newTaggedActor(sys, "a1", ActorTag.Log)
     val a2 = newTaggedActor(sys, "a2", ActorTag.Log)
-    try {
-      val id = refByTags(sys, ActorTag.Log).id
-      assert(Set("a1", "a2").contains(id), s"the tag query returned an unexpected actor: $id")
-    } finally {
-      Try(close(a1)); Try(close(a2)); Try(close(sys))
-    }
+    val id = refByTags(sys, ActorTag.Log).id
+    assert(Set("a1", "a2").contains(id), s"the tag query returned an unexpected actor: $id")
+    close(a1, a2, sys)
   }
 
   test("a tag query with no matching actor fails with NoRefFound") {
     val sys = newSystem[String]("sys")
     // auto-registration on the system uses an empty tag set
     val a = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
-    try {
-      awaitRef(sys, "a")
-      tryResultCF(sys ? AskForRef(tags = Set(ActorTag.Log))) match {
-        case Failure(NoRefFound(tags)) => assertEquals(tags, Set[ActorTag](ActorTag.Log))
-        case other => fail(s"expected NoRefFound, got $other")
-      }
-    } finally {
-      Try(close(a)); Try(close(sys))
-    }
+    awaitRef(sys, "a")
+    expectFailureCF(sys ? AskForRef(tags = Set(ActorTag.Log)), NoRefFound(Set(ActorTag.Log)))
+    close(a, sys)
   }
 
   test("a tag query with the System tag finds the system itself registered as an actor") {
     val sys = newSystem[String]("sys")
-    try {
-      val ref = refByTags(sys, ActorTag.System)
-      assertEquals(ref.id, "sys")
-      assert(ref.isLocal)
-      assertEquals(resultCF(ref ? Pause), Done)
-      assert(waitFor(sys.isPausedSignal, true), "the system was not paused through the ref found by tags")
-      assertEquals(resultCF(ref ? Unpause), Done)
-    } finally {
-      Try(close(sys))
-    }
+    val ref = refByTags(sys, ActorTag.System)
+    assertEquals(ref.id, "sys")
+    assert(ref.isLocal)
+    expectSuccessCF(ref ? Pause, Done)
+    assert(waitFor(sys.isPausedSignal, true), "the system was not paused through the ref found by tags")
+    expectSuccessCF(ref ? Unpause, Done)
+    close(sys)
   }
 
   test("a tag query with the system's own id behaves as a local query") {
     val sys = newSystem[String]("sys")
     val a = newTaggedActor(sys, "a", ActorTag.Log)
-    try {
-      resultCF(sys ? AskForRef("", "sys", Set(ActorTag.Log))) match {
-        case Ref(ref) => assertEquals(ref.id, "a")
-        case other   => fail(s"Expected Ref, got $other")
-      }
-    } finally {
-      Try(close(a)); Try(close(sys))
+    resultCF(sys ? AskForRef("", "sys", Set(ActorTag.Log))) match {
+      case Ref(ref) => assertEquals(ref.id, "a")
+      case other   => fail(s"Expected Ref, got $other")
     }
+    close(a, sys)
   }
 
   // ============================================================================
@@ -779,30 +735,21 @@ class ActorSystemSpec extends FunSuite {
     val a = newTaggedActor(sys, "a", ActorTag.Log)
     val capturer = new CapturingActor(sys)
     capturer.initialize()
-    try {
-      assertEquals(resultCF(sys ? AskForRefAsync(capturer, tags = Set(ActorTag.Log))), Done)
-      val ref = awaitCaptured(capturer)
-      assertEquals(ref.id, "a")
-      assertEquals(resultCF(ref ? "ping"), "a: ping")
-    } finally {
-      Try(close(capturer)); Try(close(a)); Try(close(sys))
-    }
+    expectSuccessCF(sys ? AskForRefAsync(capturer, tags = Set(ActorTag.Log)), Done)
+    val ref = awaitCaptured(capturer)
+    assertEquals(ref.id, "a")
+    expectSuccessCF(ref ? "ping", "a: ping")
+    close(capturer, a, sys)
   }
 
   test("AskForRefAsync with tags and no match fails with NoRefFound and sends nothing to the sender") {
     val sys = newSystem[String]("sys")
     val capturer = new CapturingActor(sys)
     capturer.initialize()
-    try {
-      tryResultCF(sys ? AskForRefAsync(capturer, tags = Set(ActorTag.Log))) match {
-        case Failure(NoRefFound(_)) => ()
-        case other => fail(s"expected NoRefFound, got $other")
-      }
-      Thread.sleep(200)
-      assert(capturer.receivedCount == 0, "the sender actor received a Ref for a query with no match")
-    } finally {
-      Try(close(capturer)); Try(close(sys))
-    }
+    expectFailureCF(sys ? AskForRefAsync(capturer, tags = Set(ActorTag.Log)), NoRefFound(Set(ActorTag.Log)))
+    Thread.sleep(200)
+    assert(capturer.receivedCount == 0, "the sender actor received a Ref for a query with no match")
+    close(capturer, sys)
   }
 
   test("AskForRefAsync for a remote actor delivers a RemoteActorRef to the sender") {
@@ -810,16 +757,13 @@ class ActorSystemSpec extends FunSuite {
     val onB = newActor(b, "onB", { case (msg, _) => Some(s"B: $msg") })
     val capturer = new CapturingActor(a)
     capturer.initialize()
-    try {
-      awaitRef(b, "onB")
-      assertEquals(resultCF(a ? AskForRefAsync(capturer, "onB", "B")), Done)
-      val ref = awaitCaptured(capturer)
-      assert(!ref.isLocal, "the sender received a local ref to a remote actor")
-      assertEquals(ref.path, ActorPath.Remote("B", "onB"))
-      assertEquals(resultCF(ref ? "7"), "B: 7")
-    } finally {
-      Try(close(capturer)); Try(close(onB)); Try(close(a)); Try(close(b))
-    }
+    awaitRef(b, "onB")
+    expectSuccessCF(a ? AskForRefAsync(capturer, "onB", "B"), Done)
+    val ref = awaitCaptured(capturer)
+    assert(!ref.isLocal, "the sender received a local ref to a remote actor")
+    assertEquals(ref.path, ActorPath.Remote("B", "onB"))
+    expectSuccessCF(ref ? "7", "B: 7")
+    close(capturer, onB, a, b)
   }
 
   // ============================================================================
@@ -828,67 +772,52 @@ class ActorSystemSpec extends FunSuite {
 
   test("AskForSystem with an empty id or the system's own id returns the system itself as a usable ref") {
     val sys = newSystem[String]("sys")
-    try {
-      List(AskForSystem(), AskForSystem("sys")).foreach { q =>
-        val ref = systemRef(sys, q)
-        assert(ref.isLocal)
-        assertEquals(ref.id, "sys")
-        assertEquals(resultCF(ref ? Pause), Done)
-        assert(waitFor(sys.isPausedSignal, true), s"the system was not paused through the ref from $q")
-        assertEquals(resultCF(ref ? Unpause), Done)
-        assert(waitFor(sys.isPausedSignal, false), s"the system was not unpaused through the ref from $q")
-      }
-    } finally {
-      Try(close(sys))
+    List(AskForSystem(), AskForSystem("sys")).foreach { q =>
+      val ref = systemRef(sys, q)
+      assert(ref.isLocal)
+      assertEquals(ref.id, "sys")
+      expectSuccessCF(ref ? Pause, Done)
+      assert(waitFor(sys.isPausedSignal, true), s"the system was not paused through the ref from $q")
+      expectSuccessCF(ref ? Unpause, Done)
+      assert(waitFor(sys.isPausedSignal, false), s"the system was not unpaused through the ref from $q")
     }
+    close(sys)
   }
 
   test("AskForSystem for a registered remote system returns a usable RemoteActorRef") {
     val (a, b) = crossRegistered()
-    try {
-      val ref = systemRef(a, AskForSystem("B"))
-      assert(!ref.isLocal)
-      assertEquals(ref.path, ActorPath.Remote("B", "B"))
-      assertEquals(resultCF(ref ? Pause), Done)
-      assert(waitFor(b.isPausedSignal, true), "the peer's system was not paused through the ref")
-      assert(!a.isPaused, "the asking system was paused instead of the peer")
-      assertEquals(resultCF(ref ? Unpause), Done)
-      assert(waitFor(b.isPausedSignal, false), "the peer's system was not unpaused through the ref")
-    } finally {
-      Try(close(a)); Try(close(b))
-    }
+    val ref = systemRef(a, AskForSystem("B"))
+    assert(!ref.isLocal)
+    assertEquals(ref.path, ActorPath.Remote("B", "B"))
+    expectSuccessCF(ref ? Pause, Done)
+    assert(waitFor(b.isPausedSignal, true), "the peer's system was not paused through the ref")
+    assert(!a.isPaused, "the asking system was paused instead of the peer")
+    expectSuccessCF(ref ? Unpause, Done)
+    assert(waitFor(b.isPausedSignal, false), "the peer's system was not unpaused through the ref")
+    close(a, b)
   }
 
   test("AskForSystem for an unknown system id fails with InvalidSystemIdException") {
     val sys = newSystem[String]("sys")
-    try {
-      tryResultCF(sys ? AskForSystem("UNKNOWN")) match {
-        case Failure(InvalidIdException("UNKNOWN")) => ()
-        case other => fail(s"expected InvalidSystemIdException, got $other")
-      }
-    } finally {
-      Try(close(sys))
-    }
+    expectFailureCF(sys ? AskForSystem("UNKNOWN"), InvalidIdException("UNKNOWN"))
+    close(sys)
   }
 
   test("AskForSystem by tags returns the tagged system") {
     val a = newSystem[String]("A")
     val b = newSystem("B")
-    try {
-      awaitCF(a ? RegisterSystem(b, Set(ActorTag.Stats)))
-      val ref = systemRef(a, AskForSystem(tags = Set(ActorTag.Stats)))
-      assert(!ref.isLocal)
-      assertEquals(ref.id, "B")
-      assertEquals(ref.path, ActorPath.Remote("B", "B"))
-      assertEquals(resultCF(ref ? Pause), Done)
-      assert(waitFor(b.isPausedSignal, true), "the tagged system was not paused through the ref")
-      assertEquals(resultCF(ref ? Unpause), Done)
-      assert(waitFor(b.isPausedSignal, false), "the tagged system was not unpaused through the ref")
-      // the system registers itself in the systems map with the System tag
-      assertEquals(systemRef(a, AskForSystem(tags = Set(ActorTag.System))).id, "A")
-    } finally {
-      Try(close(a)); Try(close(b))
-    }
+    awaitCF(a ? RegisterSystem(b, Set(ActorTag.Stats)))
+    val ref = systemRef(a, AskForSystem(tags = Set(ActorTag.Stats)))
+    assert(!ref.isLocal)
+    assertEquals(ref.id, "B")
+    assertEquals(ref.path, ActorPath.Remote("B", "B"))
+    expectSuccessCF(ref ? Pause, Done)
+    assert(waitFor(b.isPausedSignal, true), "the tagged system was not paused through the ref")
+    expectSuccessCF(ref ? Unpause, Done)
+    assert(waitFor(b.isPausedSignal, false), "the tagged system was not unpaused through the ref")
+    // the system registers itself in the systems map with the System tag
+    assertEquals(systemRef(a, AskForSystem(tags = Set(ActorTag.System))).id, "A")
+    close(a, b)
   }
 
   test("AskForSystem by tags with no match fails with NoRefFound") {
