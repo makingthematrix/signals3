@@ -12,7 +12,7 @@ import munit.FunSuite
 
 import scala.concurrent.duration.*
 import scala.concurrent.{Await, Future}
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 
 /**
  * Integration tests for Actor focusing on thread safety and concurrent behavior modifications.
@@ -150,11 +150,9 @@ class ActorIntegrationSpec extends FunSuite {
     })
 
     // Try to remove a behavior that doesn't exist
-    val cf = actor.ask(SystemMsg.RemoveBehavior("non-existent"))
-    
     // Should complete successfully without error
-    awaitCF(cf)
-    
+    expectSuccessCF(actor.ask(SystemMsg.RemoveBehavior("non-existent")), Done)
+
     close(actor)
   }
 
@@ -178,7 +176,7 @@ class ActorIntegrationSpec extends FunSuite {
         Some(MyStr(s"Recorded: $n"))
     }
     
-    awaitCF(actor ? SystemMsg.AddBehavior("recorder", recordingBehavior))
+    expectSuccessCF(actor ? SystemMsg.AddBehavior("recorder", recordingBehavior), Done)
     assert(actor.getBehavior("recorder").isDefined)
     
     // Send messages
@@ -222,7 +220,7 @@ class ActorIntegrationSpec extends FunSuite {
   test("Spawn via ? returns NewChild with a working child") {
     val parent = create[String] { case (msg, _) => Some(s"Parent: $msg") }
     val child = spawn(parent)(Spawn())
-    assertEquals(resultCF(child ? "42"), "Parent: 42") // inherited behavior
+    expectSuccessCF(child ? "42", "Parent: 42") // inherited behavior
     close(child)
     close(parent)
   }
@@ -243,8 +241,8 @@ class ActorIntegrationSpec extends FunSuite {
     val parent = create[String] { case (msg, _) => Some(s"Parent: $msg") }
     val childBeh: PF[String, Unit] = { case (msg, _) => Some(s"Child: $msg") }
     val child = spawn(parent)(Spawn(behaviors = List("c" -> childBeh)))
-    assertEquals(resultCF(child ? "1"), "Child: 1")
-    assertEquals(resultCF(parent ? "1"), "Parent: 1")
+    expectSuccessCF(child ? "1", "Child: 1")
+    expectSuccessCF(parent ? "1", "Parent: 1")
     close(child)
     close(parent)
   }
@@ -280,9 +278,9 @@ class ActorIntegrationSpec extends FunSuite {
     assert(c1.id != c2.id)
     assert(c2.id != c3.id)
     assert(c1.id != c3.id)
-    assertEquals(resultCF(c1 ? "1"), "P: 1")
-    assertEquals(resultCF(c2 ? "2"), "P: 2")
-    assertEquals(resultCF(c3 ? "3"), "P: 3")
+    expectSuccessCF(c1 ? "1", "P: 1")
+    expectSuccessCF(c2 ? "2", "P: 2")
+    expectSuccessCF(c3 ? "3", "P: 3")
     close(c1)
     close(c2)
     close(c3)
@@ -293,7 +291,7 @@ class ActorIntegrationSpec extends FunSuite {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
     val child = spawn(parent)(Spawn())
     val grandchild = spawn(child)(Spawn())
-    assertEquals(resultCF(grandchild ? "1"), "P: 1")
+    expectSuccessCF(grandchild ? "1", "P: 1")
     close(grandchild)
     close(child)
     close(parent)
@@ -302,11 +300,8 @@ class ActorIntegrationSpec extends FunSuite {
   test("Spawn with a duplicate explicit id is rejected with InvalidId") {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
     val first = spawn(parent)(Spawn(actorId = "dup"))
-    tryResultCF(parent ? Spawn(actorId = "dup")) match {
-      case Failure(InvalidIdException("dup")) => // expected
-      case other => fail(s"Expected InvalidId, got $other")
-    }
-    assertEquals(resultCF(first ? "1"), "P: 1")
+    expectFailureCF(parent ? Spawn(actorId = "dup"), InvalidIdException("dup"))
+    expectSuccessCF(first ? "1", "P: 1")
     close(first)
     close(parent)
   }
@@ -318,7 +313,7 @@ class ActorIntegrationSpec extends FunSuite {
     // After close, the child sends ActorClosed to parent, which removes it; re-spawn should succeed
     val c2 = spawn(parent)(Spawn(actorId = "x"))
     assertEquals(c2.id, "x")
-    assertEquals(resultCF(c2 ? "1"), "P: 1")
+    expectSuccessCF(c2 ? "1", "P: 1")
     close(c2)
     close(parent)
   }
@@ -332,7 +327,7 @@ class ActorIntegrationSpec extends FunSuite {
     parent ! SystemMsg.Pause
     waitFor(parent.isPausedSignal, true)
     val child = spawn(parent)(Spawn())
-    assertEquals(resultCF(child ? "1"), "P: 1")
+    expectSuccessCF(child ? "1", "P: 1")
     close(child)
     close(parent)
   }
@@ -340,9 +335,7 @@ class ActorIntegrationSpec extends FunSuite {
   test("Spawn on a closed actor fails with ActorIsClosed") {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
     close(parent)
-    intercept[IllegalStateException] {
-      resultCF(parent ? Spawn())
-    }
+    expectFailureCF(parent ? Spawn(), Actor.actorIsClosed)
   }
 
   test("Closing the parent cascades close to all children") {
@@ -392,8 +385,8 @@ class ActorIntegrationSpec extends FunSuite {
     assert(!c2.isClosed, "Sibling should not be closed")
 
     assert(!parent.isClosed, "Parent should not be closed")
-    assertEquals(resultCF(parent ? "1"), "P: 1")
-    assertEquals(resultCF(c2 ? "2"), "P: 2")
+    expectSuccessCF(parent ? "1", "P: 1")
+    expectSuccessCF(c2 ? "2", "P: 2")
 
     close(parent)
   }
@@ -510,7 +503,7 @@ class ActorIntegrationSpec extends FunSuite {
     waitFor(invalidIdCount, numThreads - 1)
 
     val child = childRef.get.getOrElse(fail("No child was created"))
-    assertEquals(resultCF(child ? "1"), "P: 1")
+    expectSuccessCF(child ? "1", "P: 1")
     close(child)
     close(parent)
   }
@@ -529,8 +522,8 @@ class ActorIntegrationSpec extends FunSuite {
     })
     waitFor(flag, true)
     val child = ref.getOrElse(fail("onInit did not capture the child reference"))
-    assertEquals(resultCF(child ? "42"), "P: 42")
-    awaitCF(child ? Close)
+    expectSuccessCF(child ? "42", "P: 42")
+    expectSuccessCF(child ? Close, Done)
     close(parent)
   }
 }

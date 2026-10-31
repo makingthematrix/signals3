@@ -8,7 +8,6 @@ import actors.Utils.*
 import munit.FunSuite
 
 import scala.concurrent.duration.*
-import scala.util.{Success, Try}
 
 /**
  * Tests for communication between actors using different message types, based on the `into[Msg]`
@@ -101,8 +100,8 @@ class ConversionActorSpec extends FunSuite {
       case (Num(n), _)  => Some(Text(s"N:$n"))
       case (Text(s), _) => Some(Text(s"T:$s"))
     }
-    assertEquals(resultCF(actor ? 42), Text("N:42"))
-    assertEquals(resultCF(actor.ask("hi")), Text("T:hi"))
+    expectSuccessCF(actor ? 42, Text("N:42"))
+    expectSuccessCF(actor.ask("hi"), Text("T:hi"))
     close(actor)
   }
 
@@ -127,11 +126,11 @@ class ConversionActorSpec extends FunSuite {
     val default: PF[Proto, Unit] = { case (p, _) => Some(Text(s"D:$p")) }
     val actor = createWithBehaviors("default" -> default, "special" -> special)
 
-    assertEquals(resultCF(actor.ask(42, "special")), Text("S:Num(42)"))
+    expectSuccessCF(actor.ask(42, "special"), Text("S:Num(42)"))
     // tuple elements are not converted inside the call - the message must be passed as Msg
-    assertEquals(resultCF(actor.ask("hello", "special")), Text("S:Text(hello)"))
+    expectSuccessCF(actor.ask("hello", "special"), Text("S:Text(hello)"))
     // regular routing is untouched by the conversions
-    assertEquals(resultCF(actor ? Num(1)), Text("D:Num(1)"))
+    expectSuccessCF(actor ? Num(1), Text("D:Num(1)"))
     close(actor)
   }
 
@@ -141,8 +140,8 @@ class ConversionActorSpec extends FunSuite {
       case (p @ Num(n), _)  => got.mutate(_ :+ p); Some(Text(s"N:$n"))
       case (p @ Text(s), _) => got.mutate(_ :+ p); Some(Text(s"T:$s"))
     }
-    assertEquals(resultCF(actor.ask(42, ActorPath.Direct, "")), Text("N:42"))
-    assertEquals(resultCF(actor.ask("hi", ActorPath.Direct, "")), Text("T:hi"))
+    expectSuccessCF(actor.ask(42, ActorPath.Direct, ""), Text("N:42"))
+    expectSuccessCF(actor.ask("hi", ActorPath.Direct, ""), Text("T:hi"))
 
     actor.tell(7, ActorPath.Direct, "")
     actor.tell("eight", ActorPath.Direct, "")
@@ -169,8 +168,7 @@ class ConversionActorSpec extends FunSuite {
     sender ! Num(0)
     waitFor(got, Seq(Num(42), Num(7), Text("hello"), Text("tagged")))
     assertEquals(asked.currentValue, Some(Text("R:7")))
-    close(sender)
-    close(receiver)
+    close(sender, receiver)
   }
 
   test("LocalActorRef converts arguments through its tell and ask overloads") {
@@ -186,11 +184,10 @@ class ConversionActorSpec extends FunSuite {
     ref !(Text("hello2"), "default")
     waitFor(got, Seq(Num(42), Text("hello"), Text("hello2")))
 
-    assertEquals(resultCF(ref ? 7), Text("ok:Num(7)"))
-    assertEquals(resultCF(ref.ask("asked")), Text("ok:Text(asked)"))
-    assertEquals(resultCF(ref ? (Text("asked2"), "default")), Text("ok:Text(asked2)"))
-    close(target)
-    close(sys)
+    expectSuccessCF(ref ? 7, Text("ok:Num(7)"))
+    expectSuccessCF(ref.ask("asked"), Text("ok:Text(asked)"))
+    expectSuccessCF(ref ? (Text("asked2"), "default"), Text("ok:Text(asked2)"))
+    close(target, sys)
   }
 
   test("RemoteActorRef converts arguments through its tell and ask overloads") {
@@ -202,8 +199,8 @@ class ConversionActorSpec extends FunSuite {
     val onB = newActor(b, "onB", "default" -> echo)
     awaitRef(b, "onB")
 
-    tryResultCF(a ? AskForRef("onB", "remoteB")) match {
-      case Success(Ref(ref0)) =>
+    resultCF(a ? AskForRef("onB", "remoteB")) match {
+      case Ref(ref0) =>
         val ref = ref0.asInstanceOf[ActorRef[Proto]]
         assert(!ref.isLocal)
         assertEquals(ref.path, ActorPath.Remote("remoteB", "onB"))
@@ -211,14 +208,12 @@ class ConversionActorSpec extends FunSuite {
         ref ! 42
         ref ! "hello"
         waitFor(got, Seq(Num(42), Text("hello")))
-        assertEquals(resultCF(ref ? 7), Text("ok:Num(7)"))
-        assertEquals(resultCF(ref.ask("asked")), Text("ok:Text(asked)"))
-        assertEquals(resultCF(ref ? (Text("asked2"), "default")), Text("ok:Text(asked2)"))
+        expectSuccessCF(ref ? 7, Text("ok:Num(7)"))
+        expectSuccessCF(ref.ask("asked"), Text("ok:Text(asked)"))
+        expectSuccessCF(ref ? (Text("asked2"), "default"), Text("ok:Text(asked2)"))
       case other => fail(s"Unexpected AskForRef response: $other")
     }
-    close(onB)
-    Try(close(a))
-    Try(close(b))
+    close(onB, a, b)
   }
 
   // ============================================================================================
@@ -232,10 +227,10 @@ class ConversionActorSpec extends FunSuite {
     given Conversion[Proto, Proto] = p => Text(s"converted:${p.toString}")
     locally(summon[Conversion[Proto, Proto]])
     val actor = create[Proto] { case (p, _) => Some(Text(s"got:$p")) }
-    assertEquals(resultCF(actor ? Num(1)), Text("got:Num(1)"))
-    assertEquals(resultCF(actor ? Text("x")), Text("got:Text(x)"))
+    expectSuccessCF(actor ? Num(1), Text("got:Num(1)"))
+    expectSuccessCF(actor ? Text("x"), Text("got:Text(x)"))
     // convertible types still convert in the same scope
-    assertEquals(resultCF(actor ? 5), Text("got:Num(5)"))
+    expectSuccessCF(actor ? 5, Text("got:Num(5)"))
     close(actor)
   }
 
@@ -243,30 +238,27 @@ class ConversionActorSpec extends FunSuite {
     // the Tag conversion appends one '#'; a message passing through a chain of nested `into` parameters
     // (ref -> system -> actor) must still contain exactly one
     val direct = create[Proto] { case (Text(s), _) => Some(Text(s)) }
-    assertEquals(resultCF(direct ? Tag("direct")), Text("direct#"))
+    expectSuccessCF(direct ? Tag("direct"), Text("direct#"))
     close(direct)
 
     val sys = newSystem[Proto]("tagLocal")
     val echoInt: PF[Proto, Int] = { case (Text(s), _) => Some(Text(s)) }
     val target = newActor(sys, "t", "default" -> echoInt)
     val ref = awaitRef(sys, "t")
-    assertEquals(resultCF(ref ? Tag("local")), Text("local#"))
-    close(target)
-    close(sys)
+    expectSuccessCF(ref ? Tag("local"), Text("local#"))
+    close(target, sys)
 
     val a = newSystem[Proto]("tagRemoteA")
     val b = newSystem[Proto]("tagRemoteB")
     awaitCF(a ? RegisterSystem(b))
     val onB = newActor(b, "onB", "default" -> echoInt)
     awaitRef(b, "onB")
-    tryResultCF(a ? AskForRef("onB", "tagRemoteB")) match {
-      case Success(Ref(ref0)) =>
-        assertEquals(resultCF(ref0.asInstanceOf[ActorRef[Proto]] ? Tag("remote")), Text("remote#"))
+    resultCF(a ? AskForRef("onB", "tagRemoteB")) match {
+      case Ref(ref0) =>
+        expectSuccessCF(ref0.asInstanceOf[ActorRef[Proto]] ? Tag("remote"), Text("remote#"))
       case other => fail(s"Unexpected AskForRef response: $other")
     }
-    close(onB)
-    Try(close(a))
-    Try(close(b))
+    close(onB, a, b)
   }
 
   test("the right conversion is selected for each source type") {
@@ -304,9 +296,7 @@ class ConversionActorSpec extends FunSuite {
     val sender = newActor(sys, "sender", "default" -> { case (_, a) => a.tell(42, ActorPath.Local("target"), ""); None })
     sender ! Num(0)
     waitFor(got, Seq(Num(42)))
-    close(sender)
-    close(target)
-    close(sys)
+    close(sender, target, sys)
   }
 
   test("a behavior can ask another actor through a Local path with a converted message") {
@@ -319,9 +309,7 @@ class ConversionActorSpec extends FunSuite {
     })
     sender ! Num(0)
     waitFor(rsp, Text("ack:Text(ping)"))
-    close(sender)
-    close(target)
-    close(sys)
+    close(sender, target, sys)
   }
 
   // ============================================================================================
@@ -336,9 +324,7 @@ class ConversionActorSpec extends FunSuite {
     // MsgA(21) becomes MsgB(42) on B
     a.tell(MsgA(21), ActorPath.Remote("B", "onB"), "")
     waitFor(got, Seq(MsgB(42)))
-    close(onB)
-    Try(close(a))
-    Try(close(b))
+    close(onB, a, b)
   }
 
   test("ask across the bridge converts the message and converts the response back") {
@@ -346,10 +332,8 @@ class ConversionActorSpec extends FunSuite {
     val onB = newActor(b, "onB", "default" -> { case (MsgB(y), _) => Some(MsgB(y + 1)) })
     awaitRef(b, "onB")
     // MsgA(21) -> MsgB(42) -> response MsgB(43) -> MsgA(21); a second back-conversion would give MsgA(10)
-    assertEquals(resultCF(a.ask(MsgA(21), ActorPath.Remote("B", "onB"), "")), MsgA(21))
-    close(onB)
-    Try(close(a))
-    Try(close(b))
+    expectSuccessCF(a.ask(MsgA(21), ActorPath.Remote("B", "onB"), ""), MsgA(21))
+    close(onB, a, b)
   }
 
   test("behavior ids are honored across the bridge together with the conversion") {
@@ -359,10 +343,8 @@ class ConversionActorSpec extends FunSuite {
       "bump"    -> { case (MsgB(y), _) => Some(MsgB(y + 100)) })
     awaitRef(b, "onB")
     // MsgA(5) -> MsgB(10) -> behavior "bump" -> MsgB(110) -> MsgA(55)
-    assertEquals(resultCF(a.ask(MsgA(5), ActorPath.Remote("B", "onB"), "bump")), MsgA(55))
-    close(onB)
-    Try(close(a))
-    Try(close(b))
+    expectSuccessCF(a.ask(MsgA(5), ActorPath.Remote("B", "onB"), "bump"), MsgA(55))
+    close(onB, a, b)
   }
 
   test("a ref from cross-system AskForRef over the bridge routes back through the sender system and converts") {
@@ -370,20 +352,18 @@ class ConversionActorSpec extends FunSuite {
     val got = Signal(Seq.empty[MsgB])
     val onB = newActor(b, "onB", "default" -> { case (m, _) => got.mutate(_ :+ m); Some(MsgB(m.y + 1)) })
     awaitRef(b, "onB")
-    tryResultCF(a ? AskForRef("onB", "B")) match {
-      case Success(Ref(ref0)) =>
+    resultCF(a ? AskForRef("onB", "B")) match {
+      case Ref(ref0) =>
         val ref = ref0.asInstanceOf[ActorRef[MsgA]]
         assert(!ref.isLocal)
         assertEquals(ref.path, ActorPath.Remote("B", "onB"))
         // the ref is bound to A, so every send re-routes through A's registry and converts
         ref ! MsgA(7) // MsgA(7) -> MsgB(14)
-        assertEquals(resultCF(ref ? MsgA(7)), MsgA(7)) // MsgB(14) -> MsgB(15) -> MsgA(7)
+        expectSuccessCF(ref ? MsgA(7), MsgA(7)) // MsgB(14) -> MsgB(15) -> MsgA(7)
         waitFor(got, Seq(MsgB(14), MsgB(14)))
       case other => fail(s"Unexpected AskForRef response: $other")
     }
-    close(onB)
-    Try(close(a))
-    Try(close(b))
+    close(onB, a, b)
   }
 
   test("mirrored registrations convert in the opposite direction on the peer") {
@@ -395,11 +375,9 @@ class ConversionActorSpec extends FunSuite {
     val onA = newActor(a, "onA", "default" -> { case (m, _) => got.mutate(_ :+ m); Some(MsgA(m.x + 1)) })
     awaitRef(a, "onA")
     // MsgB(50) -> MsgA(25) -> response MsgA(26) -> MsgB(52)
-    assertEquals(resultCF(b.ask(MsgB(50), ActorPath.Remote("A", "onA"), "")), MsgB(52))
+    expectSuccessCF(b.ask(MsgB(50), ActorPath.Remote("A", "onA"), ""), MsgB(52))
     waitFor(got, Seq(MsgA(25)))
-    close(onA)
-    Try(close(a))
-    Try(close(b))
+    close(onA, a, b)
   }
 
   test("system messages pass through the bridge unchanged") {
@@ -409,8 +387,7 @@ class ConversionActorSpec extends FunSuite {
     waitFor(b.isPausedSignal, true)
     convB.tell(SystemMsg.Unpause)
     waitFor(b.isPausedSignal, false)
-    Try(close(a))
-    Try(close(b))
+    close(a, b)
   }
 
   test("a ref from cross-system AskForRefAsync over the bridge routes back through the sender system and converts") {
@@ -421,24 +398,14 @@ class ConversionActorSpec extends FunSuite {
     val capturer = CapturingActor(a)
     capturer.initialize()
 
-    tryResultCF(a ? AskForRefAsync(capturer, "onB2", "B")) match {
-      case Success(Done) =>
-        val start = System.currentTimeMillis()
-        while (System.currentTimeMillis() - start < 5000 && capturer.receivedRef.isEmpty) Thread.sleep(50)
-        capturer.receivedRef match {
-          case Some(ref) =>
-            // like the ref from the sync AskForRef, the delivered ref is bound to A:
-            // every send re-routes through A's registry and converts
-            assert(!ref.isLocal, "the sender received a local ref to an actor behind a conversion bridge")
-            assertEquals(ref.path, ActorPath.Remote("B", "onB2"))
-            ref ! MsgA(7) // MsgA(7) -> MsgB(14)
-            waitFor(got, Seq(MsgB(14)))
-          case None => fail("sender actor never received the remote Ref")
-        }
-      case other => fail(s"Unexpected AskForRefAsync response: $other")
-    }
-    close(onB)
-    Try(close(a))
-    Try(close(b))
+    expectSuccessCF(a ? AskForRefAsync(capturer, "onB2", "B"), Done)
+    val ref = awaitCaptured(capturer)
+    // like the ref from the sync AskForRef, the delivered ref is bound to A:
+    // every send re-routes through A's registry and converts
+    assert(!ref.isLocal, "the sender received a local ref to an actor behind a conversion bridge")
+    assertEquals(ref.path, ActorPath.Remote("B", "onB2"))
+    ref ! MsgA(7) // MsgA(7) -> MsgB(14)
+    waitFor(got, Seq(MsgB(14)))
+    close(onB, a, b)
   }
 }
