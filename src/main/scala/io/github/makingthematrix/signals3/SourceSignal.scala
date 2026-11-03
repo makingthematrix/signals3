@@ -3,7 +3,6 @@ package io.github.makingthematrix.signals3
 import io.github.makingthematrix.signals3.Signal
 import io.github.makingthematrix.signals3.priv.{SourceRecoverSignal, SourceRecoverWithSignal}
 
-import scala.annotation.targetName
 import scala.concurrent.ExecutionContext
 
 /** The usual entry point for publishing values in signals.

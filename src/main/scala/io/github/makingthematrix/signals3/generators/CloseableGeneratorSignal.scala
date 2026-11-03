@@ -51,4 +51,6 @@ class CloseableGeneratorSignal[V] protected[signals3] (init: V,
   override inline def isClosed: Boolean = beat.isClosed
 
   override inline def onClose(body: => Unit): Unit = beat.onClose(body)
+  
+  override def force(): Unit = if (!isClosed && !isPaused) super.force()
 }

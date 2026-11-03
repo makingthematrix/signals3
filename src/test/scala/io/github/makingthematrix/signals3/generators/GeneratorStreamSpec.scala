@@ -3,7 +3,7 @@ package io.github.makingthematrix.signals3.generators
 import io.github.makingthematrix.signals3.Utils.{awaitAllTasks, waitFor}
 import io.github.makingthematrix.signals3.{DispatchQueue, EventContext, FlagSignal, SerialDispatchQueue, Signal}
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import scala.collection.mutable
 import scala.concurrent.duration.*
 
@@ -264,6 +264,256 @@ class GeneratorStreamSpec extends munit.FunSuite {
 
     assertEquals(bufInit.toSeq, numbers.init)
     assert(gen.isClosed)
+  }
+
+  test("force generates an event immediately and resets the beat") {
+    var n = 0
+    val buffer = mutable.ArrayBuffer[(Int, Long)]()
+    // a latch instead of waitFor+Signal: waitFor polls every 100ms which aliases with the beat interval
+    // and can return long after the second beat
+    val twoBeats = new CountDownLatch(2)
+    val forcedBeat = Signal(false)
+    val fourBeats = Signal(false)
+    val stream = GeneratorStream.generate(HeartBeatMs) {
+      n += 1
+      n
+    }
+    stream.foreach { e =>
+      buffer.addOne((e, System.currentTimeMillis))
+      if (e <= 2) twoBeats.countDown()
+      if (e == 3) forcedBeat ! true
+      if (e == 4) fourBeats ! true
+    }
+
+    // wait for two natural beats so that the generator settles into its rhythm
+    assert(twoBeats.await(Timeout.toMillis, TimeUnit.MILLISECONDS), "the generator didn't produce two natural beats")
+    // move into the middle of the current interval; if the beat is not reset by `force`,
+    // the pending beat would fire soon after, at the old schedule
+    Thread.sleep(30L)
+    val forcedAt = System.currentTimeMillis
+    stream.force()
+
+    // the forced event should be published almost immediately after the call
+    waitFor(forcedBeat, true)
+    val (forcedEvent, forcedAtPublished) = buffer(2)
+    assertEquals(forcedEvent, 3)
+    val forcedDelay = forcedAtPublished - forcedAt
+    assert(forcedDelay >= 0L && forcedDelay <= 50L, s"delay of the forced event: $forcedDelay")
+
+    // the next natural beat should come a full interval after the forced one, not at the old schedule
+    waitFor(fourBeats, true)
+    val (_, nextBeatAt) = buffer(3)
+    val gap = nextBeatAt - forcedAtPublished
+    val intervalMs = HeartBeatMs.toMillis
+    assert(gap >= intervalMs - (intervalMs / 4) && gap <= 3 * intervalMs, s"gap between the forced and the next beat: $gap")
+
+    assertEquals(buffer.take(4).map(_._1).toSeq, Seq(1, 2, 3, 4))
+    stream.close()
+    awaitAllTasks
+    assert(stream.isClosed)
+  }
+
+  test("force resets the beat also in the stream with the function interval") {
+    var n = 0
+    val buffer = mutable.ArrayBuffer[(Int, Long)]()
+    val twoBeats = new CountDownLatch(2)
+    val forcedBeat = Signal(false)
+    val fourBeats = Signal(false)
+    val stream = GeneratorStream.generate(() => HeartBeatMs) {
+      n += 1
+      n
+    }
+    stream.foreach { e =>
+      buffer.addOne((e, System.currentTimeMillis))
+      if (e <= 2) twoBeats.countDown()
+      if (e == 3) forcedBeat ! true
+      if (e == 4) fourBeats ! true
+    }
+
+    assert(twoBeats.await(Timeout.toMillis, TimeUnit.MILLISECONDS), "the generator didn't produce two natural beats")
+    Thread.sleep(30L)
+    val forcedAt = System.currentTimeMillis
+    stream.force()
+
+    waitFor(forcedBeat, true)
+    val (forcedEvent, forcedAtPublished) = buffer(2)
+    assertEquals(forcedEvent, 3)
+    val forcedDelay = forcedAtPublished - forcedAt
+    assert(forcedDelay >= 0L && forcedDelay <= 50L, s"delay of the forced event: $forcedDelay")
+
+    waitFor(fourBeats, true)
+    val (_, nextBeatAt) = buffer(3)
+    val gap = nextBeatAt - forcedAtPublished
+    val intervalMs = HeartBeatMs.toMillis
+    assert(gap >= intervalMs - (intervalMs / 4) && gap <= 3 * intervalMs, s"gap between the forced and the next beat: $gap")
+
+    assertEquals(buffer.take(4).map(_._1).toSeq, Seq(1, 2, 3, 4))
+    stream.close()
+    awaitAllTasks
+    assert(stream.isClosed)
+  }
+
+  test("force on a not yet initialized stream publishes the first event immediately") {
+    var n = 0
+    val buffer = mutable.ArrayBuffer[(Int, Long)]()
+    val twoEvents = new CountDownLatch(2)
+    val stream = new CloseableGeneratorStream[Int](HeartBeatMs, () => { n += 1; n })
+    assert(!stream.isInitialized)
+    stream.foreach { e =>
+      buffer.addOne((e, System.currentTimeMillis))
+      twoEvents.countDown()
+    }
+
+    val forcedAt = System.currentTimeMillis
+    stream.force()
+    assert(stream.isInitialized)
+
+    // the forced first event is published almost immediately
+    assert(twoEvents.await(Timeout.toMillis, TimeUnit.MILLISECONDS), "the second event wasn't generated")
+    val forcedEvent = buffer(0)._1
+    assertEquals(forcedEvent, 1)
+    val forcedDelay = buffer(0)._2 - forcedAt
+    assert(forcedDelay >= 0L && forcedDelay <= 50L, s"delay of the forced event: $forcedDelay")
+
+    // the beat started by the initialization is reset - the second event comes a full interval after the forced one
+    val intervalMs = HeartBeatMs.toMillis
+    val gap = buffer(1)._2 - buffer(0)._2
+    assert(gap >= intervalMs - (intervalMs / 4) && gap <= 3 * intervalMs, s"gap between the forced and the next event: $gap")
+
+    assertEquals(buffer.take(2).map(_._1).toSeq, Seq(1, 2))
+    stream.close()
+    awaitAllTasks
+    assert(stream.isClosed)
+  }
+
+  test("force on a closed stream does nothing") {
+    var n = 0
+    val buffer = mutable.ArrayBuffer[Int]()
+    val stream = GeneratorStream.generate(HeartBeatMs) { n += 1; n }
+    val oneEvent = new CountDownLatch(1)
+    stream.foreach { e =>
+      buffer.addOne(e)
+      oneEvent.countDown()
+    }
+    assert(oneEvent.await(Timeout.toMillis, TimeUnit.MILLISECONDS))
+    Thread.sleep(20L) // let the beat finish rescheduling itself before closing
+    stream.close()
+    awaitAllTasks
+    assert(stream.isClosed)
+
+    val count = buffer.size
+    stream.force()
+    Thread.sleep(3 * HeartBeatMs.toMillis)
+
+    assertEquals(buffer.size, count, "force generated an event on a closed stream")
+    assert(stream.isClosed)
+  }
+
+  test("double force generates two immediate events and resets the beat to the second force") {
+    var n = 0
+    val buffer = mutable.ArrayBuffer[(Int, Long)]()
+    val twoBeats = new CountDownLatch(2)
+    val fiveEvents = new CountDownLatch(5)
+    val stream = GeneratorStream.generate(HeartBeatMs) { n += 1; n }
+    stream.foreach { e =>
+      buffer.addOne((e, System.currentTimeMillis))
+      if (e <= 2) twoBeats.countDown()
+      fiveEvents.countDown()
+    }
+
+    assert(twoBeats.await(Timeout.toMillis, TimeUnit.MILLISECONDS), "the stream didn't produce two natural beats")
+    Thread.sleep(30L)
+    val forcedAt1 = System.currentTimeMillis
+    stream.force()
+    Thread.sleep(30L)
+    val forcedAt2 = System.currentTimeMillis
+    stream.force()
+
+    assert(fiveEvents.await(Timeout.toMillis, TimeUnit.MILLISECONDS), "the stream didn't produce three more events")
+    stream.close()
+    awaitAllTasks
+    assert(stream.isClosed)
+
+    val intervalMs = HeartBeatMs.toMillis
+    assertEquals(buffer.take(5).map(_._1).toSeq, Seq(1, 2, 3, 4, 5))
+    val firstForcedDelay = buffer(2)._2 - forcedAt1
+    assert(firstForcedDelay >= 0L && firstForcedDelay <= 50L, s"delay of the first forced event: $firstForcedDelay")
+    val secondForcedDelay = buffer(3)._2 - forcedAt2
+    assert(secondForcedDelay >= 0L && secondForcedDelay <= 50L, s"delay of the second forced event: $secondForcedDelay")
+
+    // the next natural beat comes a full interval after the second force, not after the first one
+    val gap = buffer(4)._2 - buffer(3)._2
+    assert(gap >= intervalMs - (intervalMs / 4) && gap <= 3 * intervalMs,
+      s"gap between the second forced event and the next beat: $gap")
+  }
+
+  test("force on a finite generator emits the next element immediately and closes the stream at the end") {
+    var n = 0
+    val buffer = mutable.ArrayBuffer[(Int, Long)]()
+    val finished = Signal(false)
+    val twoBeats = new CountDownLatch(2)
+    val gen = GeneratorStream.from(() => {
+      n += 1
+      if (n <= 5) Some(n) else None
+    }, HeartBeatMs)
+    gen.onClose(finished ! true)
+    gen.foreach { e =>
+      buffer.addOne((e, System.currentTimeMillis))
+      if (e <= 2) twoBeats.countDown()
+    }
+
+    assert(twoBeats.await(Timeout.toMillis, TimeUnit.MILLISECONDS), "the generator didn't produce two elements")
+    Thread.sleep(30L)
+    val forcedAt = System.currentTimeMillis
+    gen.force()
+
+    waitFor(finished, true)
+    assert(gen.isClosed)
+    assertEquals(buffer.map(_._1).toSeq, Seq(1, 2, 3, 4, 5))
+
+    // the forced element (3) is published almost immediately
+    val forcedDelay = buffer(2)._2 - forcedAt
+    assert(forcedDelay >= 0L && forcedDelay <= 50L, s"delay of the forced element: $forcedDelay")
+    // the beat is reset - the next element comes a full interval after the forced one
+    val intervalMs = HeartBeatMs.toMillis
+    val gap = buffer(3)._2 - buffer(2)._2
+    assert(gap >= intervalMs - (intervalMs / 4) && gap <= 3 * intervalMs,
+      s"gap between the forced element and the next one: $gap")
+  }
+
+  test("a forced beat with a throwing generate function ignores the exception and resets the beat") {
+    var n = 0
+    val buffer = mutable.ArrayBuffer[(Int, Long)]()
+    val twoBeats = new CountDownLatch(2)
+    val twoMore = new CountDownLatch(2)
+    val stream = GeneratorStream.generate(HeartBeatMs) {
+      n += 1
+      if (n == 3) throw new IllegalStateException("boom") else n
+    }
+    stream.foreach { e =>
+      buffer.addOne((e, System.currentTimeMillis))
+      if (e <= 2) twoBeats.countDown()
+      if (e >= 4) twoMore.countDown()
+    }
+
+    assert(twoBeats.await(Timeout.toMillis, TimeUnit.MILLISECONDS), "the stream didn't produce two natural beats")
+    Thread.sleep(30L)
+    val forcedAt = System.currentTimeMillis
+    // the third call to generate throws; no event is published but the exception is ignored
+    stream.force()
+
+    assert(twoMore.await(Timeout.toMillis, TimeUnit.MILLISECONDS), "the stream didn't continue after the failed forced beat")
+    stream.close()
+    awaitAllTasks
+    assert(stream.isClosed)
+
+    val intervalMs = HeartBeatMs.toMillis
+    // no event with the value 3 was published, and no event was published at the forced beat time
+    assertEquals(buffer.take(4).map(_._1).toSeq, Seq(1, 2, 4, 5))
+    // the beat was still reset - the next event comes a full interval after the forced beat
+    val gap = buffer(2)._2 - forcedAt
+    assert(gap >= intervalMs - (intervalMs / 4) && gap <= 3 * intervalMs,
+      s"gap between the forced beat and the next event: $gap")
   }
 
   test("CloseableGeneratorStream.onClose is invoked on close") {

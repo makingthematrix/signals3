@@ -1,6 +1,7 @@
 package io.github.makingthematrix.signals3.generators
 
-import io.github.makingthematrix.signals3.{Finite, Indexed, TakeStream}
+import io.github.makingthematrix.signals3.{Finite, Indexed, Pausable, TakeStream}
+
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 import scala.util.chaining.scalaUtilChainingOps
@@ -28,13 +29,13 @@ import scala.util.chaining.scalaUtilChainingOps
 class FiniteGeneratorStream[E] protected[signals3] (interval: FiniteDuration | (() => FiniteDuration),
                                                     val events: Iterable[E])
                                                    (using ExecutionContext)
-  extends GeneratorStream[E](interval) with Finite[E] with Indexed {
+  extends GeneratorStream[E](interval) with Finite[E] with Indexed with Pausable {
   private val it = events.iterator
   override def isClosed: Boolean = super.isClosed || it.isEmpty
 
   override protected def onBeat(): Unit = {
     super.onBeat()
-    if (!isClosed) {
+    if (!isClosed && !isPaused) {
       val event = it.next()
       inc()
       publish(event)
@@ -52,6 +53,8 @@ class FiniteGeneratorStream[E] protected[signals3] (interval: FiniteDuration | (
     * A [[TakeStream]] which will publish all the events from the generator except the last one. See [[Finite.last]].
     */
   lazy val init: TakeStream[E] = this.take(events.size - 1)
+  
+  override def force(): Unit = if (!isClosed && !isPaused) super.force()
 }
 
 object FiniteGeneratorStream {

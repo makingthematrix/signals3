@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.actors.Actor.*
-import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy.{Agitated, Linear, Reactive}
+import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy.{Agitated, Linear}
 import io.github.makingthematrix.signals3.generators.GeneratorStream
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, CloseableSourceStream, Initializable, Pausable, SerialDispatchQueue, SourceStream, Stream}
 
@@ -24,7 +24,7 @@ import scala.util.{Failure, Success, Try}
 	*/
 private[actors] class ActorImpl[Msg, State](override val id: String,
                                             protected var _state: State,
-                                            override protected val heartbeat: HeartBeatStrategy = Actor.defBeat,
+                                            protected val heartbeat: HeartBeatStrategy = Actor.defBeat,
                                             override val tags: Set[ActorTag] = Set.empty,
                                             override val parent: Option[ActorRef[Msg]] = None,
                                             override val system: Option[ActorSystem[Msg, ?]] = None
@@ -66,7 +66,6 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	// a method used every consecutive beat to calculate the time for the next beat
 	private def interval(): FiniteDuration = heartbeat match {
 		case Linear(ms, _) => ms.millis
-		case Reactive(maxMs, _, _) => maxMs.millis
 		case Agitated(minMs, _, _, _) if msgs.get().isEmpty && nextAgitation <= minMs => minMs.millis
 		case Agitated(_, _, maxMs, _) if msgs.get().isEmpty && nextAgitation >= maxMs => maxMs.millis
 		case Agitated(minMs, coeff, maxMs, _) if msgs.get().isEmpty =>
@@ -85,7 +84,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	msgStream.foreach { msg =>
 		enqueue(msg)
 		heartbeat match {
-			case Reactive(_, maxMsgs, _) if msgs.get().size >= maxMsgs => processMessages()
+			case Agitated(_, _, maxMsgs, _) if msgs.get().size >= maxMsgs => processMessages()
 			case _ =>
 		}
 	}
@@ -93,7 +92,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	systemStream.foreach { msg =>
 		enqueue(msg)
 		heartbeat match {
-			case Reactive(_, _, _) => processMessages()
+			case _: Agitated => processMessages()
 			case _ =>
 		}
 	}
@@ -125,7 +124,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		behMap -= id
 	}
 
-	override def getBehavior(id: String): Option[Beh[Msg, State]] =
+	private def getBehavior(id: String): Option[Beh[Msg, State]] =
 		behMap.collectFirst { case (behId, pf) if behId == id => behId -> pf }
 
 	/**

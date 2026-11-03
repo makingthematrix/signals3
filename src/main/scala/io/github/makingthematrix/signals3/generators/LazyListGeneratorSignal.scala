@@ -36,6 +36,8 @@ class LazyListGeneratorSignal[V] protected[signals3] (interval: FiniteDuration |
     val v =  values(getAndInc())
     publish(v, ec)
   }
+
+  override def force(): Unit = if (!isPaused) super.force()
 }
 
 object LazyListGeneratorSignal {

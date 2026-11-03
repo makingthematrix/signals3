@@ -4,7 +4,7 @@ import io.github.makingthematrix.signals3.priv.DoneSignal
 import io.github.makingthematrix.signals3.Utils.{awaitAllTasks, waitFor}
 import io.github.makingthematrix.signals3.{DispatchQueue, EventContext, FlagSignal, SerialDispatchQueue, Signal}
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import scala.collection.mutable
 import scala.concurrent.duration.*
 
@@ -292,5 +292,137 @@ class GeneratorSignalSpec extends munit.FunSuite {
     assert(sig.closeAndCheck())
     assert(sig.isClosed)
     assert(!sig.closeAndCheck())
+  }
+
+  test("force updates the generator signal immediately and resets the beat") {
+    val buffer = mutable.ArrayBuffer[(Int, Long)]()
+    val twoBeats = new CountDownLatch(2)
+    val fourBeats = new CountDownLatch(4)
+    // the update function is instrumented with timestamps because the signal publishes values
+    // only on change, so the subscribers can't be used to observe every beat
+    val signal = GeneratorSignal.generate(0, HeartBeatMs) { v =>
+      val nv = v + 1
+      buffer.addOne((nv, System.currentTimeMillis))
+      if (nv <= 2) twoBeats.countDown()
+      fourBeats.countDown()
+      nv
+    }
+    val done = FlagSignal()
+    signal.foreach(n => done.setIf(n == 4))
+
+    assert(twoBeats.await(Timeout.toMillis, TimeUnit.MILLISECONDS), "the signal wasn't updated twice")
+    Thread.sleep(30L)
+    val forcedAt = System.currentTimeMillis
+    signal.force()
+
+    assert(fourBeats.await(Timeout.toMillis, TimeUnit.MILLISECONDS), "the signal wasn't updated twice more")
+    signal.close()
+    awaitAllTasks
+    assert(signal.isClosed)
+
+    waitFor(done, true)
+    val intervalMs = HeartBeatMs.toMillis
+    assertEquals(buffer.take(4).map(_._1).toSeq, Seq(1, 2, 3, 4))
+    // the forced update (3) happened almost immediately
+    val forcedDelay = buffer(2)._2 - forcedAt
+    assert(forcedDelay >= 0L && forcedDelay <= 50L, s"delay of the forced update: $forcedDelay")
+    // the beat is reset - the next update comes a full interval after the forced one
+    val gap = buffer(3)._2 - buffer(2)._2
+    assert(gap >= intervalMs - (intervalMs / 4) && gap <= 3 * intervalMs,
+      s"gap between the forced update and the next one: $gap")
+  }
+
+  test("force with the function interval re-invokes the interval function with the forced value") {
+    val buffer = mutable.ArrayBuffer[(Int, Long)]()
+    val intervalValues = mutable.ArrayBuffer[Int]()
+    val twoBeats = new CountDownLatch(2)
+    val fourBeats = new CountDownLatch(4)
+    val signal = GeneratorSignal.generate(0, (n: Int) => { intervalValues.addOne(n); HeartBeatMs }) { v =>
+      val nv = v + 1
+      buffer.addOne((nv, System.currentTimeMillis))
+      if (nv <= 2) twoBeats.countDown()
+      fourBeats.countDown()
+      nv
+    }
+    val done = FlagSignal()
+    signal.foreach(n => done.setIf(n == 4))
+
+    assert(twoBeats.await(Timeout.toMillis, TimeUnit.MILLISECONDS), "the signal wasn't updated twice")
+    Thread.sleep(30L)
+    val forcedAt = System.currentTimeMillis
+    signal.force()
+
+    // the interval function was re-invoked by the restart, with the forced value as the argument
+    assertEquals(intervalValues.take(4).toSeq, Seq(0, 1, 2, 3))
+
+    assert(fourBeats.await(Timeout.toMillis, TimeUnit.MILLISECONDS), "the signal wasn't updated twice more")
+    signal.close()
+    awaitAllTasks
+    assert(signal.isClosed)
+
+    waitFor(done, true)
+    val intervalMs = HeartBeatMs.toMillis
+    assertEquals(buffer.take(4).map(_._1).toSeq, Seq(1, 2, 3, 4))
+    val forcedDelay = buffer(2)._2 - forcedAt
+    assert(forcedDelay >= 0L && forcedDelay <= 50L, s"delay of the forced update: $forcedDelay")
+    val gap = buffer(3)._2 - buffer(2)._2
+    assert(gap >= intervalMs - (intervalMs / 4) && gap <= 3 * intervalMs,
+      s"gap between the forced update and the next one: $gap")
+  }
+
+  test("force on a closed signal does nothing") {
+    var updates = 0
+    val oneBeat = new CountDownLatch(1)
+    val signal = GeneratorSignal.generate(0, HeartBeatMs) { v =>
+      updates += 1
+      v + 1
+    }
+    signal.foreach { _ => oneBeat.countDown() }
+    assert(oneBeat.await(Timeout.toMillis, TimeUnit.MILLISECONDS), "the signal wasn't updated")
+    Thread.sleep(20L) // let the beat finish rescheduling itself before closing
+    signal.close()
+    awaitAllTasks
+    assert(signal.isClosed)
+
+    val count = updates
+    signal.force()
+    Thread.sleep(3 * HeartBeatMs.toMillis)
+
+    assertEquals(updates, count, "force updated the signal after it was closed")
+    assert(signal.isClosed)
+  }
+
+  test("force when the update returns an equal value doesn't publish but resets the beat") {
+    val beatTimes = mutable.ArrayBuffer[Long]()
+    var observed = 0
+    val twoBeats = new CountDownLatch(2)
+    val fourBeats = new CountDownLatch(4)
+    val signal = GeneratorSignal.generate("constant", HeartBeatMs) { v =>
+      beatTimes.addOne(System.currentTimeMillis)
+      if (beatTimes.size <= 2) twoBeats.countDown()
+      fourBeats.countDown()
+      v
+    }
+    signal.foreach(_ => observed += 1)
+
+    assert(twoBeats.await(Timeout.toMillis, TimeUnit.MILLISECONDS), "the signal wasn't updated twice")
+    Thread.sleep(30L)
+    val forcedAt = System.currentTimeMillis
+    signal.force()
+
+    assert(fourBeats.await(Timeout.toMillis, TimeUnit.MILLISECONDS), "the signal wasn't updated twice more")
+    signal.close()
+    awaitAllTasks
+    assert(signal.isClosed)
+
+    val intervalMs = HeartBeatMs.toMillis
+    // the update never changes the value, so the subscriber was notified only about the initial one
+    assertEquals(observed, 1)
+    // but the beat itself still runs and is reset by force
+    val forcedDelay = beatTimes(2) - forcedAt
+    assert(forcedDelay >= 0L && forcedDelay <= 50L, s"delay of the forced beat: $forcedDelay")
+    val gap = beatTimes(3) - beatTimes(2)
+    assert(gap >= intervalMs - (intervalMs / 4) && gap <= 3 * intervalMs,
+      s"gap between the forced beat and the next one: $gap")
   }
 }

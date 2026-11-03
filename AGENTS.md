@@ -10,7 +10,7 @@ This is a Scala project implementing a lightweight event streaming library.
 
 ## Development Workflow
 1. Clone the repository: `git clone https://github.com/makingthematrix/signals3.git`.
-2. Run tests: `sbt test`.
+2. Run tests always with `sbt testOnly` followed by a list of test classes that are directly related to the feature you work on.
 3. Run the project: `sbt run`.
 
 ## Coding Standards

@@ -1,6 +1,5 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.actors.Actor.*
 import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy.Linear
 import io.github.makingthematrix.signals3.{CanBeClosed, CanBeInitialized, CanBePaused, CloseableFuture, DispatchQueue, SourceStream, Stream}
 
@@ -51,15 +50,7 @@ trait Actor[Msg, State] extends CanBeClosed with CanBePaused with CanBeInitializ
 		* about them, or you can do anything in-between.
 		*/
 	def out: Stream[Msg]
-
-	/**
-		* Retrieves a behavior from the actor's list of behaviors based on its unique identifier.
-		*
-		* @param id The unique identifier of the behavior to retrieve.
-		* @return An `Option` containing the partial function defining the behavior, if found; otherwise, `None`.
-		*/
-	def getBehavior(id: String): Option[Beh[Msg, State]]
-
+	
 	/**
 		* Sends a system message to the actor, expecting a response in the form of a `CloseableFuture`.
 		*
@@ -127,13 +118,7 @@ trait Actor[Msg, State] extends CanBeClosed with CanBePaused with CanBeInitializ
 		* @return the current state
 		*/
 	def state: State
-
-	/**
-		* Retrieves the current heartbeat strategy of the actor
-		* @return the current heartbeat strategy
-		*/
-	protected def heartbeat: HeartBeatStrategy
-
+	
 	/**
 		* Returns whether the actor works on a serial dispatch queue.
 		*/
@@ -233,7 +218,6 @@ object Actor {
 	enum HeartBeatStrategy(val timeout: FiniteDuration) {
 		case Linear(ms: Long, override val timeout: FiniteDuration = 5.second) extends HeartBeatStrategy(timeout)
 		case Agitated(minMs: Long, coeff: Double, maxMs: Long, override val timeout: FiniteDuration = 5.second) extends HeartBeatStrategy(timeout)
-		case Reactive(maxMs: Long, maxMsgs: Int, override val timeout: FiniteDuration = 5.second) extends HeartBeatStrategy(timeout)
 	}
 
 	/**

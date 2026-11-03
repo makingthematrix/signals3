@@ -51,4 +51,6 @@ class CloseableGeneratorStream[E] protected[signals3] (interval: FiniteDuration 
     * @param body Logic that is going to be executed when the generator is closed.
     */
   override inline def onClose(body: => Unit): Unit = beat.onClose(body)
+
+  override def force(): Unit = if (!isClosed && !isPaused) super.force()
 }

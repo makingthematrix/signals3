@@ -494,15 +494,16 @@ object CloseableFuture {
     *       call will be executed a bit earlier than `interval` to accommodate that. The next calls should be executed
     *       as planned, unless external causes will make another delay, after which the `repeat` method will again
     *       try to adjust by shortening the delay for the consecutive call.
-    *
     * @param interval The initial delay and the consecutive time interval between repeats.
-    * @param body A task repeated every `interval`. If `body` throws an exception, the method will ignore it and
-    *             call `body` again, after `interval`.
-    * @return A closeable future representing the whole process.
+    * @param body     A task repeated every `interval`. If `body` throws an exception, the method will ignore it and
+    *                 call `body` again, after `interval`.
+    *
+    * @return         A closeable future representing the whole process. It can be restarted with [[Repeat.restart]].
     */
-  final def repeat(interval: FiniteDuration)(body: => Unit)(using ExecutionContext): CloseableFuture[Unit] = {
+  final def repeat(interval: FiniteDuration)(body: => Unit)(using ExecutionContext): RepeatableFuture = {
     val intervalMillis = interval.toMillis
     @volatile var last = System.currentTimeMillis
+
     def calcInterval(): FiniteDuration = {
       val now = System.currentTimeMillis
       val error = now - last - intervalMillis
@@ -510,10 +511,7 @@ object CloseableFuture {
       FiniteDuration.apply(intervalMillis - (error / 2L) - 1L, MILLISECONDS)
     }
 
-    if (intervalMillis <= 0L)
-      successful(Try(body))
-    else
-      repeatVariant(calcInterval)(body)
+    new RepeatableFuture(calcInterval)(body)
   }
 
   /** Creates an empty closeable future which will repeat the mapped computation until closed. At creation,
@@ -526,29 +524,15 @@ object CloseableFuture {
     * @param interval The function returning the delay to the first and then to each next execution.
     * @param body A task repeated every `interval`. If `body` throws an exception, the method will ignore it and
     *             call `body` again, after `interval`.
-    * @return A closeable future representing the whole process.
+    * @return A closeable future representing the whole process. It can be restarted with [[Repeat.restart]] -
+    *         the `interval` function is then called again to obtain the delay to the next execution.
     */
-  final def repeatVariant(interval: () => FiniteDuration)(body: => Unit)(using ExecutionContext): CloseableFuture[Unit] =
-    new ActuallyCloseable(Promise[Unit]()) {
-      inline def sched(t: FiniteDuration): TimerTask = schedule(() => { Try(body); startNewTimeoutLoop() }, t.toMillis)
-
-      @volatile private var closed: Boolean = false
-      @volatile private var task: TimerTask = sched(interval())
-
-      private def startNewTimeoutLoop(): Unit =
-        if (!closed)
-          task = sched(interval())
-
-      override def closeAndCheck(): Boolean = {
-        task.cancel()
-        closed = true
-        super.closeAndCheck()
-      }
-    }
+  final def repeatVariant(interval: () => FiniteDuration)(body: => Unit)(using ExecutionContext): RepeatableFuture =
+    new RepeatableFuture(interval)(body)
 
   private val timer: Timer = new Timer()
 
-  private final def schedule(f: () => Any, delay: Long): TimerTask =
+  final def schedule(f: () => Any, delay: Long): TimerTask =
     new TimerTask {
       override def run(): Unit = f()
     }.tap {

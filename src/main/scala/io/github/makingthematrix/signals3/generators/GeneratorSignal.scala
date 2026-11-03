@@ -2,10 +2,11 @@ package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.Closeable.CloseableSignal
 import io.github.makingthematrix.signals3.priv.EventSource.NoAutowiring
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Initializable, Signal}
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Initializable, RepeatableFuture, Signal}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
+import scala.util.Try
 import scala.util.chaining.scalaUtilChainingOps
 
 /**
@@ -29,12 +30,27 @@ abstract class GeneratorSignal[V] protected[signals3] (init: V, interval: Finite
                                                       (using ExecutionContext)
   extends Signal[V](Some(init)) with Initializable with NoAutowiring {
 
-  protected lazy val beat: CloseableFuture[Unit] = (interval match {
+  protected lazy val beat: RepeatableFuture = (interval match {
     case intv: FiniteDuration        => CloseableFuture.repeat(intv)(_)
     case intv: (V => FiniteDuration) => CloseableFuture.repeatVariant(() => intv(currentValue.getOrElse(init)))(_)
-  }) { onBeat() }
+  }) {
+    onBeat()
+  }
   
   protected def onBeat(): Unit = if (!isInitialized) initialize()
+
+  /**
+    * Calls `onBeat` immediately and resets the beat so that the next call to `onBeat` planned by the beat logic
+    * will happen after the full `interval` counted from the moment of calling this method. Without the reset,
+    * the beat logic would not know about this call and would call `onBeat` again in its own time.
+    *
+    * If `onBeat` throws an exception, it is ignored - just like in the beat logic - and the beat is still reset.
+    * If restart happens when onBeat is already running, onBeat will be allowed to complete.
+    */
+  def force(): Unit = {
+    Try(onBeat())
+    beat.restart()
+  }
 
   override protected def tryInitialize(): Unit = beat
 
@@ -55,10 +71,7 @@ object GeneratorSignal {
     * @tparam V       The type of the signal's value.
     * @return         A new generator signal.
     */
-  def apply[V](init    : V,
-               update  : V => V,
-               interval: FiniteDuration)
-              (using ExecutionContext): CloseableGeneratorSignal[V] =
+  def apply[V](init    : V, update  : V => V, interval: FiniteDuration)(using ExecutionContext): CloseableGeneratorSignal[V] =
     new CloseableGeneratorSignal[V](init, update, interval).tap(_.initialize())
 
   /**

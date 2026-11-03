@@ -75,72 +75,12 @@ class ActorIntegrationSpec extends FunSuite {
     // Wait for all threads to complete
     val allFutures: Seq[Future[Unit]] = futures
     Await.result(Future.sequence(allFutures), 10.seconds)
-    
+
     // Verify all behaviors were added
     waitFor(addedCount, totalBehaviors)
-    
-    // Verify we can retrieve all added behaviors
-    val retrievedBehaviors = (0 until numThreads).flatMap { threadId =>
-      (0 until behaviorsPerThread).map { i =>
-        val behaviorId = s"thread-$threadId-behavior-$i"
-        actor.getBehavior(behaviorId)
-      }
-    }.flatten
-    
-    assertEquals(retrievedBehaviors.size, totalBehaviors)
-    
     close(actor)
   }
-
-  /**
-   * Test that concurrent behavior additions and removals are thread-safe.
-   */
-  test("Concurrent behavior additions and removals through system messages are thread-safe") {
-    val actor = create[String, String]("0", {
-      case (msg, _) => Some(s"Default: $msg")
-    })
-
-    val numOperations = 100
-    val behaviorIds = (0 until numOperations).map(i => s"behavior-$i").toList
-    
-    def createBehavior(id: String): Actor.PF[String, String] = {
-      case (msg, _) if msg == id.hashCode.toString => Some(s"Behavior-$id: $msg")
-    }
-    
-    // Perform concurrent add/remove operations
-    val futures = behaviorIds.map { id =>
-      Future {
-        if (id.hashCode % 2 == 0) {
-          // Add behavior
-          val cf = actor.ask(SystemMsg.AddBehavior(id, createBehavior(id)))
-          awaitCF(cf)
-        } else {
-          // Try to remove behavior (may or may not exist)
-          val cf = actor.ask(SystemMsg.RemoveBehavior(id))
-          awaitCF(cf)
-        }
-      }
-    }
-    
-    // Wait for all operations to complete
-    Await.result(Future.sequence(futures), 10.seconds)
-    
-    // Verify the behavior map is consistent
-    val expectedBehaviors = behaviorIds.filter(id => id.hashCode % 2 == 0).toSet
-    
-    // Verify all added behaviors are retrievable
-    expectedBehaviors.foreach { id =>
-      assert(actor.getBehavior(id).isDefined, s"Behavior $id should be present")
-    }
-    
-    // Verify removed behaviors are not present
-    behaviorIds.filter(id => id.hashCode % 2 != 0).foreach { id =>
-      assert(actor.getBehavior(id).isEmpty, s"Behavior $id should be removed")
-    }
-    
-    close(actor)
-  }
-
+  
   /**
    * Test that removing a behavior that doesn't exist doesn't cause errors.
    */
@@ -177,7 +117,6 @@ class ActorIntegrationSpec extends FunSuite {
     }
     
     expectSuccessCF(actor ? SystemMsg.AddBehavior("recorder", recordingBehavior), Done)
-    assert(actor.getBehavior("recorder").isDefined)
     
     // Send messages
     val futures: Seq[Future[MyMsg]] = (0 until numMessages).map { i =>

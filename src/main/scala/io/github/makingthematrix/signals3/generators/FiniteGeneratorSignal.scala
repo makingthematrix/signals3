@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.Finite.FiniteSignal
-import io.github.makingthematrix.signals3.{Finite, Indexed}
+import io.github.makingthematrix.signals3.{Finite, Indexed, Pausable}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
@@ -31,7 +31,7 @@ import scala.util.chaining.scalaUtilChainingOps
 class FiniteGeneratorSignal[V] protected[signals3] (interval: FiniteDuration | (V => FiniteDuration),
                                                     val values: Iterable[V])
                                                    (using ec: ExecutionContext)
-  extends GeneratorSignal[V](values.head, interval) with Finite[V] with Indexed {
+  extends GeneratorSignal[V](values.head, interval) with Finite[V] with Indexed with Pausable {
   inc() // the first value in values becomes the initial value, so we already increase the counter to 1
   private val it = values.tail.iterator
 
@@ -39,7 +39,7 @@ class FiniteGeneratorSignal[V] protected[signals3] (interval: FiniteDuration | (
 
   override protected def onBeat(): Unit = {
     super.onBeat()
-    if (!isClosed) {
+    if (!isClosed && !isPaused) {
       val v = it.next()
       inc()
       publish(v, ec)
@@ -57,6 +57,8 @@ class FiniteGeneratorSignal[V] protected[signals3] (interval: FiniteDuration | (
     * A [[io.github.makingthematrix.signals3.TakeSignal]] which will publish all the events from the generator except the last one. See [[Finite.last]].
     */
   lazy val init: FiniteSignal[V] = this.take(values.size - 1)
+  
+  override def force(): Unit = if (!isClosed && !isPaused) super.force()
 }
 
 object FiniteGeneratorSignal {

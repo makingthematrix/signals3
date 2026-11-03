@@ -168,18 +168,6 @@ final class ActorBuilder[Msg, State] (
     withHeartbeat(HeartBeatStrategy.Agitated(minMs, coeff, maxMs))
   
   /**
-   * Sets a reactive heartbeat strategy.
-   *
-   * Triggers processing when either maxMs time elapses OR maxMsgs messages are queued.
-   *
-   * @param maxMs    The maximum time interval in milliseconds
-   * @param maxMsgs  The maximum number of messages to queue before triggering
-   * @return A new builder with the reactive heartbeat strategy
-   */
-  inline def withReactiveHeartbeat(maxMs: Long, maxMsgs: Int): ActorBuilder[Msg, State] =
-    withHeartbeat(HeartBeatStrategy.Reactive(maxMs, maxMsgs))
-
-  /**
    * Sets the initialization callback.
    *
    * The callback is invoked exactly once when the actor is initialized,
@@ -335,17 +323,7 @@ object ActorBuilder {
    * Linear heartbeat with 1 second interval.
    */
   val Linear1s: HeartBeatStrategy = HeartBeatStrategy.Linear(1000L)
-
-  /**
-   * Reactive heartbeat with 100ms max interval and 10 message threshold.
-   */
-  val Reactive100ms10: HeartBeatStrategy = HeartBeatStrategy.Reactive(100L, 10)
-
-  /**
-   * Reactive heartbeat with 50ms max interval and 5 message threshold.
-   */
-  val Reactive50ms5: HeartBeatStrategy = HeartBeatStrategy.Reactive(50L, 5)
-
+  
   /**
    * Agitated heartbeat with 50ms min, 1.5x growth, 500ms max.
    */

@@ -36,6 +36,8 @@ class LazyListGeneratorStream[E] protected[signals3] (interval: FiniteDuration |
     val event = events(getAndInc())
     publish(event)
   }
+  
+  override def force(): Unit = if (!isPaused) super.force()
 }
 
 object LazyListGeneratorStream {

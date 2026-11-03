@@ -1,10 +1,11 @@
 package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.priv.EventSource.NoAutowiring
-import io.github.makingthematrix.signals3.{CloseableFuture, Initializable, Stream}
+import io.github.makingthematrix.signals3.{CloseableFuture, Initializable, RepeatableFuture, Stream}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
+import scala.util.Try
 import scala.util.chaining.scalaUtilChainingOps
 
 /**
@@ -26,7 +27,7 @@ abstract class GeneratorStream[E] protected[signals3] (interval: FiniteDuration 
                                                       (using ExecutionContext)
   extends Stream[E] with Initializable with NoAutowiring {
 
-  protected lazy val beat: CloseableFuture[Unit] =
+  protected lazy val beat: RepeatableFuture =
     (interval match {
        case intv: FiniteDuration         => CloseableFuture.repeat(intv)(_)
        case intv: (() => FiniteDuration) => CloseableFuture.repeatVariant(intv)(_)
@@ -35,6 +36,19 @@ abstract class GeneratorStream[E] protected[signals3] (interval: FiniteDuration 
     }
   
   protected def onBeat(): Unit = if (!isInitialized) initialize()
+
+  /**
+    * Calls `onBeat` immediately and resets the beat so that the next call to `onBeat` planned by the beat logic
+    * will happen after the full `interval` counted from the moment of calling this method. Without the reset,
+    * the beat logic would not know about this call and would call `onBeat` again in its own time.
+    *
+    * If `onBeat` throws an exception, it is ignored - just like in the beat logic - and the beat is still reset.
+    * If restart happens when onBeat is already running, onBeat will be allowed to complete.
+    */
+  def force(): Unit = {
+    Try(onBeat())
+    beat.restart()
+  }
 
   override protected def tryInitialize(): Unit = beat
 
