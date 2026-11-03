@@ -3,8 +3,8 @@
 ## Open
 
 ### To do
-- [ ] Create a util package object for common methods in actors unit tests (spawn, close, etc)
-- [ ] Merge heartbeat strategies Agitated and Reactive into a smarter Agitated
+- [ ] Enable an actor to take a special behavior that's run on every heartbeat even if there are no messages 
+- [ ] Make a Custom heartbeat strategy that takes a behavior
 - [ ] LogActor as a special subclass of ActorImpl
 - [ ] When an actor receives a reference of LogActor, it starts to gather logging and debugging data (not before)
 - [ ] PersistenceActor as a special subclass of ActorImpl
@@ -50,4 +50,7 @@
 - [x] Make use of `ClassTag` in `ActorRef` (see the inject project) so that the actor refs' type parameters are not lost in collections (or: [type tests](https://docs.scala-lang.org/scala3/reference/other-new-features/type-test.html))
 - [x] System messages carried through actor systems
 - [x] Actors should carry tags (strings), and the actor system can get requests to connect an actor with any other actor that has a given tag
+- [x] Create a util package object for common methods in actors unit tests (spawn, close, etc)
+- [x] Merge heartbeat strategies Agitated and Reactive into a smarter Reactive
+
 

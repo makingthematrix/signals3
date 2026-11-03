@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.actors.Actor.*
-import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy.{Agitated, Linear}
+import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy.*
 import io.github.makingthematrix.signals3.generators.GeneratorStream
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, CloseableSourceStream, Initializable, Pausable, SerialDispatchQueue, SourceStream, Stream}
 
@@ -66,14 +66,8 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	// a method used every consecutive beat to calculate the time for the next beat
 	private def interval(): FiniteDuration = heartbeat match {
 		case Linear(ms, _) => ms.millis
-		case Agitated(minMs, _, _, _) if msgs.get().isEmpty && nextAgitation <= minMs => minMs.millis
-		case Agitated(_, _, maxMs, _) if msgs.get().isEmpty && nextAgitation >= maxMs => maxMs.millis
-		case Agitated(minMs, coeff, maxMs, _) if msgs.get().isEmpty =>
-			nextAgitation = (nextAgitation * (1.0 * coeff)).toLong
-			nextAgitation.millis
-		case Agitated(minMs, _, _, _) =>
-			nextAgitation = minMs
-			nextAgitation.millis
+		case Reactive(_, longMs, _) if msgs.get().isEmpty => longMs.millis
+		case Reactive(shortMs, _, _) => shortMs.millis
 	}
 
 	override val in: CloseableSourceStream[Msg] = CloseableSourceStream[Msg]()
@@ -84,7 +78,8 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	msgStream.foreach { msg =>
 		enqueue(msg)
 		heartbeat match {
-			case Agitated(_, _, maxMsgs, _) if msgs.get().size >= maxMsgs => processMessages()
+			case Reactive(0L, _, _) => beat.force()
+			case Reactive(ms, _, _) => CloseableFuture.delayed(ms.millis) { beat.force() }
 			case _ =>
 		}
 	}
@@ -92,7 +87,8 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	systemStream.foreach { msg =>
 		enqueue(msg)
 		heartbeat match {
-			case _: Agitated => processMessages()
+			case Reactive(0L, _, _) => beat.force()
+			case Reactive(ms, _, _) => CloseableFuture.delayed(ms.millis) { beat.force() }
 			case _ =>
 		}
 	}

@@ -154,18 +154,14 @@ final class ActorBuilder[Msg, State] (
     withHeartbeat(HeartBeatStrategy.Linear(ms))
 
   /**
-   * Sets an agitated heartbeat strategy.
+   * Sets a reactived heartbeat strategy.
    *
-   * The interval starts at minMs, grows by coeff when idle (up to maxMs),
-   * and resets when messages arrive.
-   *
-   * @param minMs  The minimum interval in milliseconds
-   * @param coeff  The growth coefficient (e.g., 1.5 means 50% increase)
-   * @param maxMs  The maximum interval in milliseconds
+   * @param shortMs  The interval between a new message coming and the processing
+   * @param longMs  The interval between processings when the messages queues are empty
    * @return A new builder with the agitated heartbeat strategy
    */
-  inline def withAgitatedHeartbeat(minMs: Long, coeff: Double, maxMs: Long): ActorBuilder[Msg, State] =
-    withHeartbeat(HeartBeatStrategy.Agitated(minMs, coeff, maxMs))
+  inline def withReactiveHeartbeat(shortMs: Long, longMs: Long): ActorBuilder[Msg, State] =
+    withHeartbeat(HeartBeatStrategy.Reactive(shortMs, longMs))
   
   /**
    * Sets the initialization callback.
@@ -306,31 +302,4 @@ object ActorBuilder {
   def apply[Msg, State](id: String, state: State): ActorBuilder[Msg, State] = new ActorBuilder(id = id, state = state)
   inline def apply[Msg, State](state: State): ActorBuilder[Msg, State] = apply(id = IdGenerator.generate(), state = state)
   inline def apply[Msg](): ActorBuilder[Msg, Unit] = ActorBuilder[Msg, Unit](state = ())
-
-  // Pre-defined heartbeat strategies for convenience
-
-  /**
-   * Linear heartbeat with 100ms interval.
-   */
-  val Linear100ms: HeartBeatStrategy = HeartBeatStrategy.Linear(100L)
-
-  /**
-   * Linear heartbeat with 500ms interval.
-   */
-  val Linear500ms: HeartBeatStrategy = HeartBeatStrategy.Linear(500L)
-
-  /**
-   * Linear heartbeat with 1 second interval.
-   */
-  val Linear1s: HeartBeatStrategy = HeartBeatStrategy.Linear(1000L)
-  
-  /**
-   * Agitated heartbeat with 50ms min, 1.5x growth, 500ms max.
-   */
-  val Agitated50to500: HeartBeatStrategy = HeartBeatStrategy.Agitated(50L, 1.5, 500L)
-
-  /**
-   * Agitated heartbeat with 100ms min, 2x growth, 1000ms max.
-   */
-  val Agitated100to1000: HeartBeatStrategy = HeartBeatStrategy.Agitated(100L, 2.0, 1000L)
 }

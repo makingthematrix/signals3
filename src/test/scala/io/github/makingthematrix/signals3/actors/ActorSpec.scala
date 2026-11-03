@@ -71,19 +71,19 @@ class ActorSpec extends FunSuite {
 
   test("Heartbeat strategies") {
     val linearResponse = Signal(MyStr(""))
-    val agitatedResponse = Signal(MyStr(""))
+    val reactiveResponse = Signal(MyStr(""))
 
     val linearActor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Linear: $msg"))}, HeartBeatStrategy.Linear(100))
-    val agitatedActor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Agitated: $msg"))}, HeartBeatStrategy.Agitated(50, 1.5, 500))
+    val reactiveActor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Agitated: $msg"))}, HeartBeatStrategy.Reactive(50, 500))
 
     (linearActor ? MyInt(1)).pipeTo(linearResponse)
-    (agitatedActor ? MyInt(2)).pipeTo(agitatedResponse)
+    (reactiveActor ? MyInt(2)).pipeTo(reactiveResponse)
 
     waitFor(linearResponse, MyStr("Linear: 1"))
-    waitFor(agitatedResponse, MyStr("Agitated: 2"))
+    waitFor(reactiveResponse, MyStr("Reactive: 2"))
 
     close(linearActor)
-    close(agitatedActor)
+    close(reactiveActor)
   }
 
   // ==================== Behavior Modification ====================

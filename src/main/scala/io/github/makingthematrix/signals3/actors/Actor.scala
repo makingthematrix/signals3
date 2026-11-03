@@ -217,7 +217,7 @@ object Actor {
 		*/
 	enum HeartBeatStrategy(val timeout: FiniteDuration) {
 		case Linear(ms: Long, override val timeout: FiniteDuration = 5.second) extends HeartBeatStrategy(timeout)
-		case Agitated(minMs: Long, coeff: Double, maxMs: Long, override val timeout: FiniteDuration = 5.second) extends HeartBeatStrategy(timeout)
+		case Reactive(shortMs: Long, longMs: Long,  override val timeout: FiniteDuration = 5.second) extends HeartBeatStrategy(timeout)
 	}
 
 	/**
