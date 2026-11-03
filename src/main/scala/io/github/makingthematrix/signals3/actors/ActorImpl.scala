@@ -49,10 +49,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	private val behMap = mutable.HashMap[String, PF[Msg, State]]()
 	// the "beating heart" of the actor; depending on the strategy, accumulated messages are processed at each beat or when the message appears (reactive).
 	private lazy val beat = GeneratorStream.heartbeat(() => interval())
-
-	// the next agitation time of the actor in milliseconds); used to determine the interval between beats when using the Agitated heartbeat strategy.
-	private var nextAgitation: Long = 0L
-
+	
 	override val isSerial: Boolean = ec.isInstanceOf[SerialDispatchQueue]
 
 	inline private def enqueue(entry: MsgEntry): Unit = msgs.updateAndGet(_ :+ entry)
@@ -65,9 +62,9 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 
 	// a method used every consecutive beat to calculate the time for the next beat
 	private def interval(): FiniteDuration = heartbeat match {
-		case Linear(ms, _) => ms.millis
+		case Linear(ms, _)                                => ms.millis
 		case Reactive(_, longMs, _) if msgs.get().isEmpty => longMs.millis
-		case Reactive(shortMs, _, _) => shortMs.millis
+		case Reactive(shortMs, _, _)                      => shortMs.millis
 	}
 
 	override val in: CloseableSourceStream[Msg] = CloseableSourceStream[Msg]()
