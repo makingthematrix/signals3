@@ -337,13 +337,13 @@ class ActorSystemSpec extends FunSuite {
     ref ! "1"
     assert(waitFor(received, 1), "warm-up message was not delivered")
 
-    a.tell(Pause, ActorPath.Remote("B", "onB"))
+    a.toRemote ! (Pause, ActorPath.Remote("B", "onB"))
     assert(waitFor(onB.isPausedSignal, true), "the peer's actor was not paused by a cross-system Pause")
     ref ! "2"
     Thread.sleep(300)
     assertEquals(received.currentValue, Some(1), "the paused actor processed a message")
 
-    a.tell(Unpause, ActorPath.Remote("B", "onB"))
+    a.toRemote ! (Unpause, ActorPath.Remote("B", "onB"))
     assert(waitFor(onB.isPausedSignal, false), "the peer's actor was not unpaused by a cross-system Unpause")
     assert(waitFor(received, 2), "the message sent while paused was not processed after Unpause")
 
@@ -538,7 +538,7 @@ class ActorSystemSpec extends FunSuite {
   test("RegisterSystem with a duplicate id returns InvalidId and keeps the original mapping") {
     val (a, b) = crossRegistered()
     val onA = newActor(a, "onA", { case (msg, _) => Some(s"A: $msg") })
-    expectFailureCF(a ? RegisterSystem(b), InvalidIdException(b.id))
+    expectFailureCF(a ? RegisterSystem(b.toRemote), InvalidIdException(b.id))
     awaitRef(a, "onA")
     resultCF(b ? AskForRef("onA", "A")) match {
       case Ref(ref) => expectSuccessCF(ref.asInstanceOf[ActorRef[String]] ? "1", "A: 1")
@@ -806,7 +806,7 @@ class ActorSystemSpec extends FunSuite {
   test("AskForSystem by tags returns the tagged system") {
     val a = newSystem[String]("A")
     val b = newSystem("B")
-    awaitCF(a ? RegisterSystem(b, Set(ActorTag.Stats)))
+    awaitCF(a ? RegisterSystem(b.toRemote, Set(ActorTag.Stats)))
     val ref = systemRef(a, AskForSystem(tags = Set(ActorTag.Stats)))
     assert(!ref.isLocal)
     assertEquals(ref.id, "B")
@@ -870,7 +870,7 @@ class ActorSystemSpec extends FunSuite {
     val capturer = new CapturingActor(a)
     capturer.initialize()
 
-    awaitCF(a ? RegisterSystem(b, Set(ActorTag.Stats)))
+    awaitCF(a ? RegisterSystem(b.toRemote, Set(ActorTag.Stats)))
     expectSuccessCF(a ? AskForSystemAsync(capturer, tags = Set(ActorTag.Stats)), Done)
     val ref = awaitCaptured(capturer)
     assert(!ref.isLocal)
@@ -910,7 +910,7 @@ class ActorSystemSpec extends FunSuite {
     val a = newSystem[String]("A")
     val b = newSystem[String]("B")
     val tags: Set[ActorTag] = Set(ActorTag.Stats)
-    awaitCF(a ? RegisterSystem(b, tags))
+    awaitCF(a ? RegisterSystem(b.toRemote, tags))
     assertEquals(systemRef(a, AskForSystem(tags = tags)).id, "B")
     expectSuccessCF(a ? UnregisterSystem("B"), Done)
     expectFailureCF(a ? AskForSystem(tags = tags), NoRefFound(tags))

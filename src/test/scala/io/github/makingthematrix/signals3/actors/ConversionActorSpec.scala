@@ -76,7 +76,7 @@ class ConversionActorSpec extends FunSuite {
   private def convertedBridge(): (ActorSystem[MsgA, Int], ActorSystem[MsgB, Int]) = {
     val a = newSystem[MsgA]("A")
     val b = newSystem[MsgB]("B")
-    awaitCF(a ? RegisterSystem(ConversionRemoteSystem[MsgA, MsgB](b)))
+    awaitCF(a ? RegisterSystem(ConversionRemoteSystem[MsgA, MsgB](b.toRemote)))
     (a, b)
   }
 
@@ -193,7 +193,7 @@ class ConversionActorSpec extends FunSuite {
   test("RemoteActorRef converts arguments through its tell and ask overloads") {
     val a = newSystem[Proto]("remoteA")
     val b = newSystem[Proto]("remoteB")
-    awaitCF(a ? RegisterSystem(b))
+    awaitCF(a ? RegisterSystem(b.toRemote))
     val got = Signal(Seq.empty[Proto])
     val echo: PF[Proto, Int] = { case (p, _) => got.mutate(_ :+ p); Some(Text(s"ok:$p")) }
     val onB = newActor(b, "onB", "default" -> echo)
@@ -250,7 +250,7 @@ class ConversionActorSpec extends FunSuite {
 
     val a = newSystem[Proto]("tagRemoteA")
     val b = newSystem[Proto]("tagRemoteB")
-    awaitCF(a ? RegisterSystem(b))
+    awaitCF(a ? RegisterSystem(b.toRemote))
     val onB = newActor(b, "onB", "default" -> echoInt)
     awaitRef(b, "onB")
     resultCF(a ? AskForRef("onB", "tagRemoteB")) match {
@@ -369,8 +369,8 @@ class ConversionActorSpec extends FunSuite {
   test("mirrored registrations convert in the opposite direction on the peer") {
     val a = newSystem[MsgA]("A")
     val b = newSystem[MsgB]("B")
-    awaitCF(a ? RegisterSystem(ConversionRemoteSystem[MsgA, MsgB](b)))
-    awaitCF(b ? RegisterSystem(ConversionRemoteSystem[MsgB, MsgA](a)))
+    awaitCF(a ? RegisterSystem(ConversionRemoteSystem[MsgA, MsgB](b.toRemote)))
+    awaitCF(b ? RegisterSystem(ConversionRemoteSystem[MsgB, MsgA](a.toRemote)))
     val got = Signal(Seq.empty[MsgA])
     val onA = newActor(a, "onA", "default" -> { case (m, _) => got.mutate(_ :+ m); Some(MsgA(m.x + 1)) })
     awaitRef(a, "onA")
@@ -382,7 +382,7 @@ class ConversionActorSpec extends FunSuite {
 
   test("system messages pass through the bridge unchanged") {
     val (a, b) = convertedBridge()
-    val convB = ConversionRemoteSystem[MsgA, MsgB](b)
+    val convB = ConversionRemoteSystem[MsgA, MsgB](b.toRemote)
     awaitCF(convB.ask(SystemMsg.Pause))
     waitFor(b.isPausedSignal, true)
     convB.tell(SystemMsg.Unpause)

@@ -3,7 +3,6 @@ package io.github.makingthematrix.signals3
 import io.github.makingthematrix.signals3.Stream
 import io.github.makingthematrix.signals3.priv.{SourceRecoverStream, SourceRecoverWithStream}
 
-import scala.annotation.targetName
 import scala.concurrent.ExecutionContext
 
 /** The usual entry point for publishing events.
@@ -27,8 +26,8 @@ class SourceStream[E] extends Stream[E] {
   override def publish(event: E): Unit = dispatch(event, None)
 
   /** An alias for the `publish` method with no explicit execution context. */
-  @targetName("bang")
-  inline def !(event: E): Unit = publish(event)
+  inline def tell(event: E): Unit = publish(event)
+  inline def !(event: E): Unit = tell(event)
 
   /** Publishes the event to all subscribers, using the given execution context.
     *
@@ -47,8 +46,8 @@ class SourceStream[E] extends Stream[E] {
     * wrapped in a future and executed asynchronously. If we use `!!` then for subscribers working in the same
     * execution context the call will be synchronous. This may be desirable in some cases, but please use with caution.
     */
-  @targetName("twobang")
-  inline def !!(event: E)(using ec: ExecutionContext): Unit = publish(event, ec)
+  inline def tell2(event: E)(using ec: ExecutionContext): Unit = publish(event, ec)
+  inline def !!(event: E)(using ec: ExecutionContext): Unit = tell2(event)
 
   override protected def recoverPriv(f: Throwable => Option[E]): SourceStream[E] = SourceRecoverStream(this, f)
   

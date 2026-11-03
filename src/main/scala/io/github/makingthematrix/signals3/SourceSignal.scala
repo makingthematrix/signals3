@@ -41,8 +41,8 @@ class SourceSignal[V](v: Option[V]) extends Signal[V](v) {
   override def publish(value: V): Unit = super.publish(value)
 
   /** An alias for the `publish` method. */
-  @targetName("bang")
-  inline def !(value: V): Unit = publish(value)
+  inline def tell(value: V): Unit = publish(value)
+  inline def !(value: V): Unit = tell(value)
 
   /** A version of the `publish` method which takes the implicit execution context for dispatching.
     *
@@ -51,8 +51,8 @@ class SourceSignal[V](v: Option[V]) extends Signal[V](v) {
     * wrapped in a future and executed asynchronously. If we use `!!` then for subscribers working in the same
     * execution context the call will be synchronous. This may be desirable in some cases, but please use with caution.
     */
-  @targetName("twobang")
-  inline def !!(value: V)(using ec: ExecutionContext): Unit = publish(value, ec)
+  inline def tell2(value: V)(using ec: ExecutionContext): Unit = publish(value, ec)
+  inline def !!(value: V)(using ec: ExecutionContext): Unit = tell2(value)
 
   /** Changes the value of the signal by applying the given function to the current value.
     * If the signal is empty, it will stay empty.

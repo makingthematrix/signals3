@@ -37,7 +37,7 @@ final class ActorBuilder[Msg, State] (
   private val executionContext: Option[ExecutionContext] = None,
   private val tags: Set[ActorTag] = Set.empty,
   private val parent: Option[ActorRef[Msg]] = None,
-  private val system: Option[RemoteSystem[Msg]] = None
+  private val system: Option[ActorSystem[Msg, ?]] = None
 ) {
 
   /**
@@ -272,13 +272,13 @@ final class ActorBuilder[Msg, State] (
   inline def withNoParentIf(p: => Boolean): ActorBuilder[Msg, State] =
     if (p) withNoParent() else this
 
-  inline def withSystem(system: RemoteSystem[Msg]): ActorBuilder[Msg, State] =
+  inline def withSystem(system: ActorSystem[Msg, ?]): ActorBuilder[Msg, State] =
     new ActorBuilder(id, state, behaviors, heartbeat, onInit, useSerialDispatch, executionContext, tags, parent, Some(system))
 
-  inline def withSystemIf(p: => Boolean, system: => RemoteSystem[Msg]): ActorBuilder[Msg, State] =
+  inline def withSystemIf(p: => Boolean, system: => ActorSystem[Msg, ?]): ActorBuilder[Msg, State] =
     if (p) withSystem(system) else this
 
-  inline def withSystemIf(p: => Boolean, system: => RemoteSystem[Msg], orElse: => RemoteSystem[Msg]): ActorBuilder[Msg, State] =
+  inline def withSystemIf(p: => Boolean, system: => ActorSystem[Msg, ?], orElse: => ActorSystem[Msg, ?]): ActorBuilder[Msg, State] =
     withSystem(if (p) system else orElse)
 
   inline def withNoSystem(): ActorBuilder[Msg, State] =

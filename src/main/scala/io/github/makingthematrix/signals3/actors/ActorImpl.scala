@@ -27,7 +27,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
                                             override protected val heartbeat: HeartBeatStrategy = Actor.defBeat,
                                             override val tags: Set[ActorTag] = Set.empty,
                                             override val parent: Option[ActorRef[Msg]] = None,
-                                            override val system: Option[RemoteSystem[Msg]] = None
+                                            override val system: Option[ActorSystem[Msg, ?]] = None
                                            )(using ec: ExecutionContext)
 	extends MutableActor[Msg, State] with Closeable with Pausable with Initializable {
 
@@ -169,7 +169,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		}
 	} else ActorIsClosed[Msg]
 
-	override def tell(msg: SystemMsg): Unit = if (!isClosed) { systemStream ! (msg, None)}
+	override def tell(msg: SystemMsg): Unit = if (!isClosed) { systemStream ! (msg, None) }
 
 	override def tell(msg: into[Msg], path: ActorPath, behId: String): Unit = if (!isClosed) {
 		import ActorPath.*

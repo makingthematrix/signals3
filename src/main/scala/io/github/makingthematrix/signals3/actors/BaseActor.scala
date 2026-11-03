@@ -15,7 +15,7 @@ abstract class BaseActor[Msg](override val id: String,
                               override protected val heartbeat: HeartBeatStrategy = Actor.defBeat,
                               override val tags: Set[ActorTag] = Set.empty,
                               override val parent: Option[ActorRef[Msg]] = None,
-                              override val system: Option[RemoteSystem[Msg]] = None
+                              override val system: Option[ActorSystem[Msg, ?]] = None
                              )(using ExecutionContext)
   extends ActorImpl[Msg, Unit](id, (), heartbeat, tags, parent, system) {
 	inline protected def reply(msg: Msg): Try[Option[Msg]] = Success(Some(msg))

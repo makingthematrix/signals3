@@ -107,11 +107,11 @@ object Utils {
 			case Failure(ex) => fail(ex.getMessage)
 		}
 
-	def newActor[Msg, State](sys: ActorSystem[Msg, State], id: String, defState: State, pf: PF[Msg, State])
+	def newActor[Msg, State](sys: ActorSystem[Msg, ?], id: String, defState: State, pf: PF[Msg, State])
 	            (using ExecutionContext): Actor[Msg, State] & Closeable & Pausable =
 		ActorBuilder[Msg, State](defState).withId(id).withBehavior("default", pf).withSystem(sys).build()
 
-	def newActor(sys: ActorSystem[String, Int], id: String, pf: PF[String, Int])
+	def newActor(sys: ActorSystem[String, ?], id: String, pf: PF[String, Int])
 	            (using ExecutionContext): Actor[String, Int] & Closeable & Pausable =
 		ActorBuilder[String, Int](0).withId(id).withBehavior("default", pf).withSystem(sys).build()
 		
@@ -151,8 +151,8 @@ object Utils {
 	(ActorSystem[String, Int] & Closeable & Pausable, ActorSystem[String, Int] & Closeable & Pausable) = {
 		val a = newSystem[String](systemAId)
 		val b = newSystem[String](systemBId)
-		awaitCF(a ? RegisterSystem(b))
-		awaitCF(b ? RegisterSystem(a))
+		awaitCF(a ? RegisterSystem(b.toRemote))
+		awaitCF(b ? RegisterSystem(a.toRemote))
 		(a, b)
 	}
 

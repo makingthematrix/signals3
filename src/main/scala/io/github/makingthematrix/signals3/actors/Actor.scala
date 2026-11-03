@@ -147,7 +147,7 @@ trait Actor[Msg, State] extends CanBeClosed with CanBePaused with CanBeInitializ
 	/**
 		* Returns the actor system that this actor belongs to, if any.
 		*/
-	def system: Option[RemoteSystem[Msg]]
+	def system: Option[ActorSystem[Msg, ?]]
 	
 	val tags: Set[ActorTag] = Set.empty
 }

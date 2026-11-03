@@ -194,7 +194,7 @@ class ActorSystemRemoteSpec extends FunSuite {
 
     close(a)
     val newA = newSystem[String]("A")
-    awaitCF(b ? RegisterSystem(newA))
+    awaitCF(b ? RegisterSystem(newA.toRemote))
     newActor(newA, "onA2", behavior)
     // no awaitRef here: the lookup must queue behind the pending Register
     resultCF(b ? AskForRef("onA2", "A")) match {
