@@ -274,6 +274,9 @@ actor.close()
 5. System messages are processed first (including AddBehavior, RemoveBehavior, Pause, Unpause, Close)
 6. Regular messages are processed in order, with behavior lookup and execution
 7. Promises completed with results or failures
+8. If the optional `onBeat` hook is set and the actor is not paused, it is called with the actor right after `processMessages()` returns
+
+**onBeat hook**: `protected var onBeat: Option[MutableActor[Msg, State] => Unit] = None`, declared on the `Actor` trait. `protected` (not `private`, which would be invisible to `ActorImpl`), so it is set only by subclasses such as `ActorImpl`/`BaseActor` extensions; there is no builder option or system message for it yet. It runs on the heartbeat thread after the *call* to `processMessages()`: in serial mode that is after processing finished, but in parallel mode processing runs in a Future, so `onBeat` may overlap with behaviors and must be thread-safe in that mode. It is skipped while the actor is paused.
 
 **Thread Safety**: The `isProcessing` AtomicBoolean ensures only one thread processes messages at a time. Queue operations use AtomicReference for thread-safe access.
 

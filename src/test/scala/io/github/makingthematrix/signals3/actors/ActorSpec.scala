@@ -2,7 +2,7 @@ package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, PF}
 import io.github.makingthematrix.signals3.Utils.*
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, EventContext, Signal, SourceStream, Stream, Threading}
+import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, EventContext, Signal, SourceSignal, SourceStream, Stream, Threading}
 import munit.FunSuite
 
 import scala.concurrent.duration.*
@@ -572,5 +572,46 @@ class ActorSpec extends FunSuite {
     val actor = create[Unit]({ case _ => None }, onInit = { _ => throw new RuntimeException("Init error") })
     assert(!actor.isInitialized)
     assert(actor.isClosed)
+  }
+
+  // an actor whose onBeat increments a counter in its state and reports it to `beats`
+  private class BeatingActor(beats: SourceSignal[Int])
+    extends ActorImpl[Unit, Int]("beating", 0, HeartBeatStrategy.Linear(20L)) {
+    onBeat = Some { actor =>
+      actor.state += 1
+      beats ! actor.state
+    }
+  }
+
+  test("onBeat is not called when not set") {
+    val actor = create[Unit, Int](0, { case _ => None })
+    waitFor(actor.isInitializedSignal, true)
+    Thread.sleep(100L)
+    assertEquals(actor.state, 0)
+    close(actor)
+  }
+
+  test("onBeat is called on every beat") {
+    val beats = Signal(0)
+    val actor = BeatingActor(beats)
+    actor.initialize()
+    assert(waitFor(beats.map(_ >= 5), true))
+    close(actor)
+  }
+
+  test("onBeat is not called while the actor is paused") {
+    val beats = Signal(0)
+    val actor = BeatingActor(beats)
+    actor.initialize()
+    assert(waitFor(beats.map(_ >= 2), true))
+    actor.pause()
+    waitFor(actor.isPausedSignal, true)
+    Thread.sleep(50L) // let a beat already in progress finish
+    val countWhenPaused = actor.state
+    Thread.sleep(200L)
+    assertEquals(actor.state, countWhenPaused)
+    actor.unpause()
+    assert(waitFor(beats.map(_ > countWhenPaused), true))
+    close(actor)
   }
 }

@@ -215,6 +215,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	private given AddBehaviorT: TypeTest[SystemMsg, AddBehavior[Msg, State]] = trusted[SystemMsg, AddBehavior[Msg, State]]
 	private given AddBehaviorPFT: TypeTest[SystemMsg, AddBehaviorPF[Msg, State]] = trusted[SystemMsg, AddBehaviorPF[Msg, State]]
 	private given SpawnT: TypeTest[SystemMsg, Spawn[Msg, State]] = trusted[SystemMsg, Spawn[Msg, State]]
+	private given SetOnBeatT: TypeTest[SystemMsg, SetOnBeat[Msg, State]] = trusted[SystemMsg, SetOnBeat[Msg, State]]
 
 	protected def processSysEntry(msg: SysEntry): Unit = msg match {
 		case (Pause, p)              => pause(); respond(p, Done)
@@ -225,6 +226,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		case (AddBehaviorPFT(ab), p) => addBehaviorPF(ab.pf); respond(p, Done)
 		case (SpawnT(data), p)       => spawn(data, p)
 		case (ActorClosed(id), p)    => removeChild(id, p)
+		case (SetOnBeatT(sob), p)    => onBeat = Some(sob.onBeat); respond(p, Done)
 		case (other, p)              => respond(p, unhandledMsg(other.toString))
 	}
 
@@ -290,7 +292,10 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	}
 
 	override protected def tryInitialize(): Unit = {
-		beat.foreach(_ => processMessages())
+		beat.foreach { case _ if !isPaused =>
+			processMessages()
+			onBeat.foreach(_(this))
+		}
 		system.foreach(_.tell(Register(this, tags)))
 	}
 

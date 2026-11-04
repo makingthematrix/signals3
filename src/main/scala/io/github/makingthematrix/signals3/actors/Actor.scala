@@ -135,6 +135,13 @@ trait Actor[Msg, State] extends CanBeClosed with CanBePaused with CanBeInitializ
 	def system: Option[ActorSystem[Msg, ?]]
 	
 	val tags: Set[ActorTag] = Set.empty
+
+	/**
+		* An optional function called on every beat of the actor's heartbeat, right after the awaiting messages
+		* are processed (or, in the parallel mode, right after their processing is scheduled).
+		* It is not called while the actor is paused. `None` by default.
+		*/
+	protected var onBeat: Option[MutableActor[Msg, State] => Unit] = None
 }
 
 object Actor {
