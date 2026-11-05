@@ -3,7 +3,6 @@
 ## Open
 
 ### To do
-- [ ] Make a Custom heartbeat strategy that takes a behavior
 - [ ] LogActor as a special subclass of ActorImpl
 - [ ] When an actor receives a reference of LogActor, it starts to gather logging and debugging data (not before)
 - [ ] PersistenceActor as a special subclass of ActorImpl
@@ -52,5 +51,6 @@
 - [x] Create a util package object for common methods in actors unit tests (spawn, close, etc)
 - [x] Merge heartbeat strategies Agitated and Reactive into a smarter Reactive
 - [x] Enable an actor to take a special behavior that's run on every heartbeat even if there are no messages 
+- [x] Make a Custom heartbeat strategy that takes a behavior
 
 

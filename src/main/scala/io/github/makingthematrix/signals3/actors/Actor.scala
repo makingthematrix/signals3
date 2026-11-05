@@ -1,12 +1,11 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy.Linear
 import io.github.makingthematrix.signals3.{CanBeClosed, CanBeInitialized, CanBePaused, CloseableFuture, DispatchQueue, SourceStream, Stream}
 
 import scala.Conversion.into
 import scala.annotation.static
 import scala.concurrent.ExecutionContext
-import scala.concurrent.duration.{DurationLong, FiniteDuration}
+import scala.concurrent.duration.DurationLong
 import scala.util.chaining.*
 import scala.util.{Failure, Success}
 
@@ -211,24 +210,13 @@ object Actor {
 	type Beh[Msg, State] = (id: String, pf: PF[Msg, State])
 
 	/**
-		* Represents a strategy for configuring the heartbeat of an actor.
-		*
-		* This enum defines various approaches to managing heartbeat intervals, suitable for
-		* different scenarios based on the requirements of responsiveness.
-		*/
-	enum HeartBeatStrategy(val timeout: FiniteDuration) {
-		case Linear(ms: Long, override val timeout: FiniteDuration = 5.second) extends HeartBeatStrategy(timeout)
-		case Reactive(shortMs: Long, longMs: Long, override val timeout: FiniteDuration = 5.second) extends HeartBeatStrategy(timeout)
-	}
-
-	/**
 		* Default heartbeat strategy for the actor.
 		*
 		* By default, the strategy is set to `HeartBeatStrategy.Linear` with a heartbeat interval of 100 milliseconds.
 		*
 		* @see [[HeartBeatStrategy]]
 		*/
-	val defBeat: HeartBeatStrategy = HeartBeatStrategy.Linear(100L)
+	val defBeat: HeartBeatStrategy = HeartBeatStrategy.Linear(100L.millis)
 
 	/**
 		* Creates a new actor instance with the given initial state, behavior, and heartbeat strategy.

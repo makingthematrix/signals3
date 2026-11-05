@@ -1,7 +1,8 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.actors.Actor.{Beh, HeartBeatStrategy, PF, defBeat}
+import io.github.makingthematrix.signals3.actors.Actor.{Beh, PF, defBeat}
 import io.github.makingthematrix.signals3.{Closeable, DispatchQueue, Pausable}
+import scala.concurrent.duration.*
 
 import scala.concurrent.ExecutionContext
 
@@ -150,7 +151,7 @@ final class ActorBuilder[Msg, State] (private val id: String,
    * @return A new builder with the linear heartbeat strategy
    */
   inline def withLinearHeartbeat(ms: Long): ActorBuilder[Msg, State] =
-    withHeartbeat(HeartBeatStrategy.Linear(ms))
+    withHeartbeat(HeartBeatStrategy.Linear(ms.millis))
 
   /**
    * Sets a reactived heartbeat strategy.
@@ -160,7 +161,7 @@ final class ActorBuilder[Msg, State] (private val id: String,
    * @return A new builder with the agitated heartbeat strategy
    */
   inline def withReactiveHeartbeat(shortMs: Long, longMs: Long): ActorBuilder[Msg, State] =
-    withHeartbeat(HeartBeatStrategy.Reactive(shortMs, longMs))
+    withHeartbeat(HeartBeatStrategy.Reactive(shortMs.millis, longMs.millis))
   
   /**
    * Sets the initialization callback.

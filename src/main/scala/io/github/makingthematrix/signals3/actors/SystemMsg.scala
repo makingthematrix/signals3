@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.actors.Actor.{Beh, HeartBeatStrategy, PF}
+import io.github.makingthematrix.signals3.actors.Actor.{Beh, PF}
 
 import scala.annotation.static
 import scala.concurrent.ExecutionContext

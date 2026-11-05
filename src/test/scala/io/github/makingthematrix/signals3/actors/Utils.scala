@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.actors
 
-import Actor.{HeartBeatStrategy, InvalidIdException, PF}
+import Actor.{InvalidIdException, PF}
 import SystemMsg.*
 import io.github.makingthematrix.signals3.{Closeable, Pausable}
 import io.github.makingthematrix.signals3.Utils.*

@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.actors.Actor.*
-import io.github.makingthematrix.signals3.actors.Actor.HeartBeatStrategy.*
+import io.github.makingthematrix.signals3.actors.HeartBeatStrategy.*
 import io.github.makingthematrix.signals3.generators.GeneratorStream
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, CloseableSourceStream, Initializable, Pausable, SerialDispatchQueue, SourceStream, Stream}
 
@@ -61,10 +61,15 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		if (systemMsgs.get() != EmptyQueue) systemMsgs.getAndSet(emptyQueue) else emptyQueue[SysEntry]
 
 	// a method used every consecutive beat to calculate the time for the next beat
-	private def interval(): FiniteDuration = heartbeat match {
-		case Linear(ms, _)                                => ms.millis
-		case Reactive(_, longMs, _) if msgs.get().isEmpty => longMs.millis
-		case Reactive(shortMs, _, _)                      => shortMs.millis
+	private def interval(): FiniteDuration = {
+		inline def hasMsg: Boolean = msgs.get().nonEmpty || systemMsgs.get().nonEmpty
+		heartbeat match {
+			case Linear(time, _)                => time
+			case Reactive(time, _, _) if hasMsg => time
+			case Reactive(_, time, _)           => time
+			case CustomLinear(interval, _)      => interval()
+			case CustomReactive(interval, _)    => interval(hasMsg)
+		}
 	}
 
 	override val in: CloseableSourceStream[Msg] = CloseableSourceStream[Msg]()
@@ -72,10 +77,14 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 
 	override val out: CloseableSourceStream[Msg] = CloseableSourceStream[Msg]()
 
-	private def updateReactiveBeat(): Unit = heartbeat match {
-		case Reactive(0L, _, _) => beat.force()
-		case Reactive(ms, _, _) => CloseableFuture.delayed(ms.millis) {beat.force()}
-		case _ =>
+	private def updateReactiveBeat(): Unit = {
+		inline def update(time: FiniteDuration): Unit =
+			if (time.length == 0L) beat.force() else CloseableFuture.delayed(time) { beat.force() }
+		heartbeat match {
+			case Reactive(time, _, _)        => update(time)
+			case CustomReactive(interval, _) => update(interval(true))
+			case _ =>
+		}
 	}
 
 	msgStream.foreach { msg => msgs.updateAndGet(_ :+ msg); updateReactiveBeat() }

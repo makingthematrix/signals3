@@ -1,10 +1,11 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, PF}
+import io.github.makingthematrix.signals3.actors.Actor.{Beh, PF}
 import io.github.makingthematrix.signals3.Utils.*
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, EventContext, Signal, SourceSignal, SourceStream, Stream, Threading}
 import munit.FunSuite
 
+import scala.concurrent.TimeoutException
 import scala.concurrent.duration.*
 import scala.util.Try
 
@@ -73,8 +74,8 @@ class ActorSpec extends FunSuite {
     val linearResponse = Signal(MyStr(""))
     val reactiveResponse = Signal(MyStr(""))
 
-    val linearActor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Linear: $msg"))}, HeartBeatStrategy.Linear(100))
-    val reactiveActor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Agitated: $msg"))}, HeartBeatStrategy.Reactive(50, 500))
+    val linearActor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Linear: $msg"))}, HeartBeatStrategy.Linear(100L.millis))
+    val reactiveActor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Agitated: $msg"))}, HeartBeatStrategy.Reactive(50L.millis, 500L.millis))
 
     (linearActor ? MyInt(1)).pipeTo(linearResponse)
     (reactiveActor ? MyInt(2)).pipeTo(reactiveResponse)
@@ -84,6 +85,178 @@ class ActorSpec extends FunSuite {
 
     close(linearActor)
     close(reactiveActor)
+  }
+
+  // ==================== Custom Heartbeat Strategies ====================
+
+  test("Reactive heartbeat idles at longMs and reacts at shortMs") {
+    val beats = Signal(0)
+    val actor = ActorBuilder[Unit, Int](0)
+      .withBehaviorPF { case _ => None }
+      .withHeartbeat(HeartBeatStrategy.Reactive(20.millis, 200.millis))
+      .withOnBeat { _ => beats.mutate(_ + 1) }
+      .build()
+    waitFor(actor.isInitializedSignal, true)
+    Thread.sleep(200L) // warm-up: let any initial beat burst settle
+    beats ! 0
+    Thread.sleep(600L)
+    // an idle Reactive actor beats at the long cadence (~200ms); a reverted inversion
+    // would busy-beat at shortMs (~20ms) producing many more beats
+    val count = beats.currentValue.getOrElse(0)
+    assert(count >= 1, s"idle Reactive produced no beats in 600ms")
+    assert(count <= 8, s"idle Reactive produced $count beats in 600ms; expected the long (200ms) cadence")
+    close(actor)
+  }
+
+  test("CustomLinear heartbeat calls the interval function for each beat") {
+    val calls = Signal(0)
+    val beats = Signal(0)
+    val actor = ActorBuilder[Unit, Int](0)
+      .withBehaviorPF { case _ => None }
+      .withHeartbeat(HeartBeatStrategy.CustomLinear { () => calls.mutate(_ + 1); 20.millis })
+      .withOnBeat { _ => beats.mutate(_ + 1) }
+      .build()
+    waitFor(actor.isInitializedSignal, true)
+    assert(waitFor(beats.map(_ >= 3), true))
+    assert(waitFor(calls.map(_ >= 3), true))
+    close(actor)
+  }
+
+  test("CustomLinear can change the interval dynamically at runtime") {
+    val beats = Signal(0)
+    @volatile var fast = true
+    val actor = ActorBuilder[Unit, Int](0)
+      .withBehaviorPF { case _ => None }
+      .withHeartbeat(HeartBeatStrategy.CustomLinear { () => if fast then 20.millis else 300.millis })
+      .withOnBeat { _ => beats.mutate(_ + 1) }
+      .build()
+    waitFor(actor.isInitializedSignal, true)
+    assert(waitFor(beats.map(_ >= 3), true))
+    fast = false
+    val countWhenSlowed = beats.currentValue.getOrElse(0)
+    Thread.sleep(400L)
+    val countAfter = beats.currentValue.getOrElse(0)
+    val slowWindowBeats = countAfter - countWhenSlowed
+    // if the change was not picked up, the fast cadence would add ~20 beats in 400ms
+    assert(slowWindowBeats <= 3, s"CustomLinear added $slowWindowBeats beats in 400ms after slowing down the interval")
+    assert(slowWindowBeats >= 1, s"CustomLinear stopped beating after the interval change")
+    close(actor)
+  }
+
+  test("a short heartbeat timeout fails a long-running behavior") {
+    val slowBehavior: PF[Int, Unit] = { case (msg, _) => Thread.sleep(500L); Some(msg + 1) }
+    val shortTimeout = ActorBuilder[Int]()
+      .withBehaviorPF(slowBehavior)
+      .withHeartbeat(HeartBeatStrategy.CustomLinear(() => 20.millis, 100.millis))
+      .build()
+    intercept[TimeoutException](resultCF(shortTimeout ? 1))
+    close(shortTimeout)
+
+    val longTimeout = ActorBuilder[Int]()
+      .withBehaviorPF(slowBehavior)
+      .withHeartbeat(HeartBeatStrategy.CustomLinear(() => 20.millis, 1500.millis))
+      .build()
+    val response = resultCF(longTimeout ? 1)(using 2.seconds)
+    assertEquals(response, 2)
+    close(longTimeout)
+  }
+
+  test("CustomReactive interval receives the current hasMsg state") {
+    val flags = Signal(Seq.empty[Boolean])
+    val actor = ActorBuilder[Int, Int](0)
+      .withBehaviorPF { case (msg, _) => Some(msg + 1) }
+      .withHeartbeat(HeartBeatStrategy.CustomReactive { hasMsg =>
+        flags.mutate(_ :+ hasMsg)
+        20.millis
+      })
+      .build()
+    waitFor(actor.isInitializedSignal, true)
+    assertEquals(resultCF(actor ? 1), 2)
+    assert(waitFor(flags.map(_.contains(false)), true)) // idle beats report an empty queue
+    assert(waitFor(flags.map(_.contains(true)), true))  // an incoming message reports a non-empty queue
+    close(actor)
+  }
+
+  test("CustomReactive adapts its cadence to hasMsg") {
+    val beats = Signal(0)
+    val actor = ActorBuilder[Int, Int](0)
+      .withBehaviorPF { case (msg, _) => Some(msg + 1) }
+      .withHeartbeat(HeartBeatStrategy.CustomReactive { hasMsg => if hasMsg then 20.millis else 250.millis })
+      .withOnBeat { _ => beats.mutate(_ + 1) }
+      .build()
+    waitFor(actor.isInitializedSignal, true)
+    Thread.sleep(200L) // warm-up: let any initial beat burst settle
+    beats ! 0
+    Thread.sleep(600L)
+    val idleBeats = beats.currentValue.getOrElse(0)
+    assert(idleBeats <= 8, s"idle CustomReactive produced $idleBeats beats in 600ms; expected the slow (250ms) cadence")
+    // a message must be answered on the fast cadence, well within the idle interval
+    val fastResponse = resultCF(actor ? 1)(using 300.millis)
+    assertEquals(fastResponse, 2)
+    close(actor)
+  }
+
+  test("CustomReactive with zero interval forces an immediate beat") {
+    val actor = ActorBuilder[Int, Int](0)
+      .withBehaviorPF { case (msg, _) => Some(msg + 1) }
+      .withHeartbeat(HeartBeatStrategy.CustomReactive { hasMsg => if hasMsg then 0.millis else 200.millis })
+      .build()
+    waitFor(actor.isInitializedSignal, true)
+    Thread.sleep(150L) // settle on the slow idle cadence
+    val start = System.nanoTime()
+    val forcedResponse = resultCF(actor ? 1)(using 300.millis)
+    assertEquals(forcedResponse, 2)
+    val elapsedMs = (System.nanoTime() - start) / 1000000L
+    // the zero interval forces a beat at once; waiting for the next scheduled 200ms beat would take much longer
+    assert(elapsedMs < 150L, s"the message took $elapsedMs ms; expected an immediate forced beat")
+    close(actor)
+  }
+
+  test("HeartBeatStrategy subclasses are exhaustively matchable and equal as case classes") {
+    // sealed matching: adding a new subclass must be reflected here (the match stays exhaustive only for these four)
+    def describe(s: HeartBeatStrategy): String = s match {
+      case HeartBeatStrategy.Linear(_, _)          => "linear"
+      case HeartBeatStrategy.Reactive(_, _, _)     => "reactive"
+      case HeartBeatStrategy.CustomLinear(_, _)    => "custom-linear"
+      case HeartBeatStrategy.CustomReactive(_, _)   => "custom-reactive"
+    }
+    assertEquals(describe(HeartBeatStrategy.Linear(10.millis)), "linear")
+    assertEquals(describe(HeartBeatStrategy.Reactive(10.millis, 20.millis)), "reactive")
+    assertEquals(describe(HeartBeatStrategy.CustomLinear(() => 10.millis)), "custom-linear")
+    assertEquals(describe(HeartBeatStrategy.CustomReactive(_ => 10.millis)), "custom-reactive")
+    assertEquals(HeartBeatStrategy.Linear(10.millis), HeartBeatStrategy.Linear(10.millis))
+    assertEquals(Actor.defBeat, HeartBeatStrategy.Linear(100.millis))
+  }
+
+  test("ReactiveTrait marks reactive strategies; timeout defaults to 5 seconds") {
+    assert(HeartBeatStrategy.Reactive(10.millis, 20.millis).isInstanceOf[HeartBeatStrategy.ReactiveTrait])
+    assert(HeartBeatStrategy.CustomReactive(_ => 10.millis).isInstanceOf[HeartBeatStrategy.ReactiveTrait])
+    assert(!HeartBeatStrategy.Linear(10.millis).isInstanceOf[HeartBeatStrategy.ReactiveTrait])
+    assert(!HeartBeatStrategy.CustomLinear(() => 10.millis).isInstanceOf[HeartBeatStrategy.ReactiveTrait])
+    assertEquals(HeartBeatStrategy.CustomLinear(() => 10.millis).timeout, 5.seconds)
+    assertEquals(HeartBeatStrategy.CustomReactive(_ => 10.millis).timeout, 5.seconds)
+    assertEquals(HeartBeatStrategy.CustomLinear(() => 10.millis, 1.second).timeout, 1.second)
+  }
+
+  test("Spawn with a custom heartbeat strategy") {
+    val beats = Signal(0)
+    val parent = create[Unit, Int](0, { case _ => None })
+    val child = spawn[Unit, Int](parent) {
+      SystemMsg.Spawn(actorId = "custom-beat-child", state = Some(0),
+        heartbeat = Some(HeartBeatStrategy.CustomLinear(() => 20.millis)),
+        onBeat = { _ => beats.mutate(_ + 1) })
+    }
+    assert(waitFor(beats.map(_ >= 3), true))
+    close(child)
+    close(parent)
+  }
+
+  test("Actor.apply accepts a custom heartbeat strategy") {
+    val behavior: Beh[Int, Unit] = "beh" -> { case (msg: Int, _) => Some(msg + 1) }
+    val actor = Actor(behavior, HeartBeatStrategy.CustomLinear(() => 20.millis))
+      .asInstanceOf[Actor[Int, Unit] & Closeable]
+    assertEquals(resultCF(actor ? 1), 2)
+    close(actor)
   }
 
   // ==================== Behavior Modification ====================
@@ -576,7 +749,7 @@ class ActorSpec extends FunSuite {
 
   // an actor whose onBeat increments a counter in its state and reports it to `beats`
   private class BeatingActor(beats: SourceSignal[Int])
-    extends ActorImpl[Unit, Int]("beating", 0, HeartBeatStrategy.Linear(20L)) {
+    extends ActorImpl[Unit, Int]("beating", 0, HeartBeatStrategy.Linear(20L.millis)) {
     onBeat = { actor =>
       actor.state += 1
       beats ! actor.state
@@ -727,7 +900,7 @@ class ActorSpec extends FunSuite {
     val parent = create[Unit, Int](0, { case _ => None })
     val child = spawn[Unit, Int](parent) {
       SystemMsg.Spawn(actorId = "beating-child", state = Some(0),
-        heartbeat = Some(HeartBeatStrategy.Linear(20L)),
+        heartbeat = Some(HeartBeatStrategy.Linear(20L.millis)),
         onBeat = { _ => beats.mutate(_ + 1) })
     }
     assert(waitFor(beats.map(_ >= 3), true))

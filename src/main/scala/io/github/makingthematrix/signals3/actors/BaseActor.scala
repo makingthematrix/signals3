@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.actors.Actor.{HeartBeatStrategy, InvalidIdException, UnhandledMsgException}
+import io.github.makingthematrix.signals3.actors.Actor.{InvalidIdException, UnhandledMsgException}
 
 import scala.concurrent.{ExecutionContext, Promise}
 import scala.util.{Failure, Success, Try}
