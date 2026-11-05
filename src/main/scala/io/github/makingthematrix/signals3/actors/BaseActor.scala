@@ -17,7 +17,7 @@ abstract class BaseActor[Msg](override val id: String,
                               override val parent: Option[ActorRef[Msg]] = None,
                               override val system: Option[ActorSystem[Msg, ?]] = None
                              )(using ExecutionContext)
-  extends ActorImpl[Msg, Unit](id, (), heartbeat, tags, parent, system) {
+  extends ActorImpl[Msg, Unit](id, (), heartbeat, tags, Actor.DoNothing, parent, system) {
 	inline protected def reply(msg: Msg): Try[Option[Msg]] = Success(Some(msg))
 	inline protected def noResponse: Try[Option[Msg]] = Actor.NoResponse[Msg]
 	inline protected def fail(error: String): Try[Option[Msg]] = Failure(new IllegalStateException(error))

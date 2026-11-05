@@ -194,7 +194,7 @@ class ActorIntegrationSpec extends FunSuite {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
     val flag = Signal(false)
     var receivedChild: Option[MutableActor[String, Unit]] = None
-    val child = spawn[String, Unit](parent)(Spawn(onInit = Some { c =>
+    val child = spawn[String, Unit](parent)(Spawn(onInit = { c =>
       receivedChild = Some(c)
       flag ! true
     }))
@@ -281,9 +281,9 @@ class ActorIntegrationSpec extends FunSuite {
     val inited = Signal(0)
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
     var c1: Actor[String, Unit] & CanBeClosed = null
-    spawn[String, Unit](parent)(Spawn(onInit = Some { c => c1 = c; inited.mutate(n => n + 1) }))
+    spawn[String, Unit](parent)(Spawn(onInit = { c => c1 = c; inited.mutate(n => n + 1) }))
     var c2: Actor[String, Unit] & CanBeClosed = null
-    spawn[String, Unit](parent)(Spawn(onInit = Some { c => c2 = c; inited.mutate(n => n + 1) }))
+    spawn[String, Unit](parent)(Spawn(onInit = { c => c2 = c; inited.mutate(n => n + 1) }))
 
     waitFor(inited, 2)
 
@@ -296,9 +296,9 @@ class ActorIntegrationSpec extends FunSuite {
     val inited = Signal(0)
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
     var child: Actor[String, Unit] & CanBeClosed = null
-    spawn[String, Unit](parent)(Spawn(onInit = Some { c => child = c; inited.mutate(n => n + 1) }))
+    spawn[String, Unit](parent)(Spawn(onInit = { c => child = c; inited.mutate(n => n + 1) }))
     var grandchild: Actor[String, Unit] & CanBeClosed = null
-    spawn[String, Unit](child)(Spawn(onInit = Some { c => grandchild = c; inited.mutate(n => n + 1) }))
+    spawn[String, Unit](child)(Spawn(onInit = { c => grandchild = c; inited.mutate(n => n + 1) }))
 
     waitFor(inited, 2)
 
@@ -312,9 +312,9 @@ class ActorIntegrationSpec extends FunSuite {
 
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
     var c1: Actor[String, Unit] & CanBeClosed = null
-    spawn[String, Unit](parent)(Spawn(onInit = Some { c => c1 = c; inited.mutate(n => n + 1) }))
+    spawn[String, Unit](parent)(Spawn(onInit = { c => c1 = c; inited.mutate(n => n + 1) }))
     var c2: Actor[String, Unit] & CanBeClosed = null
-    spawn[String, Unit](parent)(Spawn(onInit = Some { c => c2 = c; inited.mutate(n => n + 1) }))
+    spawn[String, Unit](parent)(Spawn(onInit = { c => c2 = c; inited.mutate(n => n + 1) }))
 
     waitFor(inited, 2)
 
@@ -455,7 +455,7 @@ class ActorIntegrationSpec extends FunSuite {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
     val flag = Signal(false)
     var ref: Option[MutableActor[String, Unit]] = None
-    parent ! Spawn[String, Unit](onInit = Some { c =>
+    parent ! Spawn[String, Unit](onInit = { c =>
       ref = Some(c)
       flag ! true
     })

@@ -26,7 +26,7 @@ object Utils {
 
 	/** An actor that captures the Ref delivered by AskForRefAsync in a system message. */
 	class CapturingActor[Msg](sys: ActorSystem[Msg, Int])(using ExecutionContext)
-		extends ActorImpl[Msg, Int]("capturing", 0, Actor.defBeat, Set.empty, None, Some(sys)){
+		extends ActorImpl[Msg, Int]("capturing", 0, Actor.defBeat, Set.empty, Actor.DoNothing, None, Some(sys)){
 		@volatile var receivedRef: Option[ActorRef[Msg]] = None
 		@volatile var receivedCount: Int = 0
 

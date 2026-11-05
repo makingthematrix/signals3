@@ -8,6 +8,7 @@ import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, Closeable
 import java.util.UUID
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.Conversion.into
+import scala.annotation.static
 import scala.collection.mutable
 import scala.collection.mutable.Queue as MQueue
 import scala.concurrent.duration.{DurationLong, FiniteDuration}
@@ -26,10 +27,12 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
                                             protected var _state: State,
                                             protected val heartbeat: HeartBeatStrategy = Actor.defBeat,
                                             override val tags: Set[ActorTag] = Set.empty,
+                                            protected var onBeat: MutableActor[Msg, State] => Unit = Actor.DoNothing,
                                             override val parent: Option[ActorRef[Msg]] = None,
                                             override val system: Option[ActorSystem[Msg, ?]] = None
                                            )(using ec: ExecutionContext)
 	extends MutableActor[Msg, State] with Closeable with Pausable with Initializable {
+	import ActorImpl.*
 
 	protected type MsgEntry = (msg: Msg, rsp: Option[Promise[Msg]], behId: String)
 	protected type SysEntry = (msg: SystemMsg, rsp: Option[Promise[SystemMsg]])
@@ -37,11 +40,11 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	protected var children: Map[String, ActorRef[Msg]] = Map.empty
 
 	// a mutable queue of messages incoming from other actors and other sources; see the ! operator.
-	private val msgs = new AtomicReference[MQueue[MsgEntry]](MQueue.empty)
+	private val msgs = new AtomicReference[MQueue[MsgEntry]](emptyQueue)
 	// a stream that serves as a single entry for the msgs list to prevent concurrent modification; see the "!" operator.
 	protected val msgStream: SourceStream[MsgEntry] = Stream[MsgEntry]()
 	// a mutable queue of system messages incoming from the controller; see the ! operator.
-	private val systemMsgs = new AtomicReference[MQueue[SysEntry]](MQueue.empty)
+	private val systemMsgs = new AtomicReference[MQueue[SysEntry]](emptyQueue)
 	// a stream that serves as a single entry for the systemMsgs list to prevent concurrent modification; see the "! operator.
 	protected val systemStream: SourceStream[SysEntry] = Stream[SysEntry]()
 	// a variable list of behaviors; a behavior is a partial function that tries to process an incoming message; see the processMessages method.
@@ -52,13 +55,10 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	
 	override val isSerial: Boolean = ec.isInstanceOf[SerialDispatchQueue]
 
-	inline private def enqueue(entry: MsgEntry): Unit = msgs.updateAndGet(_ :+ entry)
-
-	inline private def enqueue(entry: SysEntry): Unit = systemMsgs.updateAndGet(_ :+ entry)
-
-	inline private def flushMsgEntries(): MQueue[MsgEntry] = msgs.getAndSet(MQueue.empty)
-
-	inline private def flushSystemEntries(): MQueue[SysEntry] = systemMsgs.getAndSet(MQueue.empty)
+	inline private def flushMsgEntries(): MQueue[MsgEntry] =
+		if (msgs.get() != EmptyQueue) msgs.getAndSet(emptyQueue) else emptyQueue[MsgEntry]
+	inline private def flushSystemEntries(): MQueue[SysEntry] =
+		if (systemMsgs.get() != EmptyQueue) systemMsgs.getAndSet(emptyQueue) else emptyQueue[SysEntry]
 
 	// a method used every consecutive beat to calculate the time for the next beat
 	private def interval(): FiniteDuration = heartbeat match {
@@ -72,23 +72,14 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 
 	override val out: CloseableSourceStream[Msg] = CloseableSourceStream[Msg]()
 
-	msgStream.foreach { msg =>
-		enqueue(msg)
-		heartbeat match {
-			case Reactive(0L, _, _) => beat.force()
-			case Reactive(ms, _, _) => CloseableFuture.delayed(ms.millis) { beat.force() }
-			case _ =>
-		}
+	private def updateReactiveBeat(): Unit = heartbeat match {
+		case Reactive(0L, _, _) => beat.force()
+		case Reactive(ms, _, _) => CloseableFuture.delayed(ms.millis) {beat.force()}
+		case _ =>
 	}
 
-	systemStream.foreach { msg =>
-		enqueue(msg)
-		heartbeat match {
-			case Reactive(0L, _, _) => beat.force()
-			case Reactive(ms, _, _) => CloseableFuture.delayed(ms.millis) { beat.force() }
-			case _ =>
-		}
-	}
+	msgStream.foreach { msg => msgs.updateAndGet(_ :+ msg); updateReactiveBeat() }
+	systemStream.foreach { msg => systemMsgs.updateAndGet(_ :+ msg); updateReactiveBeat() }
 
 	/**
 		* Adds a new behavior to the actor. If a behavior with the same id already exists, it will be replaced.
@@ -226,7 +217,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		case (AddBehaviorPFT(ab), p) => addBehaviorPF(ab.pf); respond(p, Done)
 		case (SpawnT(data), p)       => spawn(data, p)
 		case (ActorClosed(id), p)    => removeChild(id, p)
-		case (SetOnBeatT(sob), p)    => onBeat = Some(sob.onBeat); respond(p, Done)
+		case (SetOnBeatT(sob), p)    => onBeat = sob.onBeat; respond(p, Done)
 		case (other, p)              => respond(p, unhandledMsg(other.toString))
 	}
 
@@ -272,7 +263,8 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 				.withTags(tags + ActorTag.Child)
 				.withParent(this)
 				.withSystemIf(system.nonEmpty, system.get)
-				.withOnInitIf(data.onInit.nonEmpty, data.onInit.get)
+				.withOnInit(data.onInit)
+				.withOnBeat(data.onBeat)
 			val b2 = data.executionContext.fold(b1)(b1.withParallelDispatch)
 			val b3 = if (data.useSerialDispatch) b2.withSerialDispatch() else b2
 			val child = LocalActorRef(b3.build())
@@ -292,9 +284,9 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	}
 
 	override protected def tryInitialize(): Unit = {
-		beat.foreach { case _ if !isPaused =>
+		beat.foreach { _ =>
 			processMessages()
-			onBeat.foreach(_(this))
+			if (!isPaused && onBeat != Actor.DoNothing) Try(onBeat(this))
 		}
 		system.foreach(_.tell(Register(this, tags)))
 	}
@@ -304,11 +296,9 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		close()
 	}
 
-	override protected def onPauseFailed(t: Throwable): Unit =
-		println(s"Failed to pause actor $id: ${t.getMessage}")
+	override protected def onPauseFailed(t: Throwable): Unit = println(s"Failed to pause actor $id: ${t.getMessage}")
 
-	override protected def onCloseFailed(t: Throwable): Unit =
-		println(s"Failed to close actor $id: ${t.getMessage}")
+	override protected def onCloseFailed(t: Throwable): Unit = println(s"Failed to close actor $id: ${t.getMessage}")
 
 	/**
 		* Closes the actor and performs necessary checks to ensure all messages are completed before finalizing the closure.
@@ -330,14 +320,17 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		beat.closeAndCheck()
 		flushMsgEntries().collect { case (_, Some(p), _) => p }.foreach(_.tryFailure(actorIsClosed))
 		flushSystemEntries().collect { case (_, Some(p)) => p }.foreach(_.tryFailure(actorIsClosed))
-		parent.foreach(p => p ! ActorClosed(id))
-		system.foreach(s => s.tell(ActorClosed(id)))
+		parent.foreach(_ ! ActorClosed(id))
+		system.foreach(_ ! ActorClosed(id))
 		beat.isClosedSignal.onTrue.map(_ => ActorClosed(id))
 	}
 
 	override def state: State = _state
 
-	override def state_=(newState: State): Unit = {
-		_state = newState
-	}
+	override def state_=(newState: State): Unit = { _state = newState }
+}
+
+object ActorImpl {
+	@static private val EmptyQueue = MQueue.empty[Nothing]
+	inline def emptyQueue[T]: MQueue[T] = EmptyQueue.asInstanceOf[MQueue[T]]
 }

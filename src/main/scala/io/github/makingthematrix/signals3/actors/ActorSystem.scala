@@ -178,7 +178,8 @@ final class ActorSystem[Msg, State] private (
 				.withTags(tags + ActorTag.Child)
 				.withParent(this)
 				.withSystem(this)
-				.withOnInitIf(data.onInit.nonEmpty, data.onInit.get)
+				.withOnInit(data.onInit)
+				.withOnBeat(data.onBeat)
 			val b2 = data.executionContext.fold(b1)(b1.withParallelDispatch)
 			val b3 = if (data.useSerialDispatch) b2.withSerialDispatch() else b2
 			val child = LocalActorRef(b3.build())

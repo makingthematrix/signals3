@@ -3,7 +3,6 @@
 ## Open
 
 ### To do
-- [ ] Enable an actor to take a special behavior that's run on every heartbeat even if there are no messages 
 - [ ] Make a Custom heartbeat strategy that takes a behavior
 - [ ] LogActor as a special subclass of ActorImpl
 - [ ] When an actor receives a reference of LogActor, it starts to gather logging and debugging data (not before)
@@ -52,5 +51,6 @@
 - [x] Actors should carry tags (strings), and the actor system can get requests to connect an actor with any other actor that has a given tag
 - [x] Create a util package object for common methods in actors unit tests (spawn, close, etc)
 - [x] Merge heartbeat strategies Agitated and Reactive into a smarter Reactive
+- [x] Enable an actor to take a special behavior that's run on every heartbeat even if there are no messages 
 
 

@@ -577,7 +577,7 @@ class ActorSpec extends FunSuite {
   // an actor whose onBeat increments a counter in its state and reports it to `beats`
   private class BeatingActor(beats: SourceSignal[Int])
     extends ActorImpl[Unit, Int]("beating", 0, HeartBeatStrategy.Linear(20L)) {
-    onBeat = Some { actor =>
+    onBeat = { actor =>
       actor.state += 1
       beats ! actor.state
     }
@@ -613,5 +613,157 @@ class ActorSpec extends FunSuite {
     actor.unpause()
     assert(waitFor(beats.map(_ > countWhenPaused), true))
     close(actor)
+  }
+
+  test("onBeat works with a serial dispatch queue") {
+    val beats = Signal(0)
+    val actor = ActorBuilder[Unit, Int](0)
+      .withBehaviorPF { case _ => None }
+      .withOnBeat { _ => beats.mutate(_ + 1) }
+      .withSerialDispatch()
+      .build()
+    waitFor(actor.isInitializedSignal, true)
+    assert(waitFor(beats.map(_ >= 3), true))
+    close(actor)
+  }
+
+  test("onBeat can send messages via out stream") {
+    val actor = ActorBuilder[String]()
+      .withBehaviorPF { case (msg, _) => Some(s"Processed: $msg") }
+      .withLinearHeartbeat(20L)
+      .withOnBeat { a => a.out ! "beat" }
+      .build()
+    val beats = Signal(Seq.empty[String])
+    actor.out.foreach { msg => beats.mutate(_ :+ msg) }
+    waitFor(actor.isInitializedSignal, true)
+    assert(waitFor(beats.map(_.size >= 3), true))
+    close(actor)
+  }
+
+  // ==================== SystemMsg.SetOnBeat ====================
+
+  test("SetOnBeat via ? responds with Done") {
+    val beats = Signal(0)
+    val actor = create[Unit, Int](0, { case _ => None })
+    val cf = actor ? SystemMsg.SetOnBeat[Unit, Int] { _ => beats.mutate(_ + 1) }
+    assertEquals(resultCF(cf), SystemMsg.Done)
+    assert(waitFor(beats.map(_ >= 2), true))
+    close(actor)
+  }
+
+  test("SetOnBeat via ! applies the callback") {
+    val beats = Signal(0)
+    val actor = create[Unit, Int](0, { case _ => None })
+    actor ! SystemMsg.SetOnBeat[Unit, Int] { _ => beats.mutate(_ + 1) }
+    assert(waitFor(beats.map(_ >= 2), true))
+    close(actor)
+  }
+
+  test("SetOnBeat replaces the previous callback") {
+    val beats1 = Signal(0)
+    val beats2 = Signal(0)
+    val actor = ActorBuilder[Unit, Int](0)
+      .withBehaviorPF { case _ => None }
+      .withLinearHeartbeat(20L)
+      .withOnBeat { _ => beats1.mutate(_ + 1) }
+      .build()
+    assert(waitFor(beats1.map(_ >= 2), true))
+    val cf = actor ? SystemMsg.SetOnBeat[Unit, Int] { _ => beats2.mutate(_ + 1) }
+    assertEquals(resultCF(cf), SystemMsg.Done)
+    val count1 = beats1.currentValue.getOrElse(0)
+    assert(waitFor(beats2.map(_ >= 2), true)) // at least two beats since the swap
+    Thread.sleep(60L) // long enough that a still-attached old callback would have fired
+    assertEquals(beats1.currentValue.getOrElse(0), count1)
+    close(actor)
+  }
+
+  test("SetOnBeat sent while paused takes effect after unpause") {
+    val beats1 = Signal(0)
+    val beats2 = Signal(0)
+    val actor = ActorBuilder[Unit, Int](0)
+      .withBehaviorPF { case _ => None }
+      .withLinearHeartbeat(20L)
+      .withOnBeat { _ => beats1.mutate(_ + 1) }
+      .build()
+    assert(waitFor(beats1.map(_ >= 2), true))
+    actor ! SystemMsg.Pause
+    waitFor(actor.isPausedSignal, true)
+    Thread.sleep(50L) // let a beat already in progress finish
+    val countWhenPaused = beats1.currentValue.getOrElse(0)
+    // system messages are processed even while the actor is paused
+    val cf = actor ? SystemMsg.SetOnBeat[Unit, Int] { _ => beats2.mutate(_ + 1) }
+    assertEquals(resultCF(cf), SystemMsg.Done)
+    // neither the old nor the new callback runs while paused
+    Thread.sleep(100L)
+    assertEquals(beats1.currentValue.getOrElse(0), countWhenPaused)
+    assertEquals(beats2.currentValue.getOrElse(0), 0)
+    assertEquals(resultCF(actor ? SystemMsg.Unpause), SystemMsg.Done)
+    // after unpause only the new callback fires
+    assert(waitFor(beats2.map(_ >= 2), true))
+    assertEquals(beats1.currentValue.getOrElse(0), countWhenPaused)
+    close(actor)
+  }
+
+  test("SetOnBeat with Actor.DoNothing disables the callback") {
+    val beats = Signal(0)
+    val actor = ActorBuilder[Unit, Int](0)
+      .withBehaviorPF { case _ => None }
+      .withLinearHeartbeat(20L)
+      .withOnBeat { _ => beats.mutate(_ + 1) }
+      .build()
+    assert(waitFor(beats.map(_ >= 2), true))
+    val cf = actor ? SystemMsg.SetOnBeat[Unit, Int](Actor.DoNothing)
+    assertEquals(resultCF(cf), SystemMsg.Done)
+    val count = beats.currentValue.getOrElse(0)
+    Thread.sleep(100L) // several beats - the callback must stay disabled
+    assertEquals(beats.currentValue.getOrElse(0), count)
+    close(actor)
+  }
+
+  // ==================== Spawn and onBeat ====================
+
+  test("Spawn with onBeat creates a child that calls the callback") {
+    val beats = Signal(0)
+    val parent = create[Unit, Int](0, { case _ => None })
+    val child = spawn[Unit, Int](parent) {
+      SystemMsg.Spawn(actorId = "beating-child", state = Some(0),
+        heartbeat = Some(HeartBeatStrategy.Linear(20L)),
+        onBeat = { _ => beats.mutate(_ + 1) })
+    }
+    assert(waitFor(beats.map(_ >= 3), true))
+    close(child)
+    close(parent)
+  }
+
+  test("Spawn without onBeat; the child can get one later via SetOnBeat") {
+    val beats = Signal(0)
+    val parent = create[Unit, Int](0, { case _ => None })
+    val child = spawn[Unit, Int](parent) {
+      SystemMsg.Spawn(actorId = "boring-child", state = Some(0))
+    }
+    val cf = child ? SystemMsg.SetOnBeat[Unit, Int] { _ => beats.mutate(_ + 1) }
+    assertEquals(resultCF(cf), SystemMsg.Done)
+    assert(waitFor(beats.map(_ >= 2), true))
+    close(child)
+    close(parent)
+  }
+
+  test("a spawned child does not inherit the parent's onBeat") {
+    val beatenIds = Signal(Set.empty[String])
+    val parent = ActorBuilder[Unit, Int](0)
+      .withBehaviorPF { case _ => None }
+      .withLinearHeartbeat(20L)
+      .withOnBeat { a => beatenIds.mutate(_ + a.id) }
+      .build()
+    val child = spawn[Unit, Int](parent) {
+      SystemMsg.Spawn(actorId = "child-no-onbeat", state = Some(0))
+    }
+    assert(waitFor(beatenIds.map(_.nonEmpty), true))
+    Thread.sleep(300L) // at 20ms beats an inherited callback would have fired multiple times
+    val ids = beatenIds.currentValue.getOrElse(Set.empty)
+    assert(ids.contains(parent.id))
+    assert(!ids.contains("child-no-onbeat"))
+    close(child)
+    close(parent)
   }
 }

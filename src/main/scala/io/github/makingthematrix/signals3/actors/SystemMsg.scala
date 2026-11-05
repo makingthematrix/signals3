@@ -38,7 +38,8 @@ enum SystemMsg {
 	                       state: Option[State] = None,
 	                       behaviors: List[Beh[Msg, State]] = Nil,
 	                       heartbeat: Option[HeartBeatStrategy] = None,
-	                       onInit: Option[MutableActor[Msg, State] => Unit] = None,
+	                       onInit: MutableActor[Msg, State] => Unit = Actor.DoNothing,
+	                       onBeat: MutableActor[Msg, State] => Unit = Actor.DoNothing,
 	                       useSerialDispatch: Boolean = false,
 	                       executionContext: Option[ExecutionContext] = None
 	                      )
