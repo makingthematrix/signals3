@@ -7,16 +7,9 @@ import scala.concurrent.duration.{DurationLong, FiniteDuration}
 	* This enum defines various approaches to managing heartbeat intervals, suitable for
 	* different scenarios based on the requirements of responsiveness.
 	*/
-
-sealed abstract class HeartBeatStrategy(val timeout: FiniteDuration)
-
-object HeartBeatStrategy {
-	sealed trait ReactiveTrait
-
-	final case class Linear(ms: FiniteDuration, override val timeout: FiniteDuration = 5.second) extends HeartBeatStrategy(timeout)
-	final case class Reactive(shortMs: FiniteDuration, longMs: FiniteDuration, override val timeout: FiniteDuration = 5.second)
-		extends HeartBeatStrategy(timeout) with ReactiveTrait
-	final case class CustomLinear(interval: () => FiniteDuration, override val timeout: FiniteDuration = 5.second) extends HeartBeatStrategy(timeout)
-	final case class CustomReactive(interval: (hasMsg: Boolean) => FiniteDuration, override val timeout: FiniteDuration = 5.second)
-		extends HeartBeatStrategy(timeout) with ReactiveTrait
+enum HeartBeatStrategy(val timeout: FiniteDuration) {
+	case Linear(ms: FiniteDuration, tm: FiniteDuration = 5.second)                                    extends HeartBeatStrategy(tm)
+	case Reactive(shortMs: FiniteDuration, longMs: FiniteDuration, tm: FiniteDuration = 5.second)     extends HeartBeatStrategy(tm)
+	case CustomLinear(interval: () => FiniteDuration, tm: FiniteDuration = 5.second)                  extends HeartBeatStrategy(tm)
+	case CustomReactive(interval: (hasMsg: Boolean) => FiniteDuration, tm: FiniteDuration = 5.second) extends HeartBeatStrategy(tm)
 }
