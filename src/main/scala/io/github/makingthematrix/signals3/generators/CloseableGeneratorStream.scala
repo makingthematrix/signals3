@@ -53,4 +53,11 @@ class CloseableGeneratorStream[E] protected[signals3] (interval: FiniteDuration 
   override inline def onClose(body: => Unit): Unit = beat.onClose(body)
 
   override def force(): Unit = if (!isClosed && !isPaused) super.force()
+
+	override def tryPause(): Unit = beat.pause()
+
+	override def unpause()(using ExecutionContext): Unit = if (!isClosed && isPaused) {
+		super.unpause()
+		beat.unpause()
+	}
 }

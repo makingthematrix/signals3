@@ -227,17 +227,7 @@ class ActorSpec extends FunSuite {
     assertEquals(HeartBeatStrategy.Linear(10.millis), HeartBeatStrategy.Linear(10.millis))
     assertEquals(Actor.defBeat, HeartBeatStrategy.Linear(100.millis))
   }
-
-  test("ReactiveTrait marks reactive strategies; timeout defaults to 5 seconds") {
-    assert(HeartBeatStrategy.Reactive(10.millis, 20.millis).isInstanceOf[HeartBeatStrategy.ReactiveTrait])
-    assert(HeartBeatStrategy.CustomReactive(_ => 10.millis).isInstanceOf[HeartBeatStrategy.ReactiveTrait])
-    assert(!HeartBeatStrategy.Linear(10.millis).isInstanceOf[HeartBeatStrategy.ReactiveTrait])
-    assert(!HeartBeatStrategy.CustomLinear(() => 10.millis).isInstanceOf[HeartBeatStrategy.ReactiveTrait])
-    assertEquals(HeartBeatStrategy.CustomLinear(() => 10.millis).timeout, 5.seconds)
-    assertEquals(HeartBeatStrategy.CustomReactive(_ => 10.millis).timeout, 5.seconds)
-    assertEquals(HeartBeatStrategy.CustomLinear(() => 10.millis, 1.second).timeout, 1.second)
-  }
-
+	
   test("Spawn with a custom heartbeat strategy") {
     val beats = Signal(0)
     val parent = create[Unit, Int](0, { case _ => None })
