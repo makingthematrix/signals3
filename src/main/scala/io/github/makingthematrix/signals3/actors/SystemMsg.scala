@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.actors.Actor.{Beh, PF}
+import io.github.makingthematrix.signals3.Behaviors.{PF, PBeh}
 
 import scala.annotation.static
 import scala.concurrent.ExecutionContext
@@ -31,12 +31,12 @@ import scala.reflect.{ClassTag, TypeTest}
 	*/
 enum SystemMsg {
 	case Pause, Unpause, Close, Done, InvalidId
-	case AddBehavior[Msg, State](beh: Beh[Msg, State])
+	case AddBehavior[Msg, State](beh: PBeh[Msg, State])
 	case RemoveBehavior(behId: String)
 	case AddBehaviorPF[Msg, State](pf: PF[Msg, State])
 	case Spawn[Msg, State](actorId: String = "",
 	                       state: Option[State] = None,
-	                       behaviors: List[Beh[Msg, State]] = Nil,
+	                       behaviors: List[PBeh[Msg, State]] = Nil,
 	                       heartbeat: Option[HeartBeatStrategy] = None,
 	                       onInit: MutableActor[Msg, State] => Unit = Actor.DoNothing,
 	                       onBeat: MutableActor[Msg, State] => Unit = Actor.DoNothing,

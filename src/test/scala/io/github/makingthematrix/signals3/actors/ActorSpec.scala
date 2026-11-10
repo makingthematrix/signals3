@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.actors.Actor.{Beh, PF}
+import io.github.makingthematrix.signals3.Behaviors.{PF, PBeh}
 import io.github.makingthematrix.signals3.Utils.*
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, EventContext, Signal, SourceSignal, SourceStream, Stream, Threading}
 import munit.FunSuite
@@ -242,7 +242,7 @@ class ActorSpec extends FunSuite {
   }
 
   test("Actor.apply accepts a custom heartbeat strategy") {
-    val behavior: Beh[Int, Unit] = "beh" -> { case (msg: Int, _) => Some(msg + 1) }
+    val behavior: PBeh[Int, Unit] = "beh" -> { case (msg: Int, _) => Some(msg + 1) }
     val actor = Actor(behavior, HeartBeatStrategy.CustomLinear(() => 20.millis))
       .asInstanceOf[Actor[Int, Unit] & Closeable]
     assertEquals(resultCF(actor ? 1), 2)

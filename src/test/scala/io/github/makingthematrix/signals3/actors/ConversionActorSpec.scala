@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.actors
 
-import Actor.PF
+import io.github.makingthematrix.signals3.Behaviors.PF
 import SystemMsg.*
 import io.github.makingthematrix.signals3.Utils.*
 import io.github.makingthematrix.signals3.*

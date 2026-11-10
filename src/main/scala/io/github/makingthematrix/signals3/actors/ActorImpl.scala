@@ -4,6 +4,7 @@ import io.github.makingthematrix.signals3.actors.Actor.*
 import io.github.makingthematrix.signals3.actors.HeartBeatStrategy.*
 import io.github.makingthematrix.signals3.generators.GeneratorStream
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, CloseableSourceStream, Initializable, Pausable, SerialDispatchQueue, SourceStream, Stream}
+import io.github.makingthematrix.signals3.Behaviors.{PF, PBeh}
 
 import java.util.UUID
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
@@ -48,7 +49,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	// a stream that serves as a single entry for the systemMsgs list to prevent concurrent modification; see the "! operator.
 	protected val systemStream: SourceStream[SysEntry] = Stream[SysEntry]()
 	// a variable list of behaviors; a behavior is a partial function that tries to process an incoming message; see the processMessages method.
-	protected var behaviors: List[Beh[Msg, State]] = List[Beh[Msg, State]]()
+	protected var behaviors: List[PBeh[Msg, State]] = List[PBeh[Msg, State]]()
 	private val behMap = mutable.HashMap[String, PF[Msg, State]]()
 	// the "beating heart" of the actor; depending on the strategy, accumulated messages are processed at each beat or when the message appears (reactive).
 	private lazy val beat = GeneratorStream.heartbeat(() => interval())
@@ -98,7 +99,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		* @param behavior The behavior to be added, represented as a tuple containing a unique identifier
 		*                 and a partial function that defines the behavior logic.
 		*/
-	private[actors] def addBehavior(behavior: Beh[Msg, State]): Boolean =
+	private[actors] def addBehavior(behavior: PBeh[Msg, State]): Boolean =
 		if (behMap.contains(behavior.id)) false
 		else {
 			behMap += behavior.id -> behavior.pf
@@ -117,7 +118,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		behMap -= id
 	}
 
-	private def getBehavior(id: String): Option[Beh[Msg, State]] =
+	private def getBehavior(id: String): Option[PBeh[Msg, State]] =
 		behMap.collectFirst { case (behId, pf) if behId == id => behId -> pf }
 
 	/**
@@ -136,7 +137,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	inline private[actors] def addBehaviorPFs(pfs: Iterable[PF[Msg, State]]): Unit =
 		addBehaviors(pfs.map(pf => UUID.randomUUID().toString -> pf))
 
-	private[actors] def addBehaviors(behs: Iterable[Beh[Msg, State]]): Unit = {
+	private[actors] def addBehaviors(behs: Iterable[PBeh[Msg, State]]): Unit = {
 		behaviors = behs.toList ::: behaviors
 		behMap ++= behs.map(b => b.id -> b.pf)
 	}

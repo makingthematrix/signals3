@@ -3,9 +3,17 @@
 ## Open
 
 ### To do
+- [ ] Behaviors: A storage for behaviors (total/partial functions + ids) - this actually might be much complicated than it seems
+  - [x] Create Behaviors object (a singleton)
+  - [x] Move Beh to Behaviors and rename it PBeh (Partial Behavior)
+  - [x] Create TBeh (Total Behavior)
+  - [x] Create mutable maps for both and a way to register new behaviors
+  - [ ] Hardcode some behaviors
+  - [ ] In all 5 events: onInit, onBeat, onPause, onUnpause, onClose; switch to TBeh
+  - [ ] Enable a way to add a TBeh only by id
+    // loop: implement -> test -> refactor
 - [ ] LogActor as a special subclass of ActorImpl
 - [ ] When an actor receives a reference of LogActor, it starts to gather logging and debugging data (not before)
-- [ ] BehaviorLibrary: A storage for behaviors (total/partial functions + ids) - this actually might be much complicated than it seems
 - [ ] PersistenceActor as a special subclass of ActorImpl
 - [ ] When an actor receives a reference of PersistenceActor, it sends its state to the PersistenceActor at Close
 - [ ] `HealthCheck` system message, sent from the parent to the child; if the child doesn't respond in time, the message is repeated, and then the child is closed

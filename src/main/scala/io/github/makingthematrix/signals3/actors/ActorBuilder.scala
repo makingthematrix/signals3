@@ -1,6 +1,7 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.actors.Actor.{Beh, PF, defBeat}
+import io.github.makingthematrix.signals3.actors.Actor.defBeat
+import io.github.makingthematrix.signals3.Behaviors.{PF, PBeh}
 import io.github.makingthematrix.signals3.{Closeable, DispatchQueue, Pausable}
 import scala.concurrent.duration.*
 
@@ -30,7 +31,7 @@ import scala.concurrent.ExecutionContext
   */
 final class ActorBuilder[Msg, State] (private val id: String,
                                       private val state: State,
-                                      private val behaviors: List[Beh[Msg, State]] = Nil,
+                                      private val behaviors: List[PBeh[Msg, State]] = Nil,
                                       private val heartbeat: HeartBeatStrategy = defBeat,
                                       private val onInit: MutableActor[Msg, State] => Unit = Actor.DoNothing,
 	                                    private val useSerialDispatch: Boolean = false,
@@ -85,18 +86,18 @@ final class ActorBuilder[Msg, State] (private val id: String,
     withBehaviorPF(if (p) pf else orElse)
 
   /**
-   * Adds a behavior as a Beh tuple (id, pf).
+   * Adds a behavior as a PBeh tuple (id, pf).
    *
    * @param behavior The behavior tuple (id, partial function)
    * @return A new builder with the added behavior
    */
-  inline def withBehavior(behavior: Beh[Msg, State]): ActorBuilder[Msg, State] =
+  inline def withBehavior(behavior: PBeh[Msg, State]): ActorBuilder[Msg, State] =
     new ActorBuilder(id, state, behavior :: behaviors, heartbeat, onInit, useSerialDispatch, executionContext, tags, onBeat, parent, system)
 
-  inline def withBehaviorIf(p: => Boolean, behavior: => Beh[Msg, State]): ActorBuilder[Msg, State] =
+  inline def withBehaviorIf(p: => Boolean, behavior: => PBeh[Msg, State]): ActorBuilder[Msg, State] =
     if (p) withBehavior(behavior) else this
 
-  inline def withBehaviorIf(p: => Boolean, behavior: => Beh[Msg, State], orElse: => Beh[Msg, State]): ActorBuilder[Msg, State] =
+  inline def withBehaviorIf(p: => Boolean, behavior: => PBeh[Msg, State], orElse: => PBeh[Msg, State]): ActorBuilder[Msg, State] =
     withBehavior(if (p) behavior else orElse)
 
   /**
@@ -105,13 +106,13 @@ final class ActorBuilder[Msg, State] (private val id: String,
    * @param newBehaviors A collection of behavior tuples to add
    * @return A new builder with the added behaviors
    */
-  inline def withBehaviors(newBehaviors: Iterable[Beh[Msg, State]]): ActorBuilder[Msg, State] =
+  inline def withBehaviors(newBehaviors: Iterable[PBeh[Msg, State]]): ActorBuilder[Msg, State] =
     new ActorBuilder(id, state, newBehaviors.toList ::: behaviors, heartbeat, onInit, useSerialDispatch, executionContext, tags, onBeat, parent, system)
 
-  inline def withBehaviorsIf(p: => Boolean, newBehaviors: => Iterable[Beh[Msg, State]]): ActorBuilder[Msg, State] =
+  inline def withBehaviorsIf(p: => Boolean, newBehaviors: => Iterable[PBeh[Msg, State]]): ActorBuilder[Msg, State] =
     if (p) withBehaviors(newBehaviors) else this
 
-  inline def withBehaviorsIf(p: => Boolean, newBehaviors: => Iterable[Beh[Msg, State]], orElse: => Iterable[Beh[Msg, State]]): ActorBuilder[Msg, State] =
+  inline def withBehaviorsIf(p: => Boolean, newBehaviors: => Iterable[PBeh[Msg, State]], orElse: => Iterable[PBeh[Msg, State]]): ActorBuilder[Msg, State] =
     withBehaviors(if (p) newBehaviors else orElse)
 
   /**
