@@ -365,7 +365,24 @@ class PausableSpec extends munit.FunSuite {
   // Only CloseableStream and CloseableSignal (from generators or .closeable) can be closed.
   // The pause/unpause functionality works independently of close functionality.
   
-  test("SourceStream - pausing then closing - pause state can be toggled") {
+  test("SourceStream - pause and unpause are ignored after close") {
+    val src = CloseableSourceStream[Int]()
+    val closeableSrc = src.closeable
+    
+    closeableSrc.close()
+    assert(closeableSrc.isClosed)
+    
+    // pause on a closed stream is ignored
+    src.pause()
+    assert(!src.isPaused)
+    
+    // unpause on a closed stream is also ignored
+    src.unpause()
+    assert(!src.isPaused)
+    assert(closeableSrc.isClosed)
+  }
+
+  test("SourceStream - pausing then closing - unpause is ignored after close") {
     val src = CloseableSourceStream[Int]()
     val closeableSrc = src.closeable
     
@@ -376,13 +393,30 @@ class PausableSpec extends munit.FunSuite {
     closeableSrc.close()
     assert(closeableSrc.isClosed)
     
-    // Can unpause after close (pause state is independent)
+    // unpause after close is ignored - the stream stays paused
     src.unpause()
-    assert(!src.isPaused)
+    assert(src.isPaused)
     assert(closeableSrc.isClosed)
   }
 
-  test("SourceSignal - pausing then closing - pause state can be toggled") {
+  test("SourceSignal - pause and unpause are ignored after close") {
+    val sig = CloseableSourceSignal(0)
+    val closeableSig = sig.closeable
+    
+    closeableSig.close()
+    assert(closeableSig.isClosed)
+    
+    // pause on a closed signal is ignored
+    sig.pause()
+    assert(!sig.isPaused)
+    
+    // unpause on a closed signal is also ignored
+    sig.unpause()
+    assert(!sig.isPaused)
+    assert(closeableSig.isClosed)
+  }
+
+  test("SourceSignal - pausing then closing - unpause is ignored after close") {
     val sig = CloseableSourceSignal(0)
     val closeableSig = sig.closeable
     
@@ -393,9 +427,9 @@ class PausableSpec extends munit.FunSuite {
     closeableSig.close()
     assert(closeableSig.isClosed)
     
-    // Can unpause after close (pause state is independent)
+    // unpause after close is ignored - the signal stays paused
     sig.unpause()
-    assert(!sig.isPaused)
+    assert(sig.isPaused)
     assert(closeableSig.isClosed)
   }
 
@@ -426,11 +460,11 @@ class PausableSpec extends munit.FunSuite {
     // Events still blocked by both pause and close
     assert(waitForResult(received, Seq(1)))
     
-    // Unpause
+    // Unpause is ignored because the stream is closed - it stays paused
     src.unpause()
     src ! 4
     awaitAllTasks
-    // Still blocked by close
+    // Still blocked by both pause and close
     assert(waitForResult(received, Seq(1)))
   }
 
@@ -519,5 +553,131 @@ class PausableSpec extends munit.FunSuite {
     // Don't set any callback
     sig.pause() // Should not throw
     assert(sig.isPaused)
+  }
+
+  // ===== onUnpause callback tests =====
+
+  test("Pausable trait - onUnpause callback is triggered when unpaused") {
+    val pausable = new Pausable {}
+    var callbackCalled = false
+    pausable.onUnpause { callbackCalled = true }
+
+    assert(!callbackCalled)
+    pausable.pause()
+    assert(!callbackCalled)
+    pausable.unpause()
+    assert(callbackCalled)
+  }
+
+  test("Pausable trait - onUnpause callback is not triggered by pause") {
+    val pausable = new Pausable {}
+    var callbackCalled = false
+    pausable.onUnpause { callbackCalled = true }
+
+    pausable.pause()
+    assert(!callbackCalled)
+  }
+
+  test("Pausable trait - onUnpause callback is not triggered when unpause is a no-op") {
+    val pausable = new Pausable {}
+    var callbackCalled = false
+    pausable.onUnpause { callbackCalled = true }
+
+    // unpause() without a preceding pause() should do nothing
+    pausable.unpause()
+    assert(!callbackCalled)
+  }
+
+  test("Pausable trait - onUnpause callback is triggered on each separate unpause") {
+    val pausable = new Pausable {}
+    var callbackCount = 0
+    pausable.onUnpause { callbackCount += 1 }
+
+    pausable.pause()
+    pausable.unpause()
+    assertEquals(callbackCount, 1)
+    pausable.pause()
+    pausable.unpause()
+    assertEquals(callbackCount, 2)
+    pausable.pause()
+    pausable.unpause()
+    assertEquals(callbackCount, 3)
+  }
+
+  test("Pausable trait - multiple onUnpause callbacks run in reverse registration order") {
+    val pausable = new Pausable {}
+    val callOrder = scala.collection.mutable.ListBuffer[String]()
+
+    pausable.onUnpause { callOrder += "first" }
+    pausable.onUnpause { callOrder += "second" }
+    pausable.onUnpause { callOrder += "third" }
+
+    pausable.pause()
+    pausable.unpause()
+
+    // Callbacks are prepended to the list, so the last registered runs first
+    assertEquals(callOrder.toList, List("third", "second", "first"))
+  }
+
+  test("Pausable trait - unpause with no onUnpause callback set does not throw") {
+    val pausable = new Pausable {}
+    pausable.pause()
+    pausable.unpause() // Should not throw
+    assert(!pausable.isPaused)
+  }
+
+  test("Pausable trait - tryUnpause throwing calls onUnpauseFailed with the exception") {
+    var caught: Option[Throwable] = None
+    val pausable = new Pausable {
+      override protected def tryUnpause(): Unit = throw new RuntimeException("unpause failed")
+
+      override protected def onUnpauseFailed(t: Throwable): Unit = caught = Some(t)
+    }
+
+    pausable.pause()
+    pausable.unpause()
+
+    assert(caught.exists(_.getMessage.contains("unpause failed")))
+  }
+
+  test("Pausable trait - failed unpause does not re-pause") {
+    val pausable = new Pausable {
+      override protected def tryUnpause(): Unit = throw new RuntimeException("unpause failed")
+    }
+
+    pausable.pause()
+    pausable.unpause()
+    // The failed unpause must not trigger another pause (would cause an endless cycle)
+    assert(!pausable.isPaused)
+
+    // A subsequent pause must still work normally
+    pausable.pause()
+    assert(pausable.isPaused)
+  }
+
+  test("Stream - onUnpause callback is triggered") {
+    val src = CloseableSourceStream[Int]()
+    val unpausedSignal = Signal(false)
+
+    src.onUnpause { unpausedSignal ! true }
+
+    assert(!unpausedSignal.currentValue.contains(true))
+    src.pause()
+    assert(!unpausedSignal.currentValue.contains(true))
+    src.unpause()
+    waitForResult(unpausedSignal, true)
+  }
+
+  test("Signal - onUnpause callback is triggered") {
+    val sig = CloseableSourceSignal(0)
+    val unpausedSignal = Signal(false)
+
+    sig.onUnpause { unpausedSignal ! true }
+
+    assert(!unpausedSignal.currentValue.contains(true))
+    sig.pause()
+    assert(!unpausedSignal.currentValue.contains(true))
+    sig.unpause()
+    waitForResult(unpausedSignal, true)
   }
 }

@@ -23,6 +23,10 @@ final class RepeatableFuture(interval: () => FiniteDuration)(body: => Unit)(usin
 	extends ActuallyCloseable(Promise[Unit]()) with Pausable {
 	private inline def sched(t: FiniteDuration): TimerTask = CloseableFuture.schedule(() => onRepeat(), t.toMillis)
 
+	override def pause()(using ExecutionContext): Unit = if (!isClosed) super.pause()
+
+	override def unpause()(using ExecutionContext): Unit = if (!isClosed) super.unpause()
+
 	private val alreadyRunning = AtomicBoolean(false)
 	private var task = sched(interval())
 

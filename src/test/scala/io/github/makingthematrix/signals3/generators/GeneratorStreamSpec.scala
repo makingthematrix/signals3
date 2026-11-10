@@ -533,4 +533,32 @@ class GeneratorStreamSpec extends munit.FunSuite {
     assert(stream.isClosed)
     assert(closed)
   }
+
+  test("pause and unpause are ignored after close") {
+    val stream = GeneratorStream.heartbeat(HeartBeatMs)
+
+    stream.close()
+    assert(stream.isClosed)
+
+    // pause on a closed generator is ignored
+    stream.pause()
+    assert(!stream.isPaused)
+
+    // unpause on a closed generator is ignored too
+    stream.unpause()
+    assert(!stream.isPaused)
+  }
+
+  test("unpause after close keeps the generator paused") {
+    val stream = GeneratorStream.heartbeat(HeartBeatMs)
+    stream.pause()
+    assert(stream.isPaused)
+
+    stream.close()
+    assert(stream.isClosed)
+
+    // unpause after close is ignored - the generator stays paused
+    stream.unpause()
+    assert(stream.isPaused)
+  }
 }

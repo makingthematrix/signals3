@@ -3,6 +3,10 @@ package io.github.makingthematrix.signals3
 import scala.concurrent.ExecutionContext
 
 class CloseableSourceSignal[V](v: Option[V]) extends SourceSignal[V](v) with Closeable with Pausable {
+	override def pause()(using ExecutionContext): Unit = if (!isClosed) super.pause()
+
+	override def unpause()(using ExecutionContext): Unit = if (!isClosed) super.unpause()
+
 	override def publish(value: V, ec: ExecutionContext): Unit = 
 		if (!isClosed && !isPaused) super.publish(value, ec)
 		

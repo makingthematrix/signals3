@@ -425,4 +425,32 @@ class GeneratorSignalSpec extends munit.FunSuite {
     assert(gap >= intervalMs - (intervalMs / 4) && gap <= 3 * intervalMs,
       s"gap between the forced beat and the next one: $gap")
   }
+
+  test("pause and unpause are ignored after close") {
+    val signal = GeneratorSignal.generate(0, HeartBeatMs)(_ + 1)
+
+    signal.close()
+    assert(signal.isClosed)
+
+    // pause on a closed generator is ignored
+    signal.pause()
+    assert(!signal.isPaused)
+
+    // unpause on a closed generator is ignored too
+    signal.unpause()
+    assert(!signal.isPaused)
+  }
+
+  test("unpause after close keeps the generator paused") {
+    val signal = GeneratorSignal.generate(0, HeartBeatMs)(_ + 1)
+    signal.pause()
+    assert(signal.isPaused)
+
+    signal.close()
+    assert(signal.isClosed)
+
+    // unpause after close is ignored - the generator stays paused
+    signal.unpause()
+    assert(signal.isPaused)
+  }
 }

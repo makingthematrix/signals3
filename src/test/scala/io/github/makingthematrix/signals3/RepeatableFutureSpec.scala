@@ -147,4 +147,36 @@ class RepeatableFutureSpec extends munit.FunSuite {
     val gap = beatStarts(1) - beatStarts(0)
     assert(gap >= bodyMs && gap <= 4 * HeartBeatMs.toMillis, s"the gap between the first two beats: $gap")
   }
+
+  test("unpause after close is ignored and does not schedule the body again") {
+    val beats = new CountDownLatch(2)
+    var count = 0
+    val cf = CloseableFuture.repeat(HeartBeatMs) {
+      count += 1
+      beats.countDown()
+    }
+
+    assert(await(beats), "the repeat didn't execute two times before the pause")
+    cf.pause()
+    assert(cf.isPaused)
+
+    cf.close()
+    assert(cf.isClosed)
+
+    // unpause after close is ignored - the repeat stays paused and the body is never scheduled again
+    cf.unpause()
+    assert(cf.isPaused)
+    val countAfterClose = count
+    Thread.sleep(3 * HeartBeatMs.toMillis)
+    assertEquals(count, countAfterClose)
+  }
+
+  test("pause after close is ignored") {
+    val cf = CloseableFuture.repeat(HeartBeatMs) { }
+    cf.close()
+    assert(cf.isClosed)
+
+    cf.pause()
+    assert(!cf.isPaused, "pause() should be ignored on a closed repeat")
+  }
 }

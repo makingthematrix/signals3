@@ -23,7 +23,7 @@ trait CanBePaused {
 }
 
 trait Pausable extends CanBePaused {
-	final def pause()(using ExecutionContext): Unit =
+	def pause()(using ExecutionContext): Unit =
 		if (!paused.getAndSet(true)) try {
 			tryPause()
 			pausedSignal.set()
@@ -36,7 +36,7 @@ trait Pausable extends CanBePaused {
 
 	protected def onPauseFailed(t: Throwable): Unit = {}
 
-	final def unpause()(using ExecutionContext): Unit =
+	def unpause()(using ExecutionContext): Unit =
 		if (paused.getAndSet(false)) try {
 			tryUnpause()
 			pausedSignal.clear()
