@@ -1,7 +1,6 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.{CanBeClosed, CanBeInitialized, CanBePaused, CloseableFuture, DispatchQueue, SourceStream, Stream}
-import io.github.makingthematrix.signals3.Behaviors.PBeh
+import io.github.makingthematrix.signals3.{CanBeClosed, CanBeInitialized, CanBePaused, CloseableFuture, DispatchQueue, IdGenerator, SourceStream, Stream}
 
 import scala.Conversion.into
 import scala.annotation.static
@@ -138,6 +137,8 @@ trait Actor[Msg, State] extends CanBeClosed with CanBePaused with CanBeInitializ
 }
 
 object Actor {
+	import io.github.makingthematrix.signals3.Behaviors.PBeh
+	
 	@static private val noResponse: Failure[Nothing] = Failure[Nothing](new IllegalStateException("No response"))
 	@static private val ignored: Success[Option[Nothing]] = Success[Option[Nothing]](None)
 	@static private[actors] val actorIsClosed = IllegalStateException("Actor is closed")

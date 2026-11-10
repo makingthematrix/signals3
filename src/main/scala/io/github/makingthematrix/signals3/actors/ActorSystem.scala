@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.CloseableFuture
+import io.github.makingthematrix.signals3.{CloseableFuture, IdGenerator}
 import io.github.makingthematrix.signals3.actors.Actor.*
 
 import scala.Conversion.into
@@ -8,7 +8,6 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.reflect.TypeTest
 import scala.util.chaining.scalaUtilChainingOps
 import scala.util.{Failure, Success}
-
 import scala.collection.mutable
 
 final class ActorSystem[Msg, State] private (
@@ -242,11 +241,11 @@ final class ActorSystem[Msg, State] private (
 			case Remote(systemId, _)   => if (systemId != id && systems.contains(systemId)) systems(systemId)._1.ask(msg, path, behId) else invalidId(systemId)
 		}
 	} else ActorIsClosed[Msg]
-
-	override protected def tryInitialize(): Unit = {
+	
+	onInit {
 		systems += (id -> (toRemote, tags))
 		actorRefs += (id -> (LocalActorRef(this), tags)) // register yourself as a valid actor
-		super.tryInitialize()
+		()
 	}
 
 	override protected def shutdown(): Future[SystemMsg] = {

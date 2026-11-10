@@ -1,6 +1,5 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.Behaviors.{PF, PBeh}
 import io.github.makingthematrix.signals3.Utils.*
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, EventContext, Signal, SourceSignal, SourceStream, Stream, Threading}
 import munit.FunSuite

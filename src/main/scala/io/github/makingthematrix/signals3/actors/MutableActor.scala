@@ -1,6 +1,7 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.SourceStream
+import io.github.makingthematrix.signals3.{IdGenerator, SourceStream, Behaviors}
+import io.github.makingthematrix.signals3.Behaviors.{TBeh, PBeh, TF, PF}
 
 /**
 	* A trait representing a mutable actor, which is an extension of the `Actor` trait. This actor
@@ -30,4 +31,26 @@ trait MutableActor[Msg, State] extends Actor[Msg, State]{
 		* In `MutableActor` the type of `out` changes to `SourceStream[Msg]` so that the behavior may send a response to it.
 		*/
 	override def out: SourceStream[Msg]
+
+	private var _onBeat: List[TBeh[Msg, State]] = Nil
+
+	// Registers a function that should be called exactly once when the actor is initialized
+	def onBeat(beh: TBeh[Msg, State]): Unit =
+		_onBeat ::= beh
+
+	inline final def onBeat(tf: TF[Msg, State]): Unit =
+		onBeat((IdGenerator.generate("onBeat"), tf))
+
+	inline final def onBeat(id: String, tf: TF[Msg, State]): Unit = onBeat(id -> tf)
+
+	final def onBeat(id: String): Boolean = Behaviors.getTBeh(id) match {
+		case Some((id, tf)) => onBeat(id -> tf.asInstanceOf[TF[Msg, State]]); true
+		case None => false
+	}
+	
+	inline final def runOnBeat(): Unit = try {
+		_onBeat.foreach(_.tf(this))
+	} catch {
+		case t: Throwable => 
+	}
 }

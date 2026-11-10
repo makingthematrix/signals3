@@ -1,5 +1,6 @@
 package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.Behaviors.{Beh, Fail}
 import io.github.makingthematrix.signals3.priv.DoneSignal
 
 import java.util.concurrent.atomic.AtomicBoolean
@@ -21,33 +22,56 @@ trait CanBeClosed {
    */
   def isClosed: Boolean = closed.get()
 
+	private final inline def runOnClose(): Unit = _onClose.foreach(_.f())
+	
   protected def closeAndCheck(): Boolean =
     if (!closed.getAndSet(true)) {
       try {
-        tryClose()
-        _onClose.foreach(_())
-        _onClose = Nil
+        runOnClose()
         true 
       } catch {
         case t: Throwable =>
-          onCloseFailed(t)
           closed.set(false)
+          runOnCloseFailed(t)
           false
       }
     } else false
-
-  protected def tryClose(): Unit = {}
+	
   
-  protected def onCloseFailed(t: Throwable): Unit = {}
 
   /**
    * Registers a block of code that should be called exactly once when the closeable is being closed.
-   * @param body Logic that is going to be executed when the closeable is closed.
+   * @param beh Logic that is going to be executed when the closeable is closed.
    */
-  def onClose(body: => Unit): Unit =
-    _onClose ::= (() => body)
+  def onClose(beh: Beh): Unit =
+		_onClose ::= beh  
+  inline final def onClose(body: => Unit): Unit = onClose((IdGenerator.generate("onClose"), () => body))
+	inline final def onClose(id: String, f: () => Unit): Unit = onClose(id -> f)
 
-  private var _onClose: List[() => Unit] = Nil
+	final def onClose(id: String): Boolean = Behaviors.getBeh(id) match {
+		case Some(beh) => onClose(beh); true
+		case None => false
+	}
+
+	private var _onClose: List[Beh] = Nil
+	
+  private final inline def runOnCloseFailed(t: Throwable): Unit = _onCloseFailed.foreach(_.f(t))
+	
+	def onCloseFailed(fail: Fail): Unit =
+		_onCloseFailed ::= fail
+
+	inline final def onCloseFailed(f: Throwable => Unit): Unit = 
+		onCloseFailed((IdGenerator.generate("onCloseFailed"), f))
+
+	inline final def onCloseFailed(id: String, f: Throwable => Unit): Unit = onCloseFailed(id -> f)
+
+	final def onCloseFailed(id: String): Boolean = Behaviors.getFail(id) match {
+		case Some(fail) => onCloseFailed(fail); true
+		case None => false
+	}
+
+	private var _onCloseFailed: List[Fail] = Nil
+
 
   /**
    * Returns a signal that works on a given [[scala.concurrent.ExecutionContext]]; it starts with the value set to `false` (unless it's

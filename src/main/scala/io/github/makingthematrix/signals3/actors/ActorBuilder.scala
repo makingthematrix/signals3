@@ -1,10 +1,10 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.actors.Actor.defBeat
-import io.github.makingthematrix.signals3.Behaviors.{PF, PBeh}
-import io.github.makingthematrix.signals3.{Closeable, DispatchQueue, Pausable}
-import scala.concurrent.duration.*
+import io.github.makingthematrix.signals3.{Closeable, DispatchQueue, IdGenerator, Pausable}
+import io.github.makingthematrix.signals3.Behaviors.*
 
+import scala.concurrent.duration.*
 import scala.concurrent.ExecutionContext
 
 /**
@@ -300,9 +300,10 @@ final class ActorBuilder[Msg, State] (private val id: String,
   }
 
   private def buildActor(state: State, ec: ExecutionContext): Actor[Msg, State] & Closeable & Pausable = {
-    val actor = new ActorImpl[Msg, State](id, state, heartbeat, tags, onBeat, parent, system)(using ec)
+    val actor = new ActorImpl[Msg, State](id, state, heartbeat, tags, parent, system)(using ec)
     if (onInit != Actor.DoNothing) actor.onInit(onInit(actor))
     actor.addBehaviors(behaviors)
+	  actor.onBeat(onBeat)
     actor.initialize()
     actor
   }

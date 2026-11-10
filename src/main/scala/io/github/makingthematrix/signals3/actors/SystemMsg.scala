@@ -1,10 +1,9 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.Behaviors.{PF, PBeh}
-
 import scala.annotation.static
 import scala.concurrent.ExecutionContext
 import scala.reflect.{ClassTag, TypeTest}
+import io.github.makingthematrix.signals3.Behaviors.*
 
 /**
 	* Represents system-level messages that can be used to control or affect the behavior
@@ -58,7 +57,7 @@ enum SystemMsg {
 	case AskForSystem(systemId: String = "", tags: Set[ActorTag] = Set.empty)
 	case AskForSystemAsync[Msg](sender: Actor[Msg, ?], systemId: String = "", tags: Set[ActorTag] = Set.empty)
 	case RemoteRef[Msg](ref: RemoteSystem[Msg])
-	case SetOnBeat[Msg, State](onBeat: MutableActor[Msg, State] => Unit)
+	case SetOnBeat[Msg, State](tbeh: TBeh[Msg, State])
 }
 
 object SystemMsg {

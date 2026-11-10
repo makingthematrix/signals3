@@ -4,7 +4,7 @@ import io.github.makingthematrix.signals3.actors.Actor.*
 import io.github.makingthematrix.signals3.actors.HeartBeatStrategy.*
 import io.github.makingthematrix.signals3.generators.GeneratorStream
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, CloseableSourceStream, Initializable, Pausable, SerialDispatchQueue, SourceStream, Stream}
-import io.github.makingthematrix.signals3.Behaviors.{PF, PBeh}
+import io.github.makingthematrix.signals3.Behaviors.*
 
 import java.util.UUID
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
@@ -28,7 +28,6 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
                                             protected var _state: State,
                                             protected val heartbeat: HeartBeatStrategy = Actor.defBeat,
                                             override val tags: Set[ActorTag] = Set.empty,
-                                            protected var onBeat: MutableActor[Msg, State] => Unit = Actor.DoNothing,
                                             override val parent: Option[ActorRef[Msg]] = None,
                                             override val system: Option[ActorSystem[Msg, ?]] = None
                                            )(using ec: ExecutionContext)
@@ -227,7 +226,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		case (AddBehaviorPFT(ab), p) => addBehaviorPF(ab.pf); respond(p, Done)
 		case (SpawnT(data), p)       => spawn(data, p)
 		case (ActorClosed(id), p)    => removeChild(id, p)
-		case (SetOnBeatT(sob), p)    => onBeat = sob.onBeat; respond(p, Done)
+		case (SetOnBeatT(sob), p)    => onBeat(sob.tbeh); respond(p, Done)
 		case (other, p)              => respond(p, unhandledMsg(other.toString))
 	}
 
@@ -293,15 +292,15 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		while (!isPaused && !isClosed && entries.nonEmpty) processMsgEntry(entries.dequeue())
 	}
 
-	override protected def tryInitialize(): Unit = {
+	onInit {
 		beat.foreach { _ =>
 			processMessages()
-			if (!isPaused && onBeat != Actor.DoNothing) Try(onBeat(this))
+			if (!isPaused) runOnBeat()
 		}
 		system.foreach(_.tell(Register(this, tags)))
 	}
 
-	override protected def onInitializationFailed(t: Throwable): Unit = {
+	onInitFailed { t =>
 		println(s"Failed to initialize actor $id: ${t.getMessage}")
 		close()
 	}
@@ -310,9 +309,9 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 
 	override def unpause()(using ExecutionContext): Unit = if (!isClosed) super.unpause()
 
-	override protected def onPauseFailed(t: Throwable): Unit = println(s"Failed to pause actor $id: ${t.getMessage}")
+	onPauseFailed { t => println(s"Failed to pause actor $id: ${t.getMessage}") }
 
-	override protected def onCloseFailed(t: Throwable): Unit = println(s"Failed to close actor $id: ${t.getMessage}")
+	onCloseFailed { t =>  println(s"Failed to close actor $id: ${t.getMessage}") }
 
 	/**
 		* Closes the actor and performs necessary checks to ensure all messages are completed before finalizing the closure.

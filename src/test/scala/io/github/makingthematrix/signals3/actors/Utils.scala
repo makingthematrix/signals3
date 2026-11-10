@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.actors
 
 import Actor.InvalidIdException
-import io.github.makingthematrix.signals3.Behaviors.PF
+import .PF
 import SystemMsg.*
 import io.github.makingthematrix.signals3.{Closeable, Pausable}
 import io.github.makingthematrix.signals3.Utils.*

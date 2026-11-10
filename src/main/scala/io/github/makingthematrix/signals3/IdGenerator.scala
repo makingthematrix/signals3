@@ -1,4 +1,4 @@
-package io.github.makingthematrix.signals3.actors
+package io.github.makingthematrix.signals3
 
 import java.util.UUID
 import scala.util.Random
