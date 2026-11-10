@@ -56,8 +56,5 @@ class CloseableGeneratorSignal[V] protected[signals3] (init: V,
 
 	override def tryPause(): Unit = beat.pause()
 
-	override def unpause()(using ExecutionContext): Unit = if (!isClosed && isPaused) {
-		super.unpause()
-		beat.unpause()
-	}
+	override def tryUnpause(): Unit = beat.unpause()
 }
