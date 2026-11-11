@@ -51,11 +51,6 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext)
     */
   def fail(th: Throwable): Boolean
 
-	if (isCloseable) future.onComplete {
-		case Failure(Closed) => self.runOnClose()
-		case _ =>
-	}
-
   /** If the future is actually closeable, adds a timeout after which this future will be closed.
     * In theory, it's possible to add more than one timeout - the shortest one will close all others.
     * Returns the reference to itself so it can be chained with other `CloseableFuture` methods.

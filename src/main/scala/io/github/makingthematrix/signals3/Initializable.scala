@@ -22,29 +22,29 @@ trait CanBeInitialized {
 	def onInit(beh: Beh): Unit =
 		_onInit ::= beh
 
-	inline final def onInit(body: => Unit): Unit = onInit((IdGenerator.generate("onInit"), () => body))
-	inline final def onInit(id: String, f: () => Unit): Unit = onInit(id -> f)
-	
-	final def onInit(id: String): Boolean = Behaviors.getBeh(id) match {
+	inline final def onInit(body: => Unit): Unit = onInit((IdGenerator.generate("onInit"), () => body): Beh)
+	inline final def onInit(id: String, f: () => Unit): Unit = onInit((id -> f): Beh)
+
+	final def onInitById(id: String): Boolean = Behaviors.getBeh(id) match {
 		case Some(beh) => onInit(beh); true
 		case None => false
 	}
-	
+
 	def isInitializedSignal(using ExecutionContext): Signal[Boolean]
-	
+
 	protected inline final def runOnInit(): Unit = _onInit.foreach(_.f())
 
 	private var _onInitFailed: List[Fail] = Nil
-	
+
 	def onInitFailed(fail: Fail): Unit =
 		_onInitFailed ::= fail
 
 	inline final def onInitFailed(f: Throwable => Unit): Unit = 
-		onInitFailed((IdGenerator.generate("onInitFailed"), f))
+		onInitFailed((IdGenerator.generate("onInitFailed"), f): Fail)
 
-	inline final def onInitFailed(id: String, f: Throwable => Unit): Unit = onInitFailed(id -> f)
+	inline final def onInitFailed(id: String, f: Throwable => Unit): Unit = onInitFailed((id -> f): Fail)
 
-	final def onInitFailed(id: String): Boolean = Behaviors.getFail(id) match {
+	final def onInitFailedById(id: String): Boolean = Behaviors.getFail(id) match {
 		case Some(fail) => onInitFailed(fail); true
 		case None => false
 	}

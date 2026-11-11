@@ -45,10 +45,12 @@ trait CanBeClosed {
    */
   def onClose(beh: Beh): Unit =
 		_onClose ::= beh
-  def onClose(body: => Any): Unit = onClose((IdGenerator.generate("onClose"), () => body))
-	inline final def onClose(id: String, f: () => Unit): Unit = onClose(id -> f)
 
-	final def onClose(id: String): Boolean = Behaviors.getBeh(id) match {
+	final def onClose(body: => Any): Unit = onClose((IdGenerator.generate("onClose"), () => body): Beh)
+
+	final def onClose(id: String, f: () => Unit): Unit = onClose((id -> f): Beh)
+
+	final def onCloseById(id: String): Boolean = Behaviors.getBeh(id) match {
 		case Some(beh) => onClose(beh); true
 		case None => false
 	}
@@ -60,18 +62,16 @@ trait CanBeClosed {
 	def onCloseFailed(fail: Fail): Unit =
 		_onCloseFailed ::= fail
 
-	inline final def onCloseFailed(f: Throwable => Unit): Unit =
-		onCloseFailed((IdGenerator.generate("onCloseFailed"), f))
+	final def onCloseFailed(f: Throwable => Unit): Unit = onCloseFailed((IdGenerator.generate("onCloseFailed"), f): Fail)
 
-	inline final def onCloseFailed(id: String, f: Throwable => Unit): Unit = onCloseFailed(id -> f)
+	inline final def onCloseFailed(id: String, f: Throwable => Unit): Unit = onCloseFailed((id -> f): Fail)
 
-	final def onCloseFailed(id: String): Boolean = Behaviors.getFail(id) match {
+	final def onCloseFailedById(id: String): Boolean = Behaviors.getFail(id) match {
 		case Some(fail) => onCloseFailed(fail); true
 		case None => false
 	}
 
 	private var _onCloseFailed: List[Fail] = Nil
-
 
   /**
    * Returns a signal that works on a given [[scala.concurrent.ExecutionContext]]; it starts with the value set to `false` (unless it's

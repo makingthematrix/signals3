@@ -1,5 +1,6 @@
 package io.github.makingthematrix.signals3.generators
 
+import io.github.makingthematrix.signals3.Behaviors.Beh
 import io.github.makingthematrix.signals3.{Closeable, Pausable}
 
 import scala.concurrent.ExecutionContext
@@ -48,9 +49,9 @@ class CloseableGeneratorStream[E] protected[signals3] (interval: FiniteDuration 
 
   /**
     * Registers a snippet of code to execute when the generator is closed.
-    * @param body Logic that is going to be executed when the generator is closed.
+    * @param beh Behavior that is going to be executed when the generator is closed.
     */
-  override inline def onClose(body: => Any): Unit = beat.onClose(body)
+  override def onClose(beh: Beh): Unit = beat.onClose(beh)
 
   override def force(): Unit = if (!isClosed && !isPaused) super.force()
 

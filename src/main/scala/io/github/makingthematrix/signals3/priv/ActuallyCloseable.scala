@@ -1,8 +1,10 @@
 package io.github.makingthematrix.signals3.priv
 
 import io.github.makingthematrix.signals3.CloseableFuture
+import io.github.makingthematrix.signals3.CloseableFuture.Closed
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.util.Failure
 
 /** A subclass of `CloseableFuture` which represents a subset of closeable futures which are actually closeable.
   * I know it means the name of the parent class is misleading, since not all closeable futures are closeable, but,
@@ -38,11 +40,16 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
   */
 private[signals3] class ActuallyCloseable[+T](promise: Promise[T])
                                              (using ExecutionContext) extends CloseableFuture[T]{
-  override val future: Future[T] = promise.future
+  override lazy val future: Future[T] = promise.future
 
   override def fail(ex: Throwable): Boolean = promise.tryFailure(ex)
 
   override def toUncloseable: CloseableFuture[T] = new Uncloseable[T](future)
 
   override def isCloseable: Boolean = !future.isCompleted
+
+  if (isCloseable) future.onComplete {
+    case Failure(Closed) => runOnClose()
+    case _ =>
+  }
 }
