@@ -43,12 +43,12 @@ trait CanBeClosed {
    * Registers a block of code that should be called exactly once when the closeable is being closed.
    * @param beh Logic that is going to be executed when the closeable is closed.
    */
-  def onClose(beh: Beh): Unit =
+  protected def onClose(beh: Beh): Unit =
 		_onClose ::= beh
 
-	final def onClose(body: => Any): Unit = onClose((IdGenerator.generate("onClose"), () => body): Beh)
+	inline final def onClose(body: => Any): Unit = onClose((IdGenerator.generate("onClose"), () => body): Beh)
 
-	final def onClose(id: String, f: () => Unit): Unit = onClose((id -> f): Beh)
+	inline final def onClose(id: String, f: () => Unit): Unit = onClose((id -> f): Beh)
 
 	final def onCloseById(id: String): Boolean = Behaviors.getBeh(id) match {
 		case Some(beh) => onClose(beh); true
@@ -59,10 +59,10 @@ trait CanBeClosed {
 
   private final inline def runOnCloseFailed(t: Throwable): Unit = _onCloseFailed.foreach(_.f(t))
 
-	def onCloseFailed(fail: Fail): Unit =
+	protected def onCloseFailed(fail: Fail): Unit =
 		_onCloseFailed ::= fail
 
-	final def onCloseFailed(f: Throwable => Unit): Unit = onCloseFailed((IdGenerator.generate("onCloseFailed"), f): Fail)
+	inline final def onCloseFailed(f: Throwable => Unit): Unit = onCloseFailed((IdGenerator.generate("onCloseFailed"), f): Fail)
 
 	inline final def onCloseFailed(id: String, f: Throwable => Unit): Unit = onCloseFailed((id -> f): Fail)
 

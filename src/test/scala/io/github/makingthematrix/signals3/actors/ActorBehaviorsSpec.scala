@@ -57,14 +57,13 @@ class ActorBehaviorsSpec extends FunSuite {
 		assertEquals(getTBeh[Int, Unit]("spec-tbeh-dup").map(_.tf), Some(tf1))
 	}
 
-	test("a partial and a total behavior can share the same id") {
+	test("a partial and a total behavior can't share the same id") {
 		val pf: PF[Int, Unit] = { case (n, _) => Some(n) }
 		val tf: TF[Int, Unit] = _ => ()
 
 		assert(registerPBeh("spec-shared" -> pf))
-		assert(registerTBeh("spec-shared" -> tf))
+		assertEquals(registerTBeh("spec-shared" -> tf), false)
 		assertEquals(getPBeh[Int, Unit]("spec-shared").map(_.pf), Some(pf))
-		assertEquals(getTBeh[Int, Unit]("spec-shared").map(_.tf), Some(tf))
 	}
 
 	test("unregister removes behaviors of both kinds and reports if nothing was removed") {
@@ -72,9 +71,10 @@ class ActorBehaviorsSpec extends FunSuite {
 		val tf: TF[Int, Unit] = _ => ()
 
 		assert(registerPBeh("spec-unreg" -> pf))
-		assert(registerTBeh("spec-unreg" -> tf))
-
 		assert(unregister("spec-unreg"))
+		assert(registerTBeh("spec-unreg" -> tf))
+		assert(unregister("spec-unreg"))
+
 		// both the partial and the total behavior are gone
 		assert(getPBeh[Int, Unit]("spec-unreg").isEmpty)
 		assert(getTBeh[Int, Unit]("spec-unreg").isEmpty)

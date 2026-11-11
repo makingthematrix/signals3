@@ -26,7 +26,7 @@ import scala.util.chaining.scalaUtilChainingOps
 abstract class GeneratorStream[E] protected[signals3] (interval: FiniteDuration | (() => FiniteDuration))
                                                       (using ExecutionContext)
   extends Stream[E] with Initializable with NoAutowiring {
-
+	
   protected lazy val beat: RepeatableFuture =
     (interval match {
        case intv: FiniteDuration         => CloseableFuture.repeat(intv)(_)
@@ -34,8 +34,11 @@ abstract class GeneratorStream[E] protected[signals3] (interval: FiniteDuration 
     }) {
       onBeat()
     }
-  
+	
   protected def onBeat(): Unit = if (!isInitialized) initialize()
+	
+	onInit { beat }
+	onInitFailed { t => println(s"GenetorStream initialization failed: ${t.getMessage}") }
 
   /**
     * Calls `onBeat` immediately and resets the beat so that the next call to `onBeat` planned by the beat logic
@@ -49,10 +52,6 @@ abstract class GeneratorStream[E] protected[signals3] (interval: FiniteDuration 
     Try(onBeat())
     beat.restart()
   }
-
-  onInit { beat; () }
-
-  onInitFailed { t => println(s"GenetorStream initialization failed: ${t.getMessage}") }
 }
 
 object GeneratorStream {

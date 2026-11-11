@@ -4,6 +4,8 @@ import io.github.makingthematrix.signals3.Utils.*
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, EventContext, Signal, SourceSignal, SourceStream, Stream, Threading}
 import munit.FunSuite
 import io.github.makingthematrix.signals3.Behaviors.*
+import io.github.makingthematrix.signals3.actors.SystemMsg.{Done, ResetOnBeat, addOnBeat}
+
 import scala.concurrent.TimeoutException
 import scala.concurrent.duration.*
 import scala.util.Try
@@ -802,26 +804,26 @@ class ActorSpec extends FunSuite {
     close(actor)
   }
 
-  // ==================== SystemMsg.SetOnBeat ====================
+  // ==================== SystemMsg.AddOnBeat ====================
 
-  test("SetOnBeat via ? responds with Done") {
+  test("AddOnBeat via ? responds with Done") {
     val beats = Signal(0)
     val actor = create[Unit, Int](0, { case _ => None })
-    val cf = actor ? SystemMsg.addOnBeat[Unit, Int] { _ => beats.mutate(_ + 1) }
-    assertEquals(resultCF(cf), SystemMsg.Done)
+    val cf = actor ? addOnBeat[Unit, Int] { _ => beats.mutate(_ + 1) }
+    assertEquals(resultCF(cf), Done)
     assert(waitFor(beats.map(_ >= 2), true))
     close(actor)
   }
 
-  test("SetOnBeat via ! applies the callback") {
+  test("AddOnBeat via ! applies the callback") {
     val beats = Signal(0)
     val actor = create[Unit, Int](0, { case _ => None })
-    actor ! SystemMsg.addOnBeat[Unit, Int] { _ => beats.mutate(_ + 1) }
+    actor ! addOnBeat[Unit, Int] { _ => beats.mutate(_ + 1) }
     assert(waitFor(beats.map(_ >= 2), true))
     close(actor)
   }
 
-  test("SetOnBeat replaces the previous callback") {
+  test("ResetOnBeat replaces the previous callback") {
     val beats1 = Signal(0)
     val beats2 = Signal(0)
     val actor = ActorBuilder[Unit, Int](0)
@@ -830,8 +832,9 @@ class ActorSpec extends FunSuite {
       .withOnBeat { _ => beats1.mutate(_ + 1) }
       .build()
     assert(waitFor(beats1.map(_ >= 2), true))
-    val cf = actor ? SystemMsg.addOnBeat[Unit, Int] { _ => beats2.mutate(_ + 1) }
-    assertEquals(resultCF(cf), SystemMsg.Done)
+	  expectSuccessCF(actor ? ResetOnBeat, Done)
+    val cf = actor ? addOnBeat[Unit, Int] { _ => beats2.mutate(_ + 1) }
+	  expectSuccessCF(cf, Done)
     val count1 = beats1.currentValue.getOrElse(0)
     assert(waitFor(beats2.map(_ >= 2), true)) // at least two beats since the swap
     Thread.sleep(60L) // long enough that a still-attached old callback would have fired
@@ -839,7 +842,7 @@ class ActorSpec extends FunSuite {
     close(actor)
   }
 
-  test("SetOnBeat sent while paused takes effect after unpause") {
+  test("AddOnBeat sent while paused takes effect after unpause") {
     val beats1 = Signal(0)
     val beats2 = Signal(0)
     val actor = ActorBuilder[Unit, Int](0)
@@ -851,22 +854,23 @@ class ActorSpec extends FunSuite {
     actor ! SystemMsg.Pause
     waitFor(actor.isPausedSignal, true)
     Thread.sleep(50L) // let a beat already in progress finish
+	  expectSuccessCF(actor ? ResetOnBeat, Done)
     val countWhenPaused = beats1.currentValue.getOrElse(0)
     // system messages are processed even while the actor is paused
-    val cf = actor ? SystemMsg.addOnBeat[Unit, Int] { _ => beats2.mutate(_ + 1) }
-    assertEquals(resultCF(cf), SystemMsg.Done)
+    val cf = actor ? addOnBeat[Unit, Int] { _ => beats2.mutate(_ + 1) }
+    assertEquals(resultCF(cf), Done)
     // neither the old nor the new callback runs while paused
     Thread.sleep(100L)
     assertEquals(beats1.currentValue.getOrElse(0), countWhenPaused)
     assertEquals(beats2.currentValue.getOrElse(0), 0)
-    assertEquals(resultCF(actor ? SystemMsg.Unpause), SystemMsg.Done)
+    assertEquals(resultCF(actor ? SystemMsg.Unpause), Done)
     // after unpause only the new callback fires
     assert(waitFor(beats2.map(_ >= 2), true))
     assertEquals(beats1.currentValue.getOrElse(0), countWhenPaused)
     close(actor)
   }
 
-  test("SetOnBeat with Actor.DoNothing disables the callback") {
+  test("ResetOnBeat + Actor.DoNothing actually does nothing") {
     val beats = Signal(0)
     val actor = ActorBuilder[Unit, Int](0)
       .withBehaviorPF { case _ => None }
@@ -874,8 +878,9 @@ class ActorSpec extends FunSuite {
       .withOnBeat { _ => beats.mutate(_ + 1) }
       .build()
     assert(waitFor(beats.map(_ >= 2), true))
-    val cf = actor ? SystemMsg.addOnBeat[Unit, Int](Actor.DoNothing)
-    assertEquals(resultCF(cf), SystemMsg.Done)
+	  expectSuccessCF(actor ? ResetOnBeat, Done)
+    val cf = actor ? addOnBeat[Unit, Int](Actor.DoNothing)
+    assertEquals(resultCF(cf), Done)
     val count = beats.currentValue.getOrElse(0)
     Thread.sleep(100L) // several beats - the callback must stay disabled
     assertEquals(beats.currentValue.getOrElse(0), count)
@@ -897,14 +902,14 @@ class ActorSpec extends FunSuite {
     close(parent)
   }
 
-  test("Spawn without onBeat; the child can get one later via SetOnBeat") {
+  test("Spawn without onBeat; the child can get one later via AddOnBeat") {
     val beats = Signal(0)
     val parent = create[Unit, Int](0, { case _ => None })
     val child = spawn[Unit, Int](parent) {
       SystemMsg.Spawn(actorId = "boring-child", state = Some(0))
     }
-    val cf = child ? SystemMsg.addOnBeat[Unit, Int] { _ => beats.mutate(_ + 1) }
-    assertEquals(resultCF(cf), SystemMsg.Done)
+    val cf = child ? addOnBeat[Unit, Int] { _ => beats.mutate(_ + 1) }
+    assertEquals(resultCF(cf), Done)
     assert(waitFor(beats.map(_ >= 2), true))
     close(child)
     close(parent)

@@ -35,31 +35,36 @@ trait MutableActor[Msg, State] extends Actor[Msg, State]{
 	private var _onBeat: List[TBeh[Msg, State]] = Nil
 
 	// Registers a function that should be called exactly once when the actor is initialized
-	def onBeat(beh: TBeh[Msg, State]): Unit =
-		_onBeat ::= beh
+	protected def onBeat(tbeh: TBeh[Msg, State]): Unit =
+		_onBeat ::= tbeh
 
 	inline final def onBeat(tf: TF[Msg, State]): Unit =
-		onBeat((IdGenerator.generate("onBeat"), tf))
+		onBeat((IdGenerator.generate("onBeat"), tf): TBeh[Msg, State])
 
-	inline final def onBeat(id: String, tf: TF[Msg, State]): Unit = onBeat(id -> tf)
+	inline final def onBeat(id: String, tf: TF[Msg, State]): Unit = onBeat((id -> tf): TBeh[Msg, State])
 
-	final def onBeat(id: String): Boolean = Behaviors.getTBeh(id) match {
+	final def onBeatById(id: String): Boolean = Behaviors.getTBeh(id) match {
 		case Some((id, tf)) => onBeat(id -> tf.asInstanceOf[TF[Msg, State]]); true
 		case None => false
+	}
+
+	def resetOnBeat(): Unit = {
+		_onBeat = Nil
+		_onBeatFailed = Nil
 	}
 
 	private var _onBeatFailed: List[Fail] = Nil
 
 	// Registers a function that should be called exactly once when the actor is initialized
-	def onBeatFailed(fail: Fail): Unit =
+	protected def onBeatFailed(fail: Fail): Unit =
 		_onBeatFailed ::= fail
 
 	inline final def onBeatFailed(f: Throwable => Unit): Unit =
-		onBeatFailed((IdGenerator.generate("onBeatFailed"), f))
+		onBeatFailed((IdGenerator.generate("onBeatFailed"), f): Fail)
 
-	inline final def onBeatFailed(id: String, f: Throwable => Unit): Unit = onBeatFailed(id -> f)
+	inline final def onBeatFailed(id: String, f: Throwable => Unit): Unit = onBeatFailed((id -> f): Fail)
 
-	final def onBeatFailed(id: String): Boolean = Behaviors.getFail(id) match {
+	final def onBeatFailedById(id: String): Boolean = Behaviors.getFail(id) match {
 		case Some((id, f)) => onBeatFailed(id -> f); true
 		case None => false
 	}

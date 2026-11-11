@@ -29,11 +29,11 @@ import scala.collection.mutable
 	* may share the same id.
 	*/
 object Behaviors {
-	type Beh = (id: String, f: () => Unit)
-	type Fail = (id: String, f: Throwable => Unit)
+	type Beh = (id: String, f: () => Any)
+	type Fail = (id: String, f: Throwable => Any)
 
-	private val behs = mutable.HashMap[String, () => Unit]()
-	private val fails = mutable.HashMap[String, Throwable => Unit]()
+	private val behs = mutable.HashMap[String, () => Any]()
+	private val fails = mutable.HashMap[String, Throwable => Any]()
 	
 	def registerBeh(beh: Beh): Boolean =
 		if (behs.contains(beh.id)) false
@@ -106,7 +106,7 @@ object Behaviors {
 		*         (the existing one is kept).
 		*/
 	def registerPBeh[Msg, State](beh: PBeh[Msg, State]): Boolean =
-		if (pbehs.contains(beh.id) || tbehs.contains(beh.id)) false
+		if (behs.contains(beh.id) || pbehs.contains(beh.id) || tbehs.contains(beh.id)) false
 		else {
 			pbehs += beh.id -> beh.pf.asInstanceOf[AnyPF]
 			true
@@ -120,7 +120,7 @@ object Behaviors {
 		*         (the existing one is kept).
 		*/
 	def registerTBeh[Msg, State](beh: TBeh[Msg, State]): Boolean =
-		if (pbehs.contains(beh.id) || tbehs.contains(beh.id)) false
+		if (behs.contains(beh.id) || pbehs.contains(beh.id) || tbehs.contains(beh.id)) false
 		else {
 			tbehs += beh.id -> beh.tf.asInstanceOf[AnyTF]
 			true
@@ -134,7 +134,7 @@ object Behaviors {
 		* @return `true` if any behavior was removed, `false` if nothing was registered under this id.
 		*/
 	def unregister(id: String): Boolean =
-		pbehs.remove(id).isDefined || tbehs.remove(id).isDefined
+		behs.remove(id).isDefined || pbehs.remove(id).isDefined || tbehs.remove(id).isDefined
 
 	/**
 		* Returns the partial behavior function registered under the given id, if any.

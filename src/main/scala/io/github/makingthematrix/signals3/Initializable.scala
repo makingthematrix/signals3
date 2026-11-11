@@ -18,12 +18,11 @@ trait CanBeInitialized {
 	
 	private var _onInit: List[Beh] = Nil
 
-	// Registers a function that should be called exactly once when the actor is initialized
-	def onInit(beh: Beh): Unit =
+	protected def onInit(beh: Beh): Unit =
 		_onInit ::= beh
 
-	inline final def onInit(body: => Unit): Unit = onInit((IdGenerator.generate("onInit"), () => body): Beh)
-	inline final def onInit(id: String, f: () => Unit): Unit = onInit((id -> f): Beh)
+	inline final def onInit(body: => Any): Unit = onInit((IdGenerator.generate("onInit"), () => body): Beh)
+	inline final def onInit(id: String, f: () => Any): Unit = onInit((id -> f): Beh)
 
 	final def onInitById(id: String): Boolean = Behaviors.getBeh(id) match {
 		case Some(beh) => onInit(beh); true
@@ -36,13 +35,13 @@ trait CanBeInitialized {
 
 	private var _onInitFailed: List[Fail] = Nil
 
-	def onInitFailed(fail: Fail): Unit =
+	protected def onInitFailed(fail: Fail): Unit =
 		_onInitFailed ::= fail
 
-	inline final def onInitFailed(f: Throwable => Unit): Unit = 
+	inline final def onInitFailed(f: Throwable => Any): Unit =
 		onInitFailed((IdGenerator.generate("onInitFailed"), f): Fail)
 
-	inline final def onInitFailed(id: String, f: Throwable => Unit): Unit = onInitFailed((id -> f): Fail)
+	inline final def onInitFailed(id: String, f: Throwable => Any): Unit = onInitFailed((id -> f): Fail)
 
 	final def onInitFailedById(id: String): Boolean = Behaviors.getFail(id) match {
 		case Some(fail) => onInitFailed(fail); true

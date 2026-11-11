@@ -39,6 +39,9 @@ abstract class GeneratorSignal[V] protected[signals3] (init: V, interval: Finite
   
   protected def onBeat(): Unit = if (!isInitialized) initialize()
 
+	onInit { beat }
+	onInitFailed { t => println(s"GeneratorStream initialization failed: ${t.getMessage}") }
+
   /**
     * Calls `onBeat` immediately and resets the beat so that the next call to `onBeat` planned by the beat logic
     * will happen after the full `interval` counted from the moment of calling this method. Without the reset,
@@ -51,10 +54,6 @@ abstract class GeneratorSignal[V] protected[signals3] (init: V, interval: Finite
     Try(onBeat())
     beat.restart()
   }
-
-	onInit { beat; () }
-
-	onInitFailed { t => println(s"GeneratorStream initialization failed: ${t.getMessage}") }
 }
 
 object GeneratorSignal {

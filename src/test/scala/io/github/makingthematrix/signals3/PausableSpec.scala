@@ -628,10 +628,9 @@ class PausableSpec extends munit.FunSuite {
 
   test("Pausable trait - tryUnpause throwing calls onUnpauseFailed with the exception") {
     var caught: Option[Throwable] = None
-    val pausable = new Pausable {
-	    onUnpause { throw new RuntimeException("unpause failed") }
-	    onUnpauseFailed { t => caught = Some(t) }
-    }
+    val pausable = new Pausable { }
+	  pausable.onUnpause {throw new RuntimeException("unpause failed")}
+	  pausable.onUnpauseFailed { t => caught = Some(t) }
 
     pausable.pause()
     pausable.unpause()
@@ -640,9 +639,8 @@ class PausableSpec extends munit.FunSuite {
   }
 
   test("Pausable trait - failed unpause does not re-pause") {
-    val pausable = new Pausable {
-      onUnpause { throw new RuntimeException("unpause failed") }
-    }
+    val pausable = new Pausable { }
+    pausable.onUnpause { throw new RuntimeException("unpause failed") }
 
     pausable.pause()
     pausable.unpause()

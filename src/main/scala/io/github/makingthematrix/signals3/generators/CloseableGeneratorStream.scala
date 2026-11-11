@@ -34,32 +34,14 @@ class CloseableGeneratorStream[E] protected[signals3] (interval: FiniteDuration 
     super.onBeat()
     if (!isPaused && !isClosed) publish(generate())
   }
-
-  /**
-    * Closes the generator permanently. There will be no further calls to `generate`, `interval`, and `paused`.
-    */
-  override inline def closeAndCheck(): Boolean = beat.closeAndCheck()
-
-  /**
-    * Checks if the generator is closed.
-    *
-    * @return `true` if the generator was closed
-    */
-  override inline def isClosed: Boolean = beat.isClosed
-
-  /**
-    * Registers a snippet of code to execute when the generator is closed.
-    * @param beh Behavior that is going to be executed when the generator is closed.
-    */
-  override def onClose(beh: Beh): Unit = beat.onClose(beh)
-
+	
+  onClose { beat.close() }
+	onPause { beat.pause() }
+	onUnpause { beat.unpause() }
+	
   override def force(): Unit = if (!isClosed && !isPaused) super.force()
 
   override def pause()(using ExecutionContext): Unit = if (!isClosed) super.pause()
 
   override def unpause()(using ExecutionContext): Unit = if (!isClosed) super.unpause()
-
-	onPause { beat.pause() }
-
-	onUnpause { beat.unpause() }
 }

@@ -215,7 +215,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	private given AddBehaviorT: TypeTest[SystemMsg, AddBehavior[Msg, State]] = trusted[SystemMsg, AddBehavior[Msg, State]]
 	private given AddBehaviorPFT: TypeTest[SystemMsg, AddBehaviorPF[Msg, State]] = trusted[SystemMsg, AddBehaviorPF[Msg, State]]
 	private given SpawnT: TypeTest[SystemMsg, Spawn[Msg, State]] = trusted[SystemMsg, Spawn[Msg, State]]
-	private given SetOnBeatT: TypeTest[SystemMsg, AddOnBeat[Msg, State]] = trusted[SystemMsg, AddOnBeat[Msg, State]]
+	private given AddOnBeatT: TypeTest[SystemMsg, AddOnBeat[Msg, State]] = trusted[SystemMsg, AddOnBeat[Msg, State]]
 
 	protected def processSysEntry(msg: SysEntry): Unit = msg match {
 		case (Pause, p)              => pause(); respond(p, Done)
@@ -226,7 +226,8 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		case (AddBehaviorPFT(ab), p) => addBehaviorPF(ab.pf); respond(p, Done)
 		case (SpawnT(data), p)       => spawn(data, p)
 		case (ActorClosed(id), p)    => removeChild(id, p)
-		case (SetOnBeatT(sob), p)    => onBeat(sob.tbeh); respond(p, Done)
+		case (AddOnBeatT(sob), p)    => onBeat(sob.tbeh); respond(p, Done)
+		case (ResetOnBeat, p)        => resetOnBeat(); respond(p, Done)
 		case (other, p)              => respond(p, unhandledMsg(other.toString))
 	}
 

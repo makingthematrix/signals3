@@ -59,6 +59,7 @@ enum SystemMsg {
 	case AskForSystemAsync[Msg](sender: Actor[Msg, ?], systemId: String = "", tags: Set[ActorTag] = Set.empty)
 	case RemoteRef[Msg](ref: RemoteSystem[Msg])
 	case AddOnBeat[Msg, State](tbeh: TBeh[Msg, State])
+	case ResetOnBeat
 }
 
 object SystemMsg {

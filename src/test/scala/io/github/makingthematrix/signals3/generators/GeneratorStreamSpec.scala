@@ -1,6 +1,7 @@
 package io.github.makingthematrix.signals3.generators
 
 import io.github.makingthematrix.signals3.Utils.{awaitAllTasks, waitFor}
+import io.github.makingthematrix.signals3.priv.DoneSignal
 import io.github.makingthematrix.signals3.{DispatchQueue, EventContext, FlagSignal, SerialDispatchQueue, Signal}
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
@@ -517,9 +518,11 @@ class GeneratorStreamSpec extends munit.FunSuite {
   }
 
   test("CloseableGeneratorStream.onClose is invoked on close") {
-    var closed = false
+    val closed = DoneSignal()
     val stream = GeneratorStream(() => 1, HeartBeatMs)
-    stream.onClose { closed = true }
+    stream.onClose {
+	    closed.done()
+    }
     // consume a few events then close
     val done = FlagSignal()
     var counter = 0
@@ -531,7 +534,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
     stream.close()
     awaitAllTasks
     assert(stream.isClosed)
-    assert(closed)
+    assert(closed.state)
   }
 
   test("pause and unpause are ignored after close") {

@@ -38,27 +38,13 @@ class CloseableGeneratorSignal[V] protected[signals3] (init: V,
     if (!isPaused && !isClosed) currentValue.foreach(v => publish(update(v), ec))
   }
 
-  /**
-    * Closes the generator permanently. There will be no further calls to `update`, `interval`, and `paused`.
-    */
-  override inline def closeAndCheck(): Boolean = beat.closeAndCheck()
-
-  /**
-    * Checks if the generator is closed.
-    *
-    * @return `true` if the generator was closed
-    */
-  override inline def isClosed: Boolean = beat.isClosed
-
-  override inline def onClose(body: => Unit): Unit = beat.onClose(body)
-  
+	onClose { beat.close() }
+	onPause { beat.pause() }
+	onUnpause { beat.unpause() }
+	
   override def force(): Unit = if (!isClosed && !isPaused) super.force()
 
   override def pause()(using ExecutionContext): Unit = if (!isClosed) super.pause()
 
   override def unpause()(using ExecutionContext): Unit = if (!isClosed) super.unpause()
-
-	onPause { beat.pause() }
-
-	onUnpause { beat.unpause() }
 }
