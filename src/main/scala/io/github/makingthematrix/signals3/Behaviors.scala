@@ -34,7 +34,7 @@ object Behaviors {
 
 	private val behs = mutable.HashMap[String, () => Unit]()
 	private val fails = mutable.HashMap[String, Throwable => Unit]()
-
+	
 	def registerBeh(beh: Beh): Boolean =
 		if (behs.contains(beh.id)) false
 		else {
@@ -75,7 +75,7 @@ object Behaviors {
 		* `onUnpause`, `onClose` - functions which should be executed at a given point of the actor's lifecycle
 		* rather than in response to a particular message.
 		*/
-	type TF[Msg, State] = MutableActor[Msg, State] => Unit
+	type TF[Msg, State] = MutableActor[Msg, State] => Any
 
 	/**
 		* A ''total'' behavior: a total function (`TF`) paired with a unique id.

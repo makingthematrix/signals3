@@ -49,13 +49,13 @@ final class RepeatableFuture(interval: () => FiniteDuration)(body: => Unit)(usin
 		super.closeAndCheck()
 	}
 
-	override def tryPause(): Unit = if (!alreadyRunning.getAndSet(true)) {
+	onPause(if (!alreadyRunning.getAndSet(true)) {
 		task.cancel()
 		alreadyRunning.set(false)
-	}
+	})
 
-	override def tryUnpause(): Unit = if(!alreadyRunning.getAndSet(true)) {
+	onUnpause(if(!alreadyRunning.getAndSet(true)) {
 		task = sched(interval())
 		alreadyRunning.set(false)
-	}
+	})
 }

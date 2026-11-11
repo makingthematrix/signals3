@@ -15,7 +15,7 @@ trait CanBePaused {
 	
 	def onPause(beh: Beh): Unit =
 		_onPause ::= beh
-	inline final def onPause(body: => Unit): Unit = onPause((IdGenerator.generate("onPause"), () => body))
+	inline final def onPause(body: => Any): Unit = onPause((IdGenerator.generate("onPause"), () => {body; ()}))
 	inline final def onPause(id: String, f: () => Unit): Unit = onPause(id -> f)
 
 	final def onPause(id: String): Boolean = Behaviors.getBeh(id) match {
@@ -48,10 +48,10 @@ trait CanBePaused {
 
 	def onUnpause(beh: Beh): Unit =
 		_onUnpause ::= beh
-	inline final def onUnpause(body: => Unit): Unit = onUnpause((IdGenerator.generate("onUnpause"), () => body))
+	inline final def onUnpause(body: => Any): Unit = onUnpause((IdGenerator.generate("onUnpause"), () => {body; ()}))
 	inline final def onUnpause(id: String, f: () => Unit): Unit = onUnpause(id -> f)
 
-	final def onUnpause(id: String): Boolean = Behaviors.getBeh(id) match {
+	final def onUnpauseById(id: String): Boolean = Behaviors.getBeh(id) match {
 		case Some(beh) => onUnpause(beh); true
 		case None => false
 	}
@@ -66,7 +66,7 @@ trait CanBePaused {
 
 	inline final def onUnpauseFailed(id: String, f: Throwable => Unit): Unit = onUnpauseFailed(id -> f)
 
-	final def onUnpauseFailed(id: String): Boolean = Behaviors.getFail(id) match {
+	final def onUnpauseFailedById(id: String): Boolean = Behaviors.getFail(id) match {
 		case Some(fail) => onUnpauseFailed(fail); true
 		case None => false
 	}

@@ -51,18 +51,10 @@ abstract class CloseableFuture[+T](using ec: ExecutionContext)
     */
   def fail(th: Throwable): Boolean
 
-  /** Adds a callback for when the future is closed (but not failed for any other reason).
-    * There can be more than one `onClose` callback.
-    * Returns the reference to itself so it can be chained with other `CloseableFuture` methods.
-    *
-    * @param body The callback code
-    * @return The reference to itself
-    */
-  override def onClose(body: => Unit): Unit =
-    if (isCloseable) future.onComplete {
-      case Failure(Closed) => body
-      case _ =>
-    }
+	if (isCloseable) future.onComplete {
+		case Failure(Closed) => self.runOnClose()
+		case _ =>
+	}
 
   /** If the future is actually closeable, adds a timeout after which this future will be closed.
     * In theory, it's possible to add more than one timeout - the shortest one will close all others.
@@ -480,7 +472,7 @@ object CloseableFuture {
     else {
       val p = Promise[Unit]()
       val task = schedule(() => p.trySuccess(()), duration.toMillis)
-      new ActuallyCloseable(p).tap { _ .onClose(task.cancel()) }
+      new ActuallyCloseable(p).tap { _.onClose { task.cancel(); () } }
     }
 
   /** Creates an empty closeable future which will repeat the mapped computation every given `interval` until

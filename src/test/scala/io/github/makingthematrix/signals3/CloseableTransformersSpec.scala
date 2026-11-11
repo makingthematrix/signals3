@@ -409,9 +409,9 @@ class CloseableTransformersSpec extends munit.FunSuite {
   test("In a zipped stream, closing the transformed one calls all onClose") {
     val isClosed = Signal(0)
     val original1 = GeneratorStream.heartbeat(HeartBeatMs)
-    original1.onClose { isClosed.mutate(_ + 1) }
+    original1.onClose { isClosed.mutate(_ + 1); () }
     val original2 = GeneratorStream.heartbeat((HeartBeatMs.toMillis * 2).millis)
-    original2.onClose { isClosed.mutate(_ + 1) }
+    original2.onClose { isClosed.mutate(_ + 1); () }
     val zipped = Closeable.zip(original1, original2)
     zipped.onClose { isClosed.mutate(_ + 1) }
 

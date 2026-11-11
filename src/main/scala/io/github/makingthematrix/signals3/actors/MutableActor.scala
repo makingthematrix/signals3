@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.{IdGenerator, SourceStream, Behaviors}
-import io.github.makingthematrix.signals3.Behaviors.{TBeh, PBeh, TF, PF}
+import io.github.makingthematrix.signals3.Behaviors.{Fail, TBeh, TF}
+import io.github.makingthematrix.signals3.{Behaviors, IdGenerator, SourceStream}
 
 /**
 	* A trait representing a mutable actor, which is an extension of the `Actor` trait. This actor
@@ -47,10 +47,26 @@ trait MutableActor[Msg, State] extends Actor[Msg, State]{
 		case Some((id, tf)) => onBeat(id -> tf.asInstanceOf[TF[Msg, State]]); true
 		case None => false
 	}
-	
+
+	private var _onBeatFailed: List[Fail] = Nil
+
+	// Registers a function that should be called exactly once when the actor is initialized
+	def onBeatFailed(fail: Fail): Unit =
+		_onBeatFailed ::= fail
+
+	inline final def onBeatFailed(f: Throwable => Unit): Unit =
+		onBeatFailed((IdGenerator.generate("onBeatFailed"), f))
+
+	inline final def onBeatFailed(id: String, f: Throwable => Unit): Unit = onBeatFailed(id -> f)
+
+	final def onBeatFailed(id: String): Boolean = Behaviors.getFail(id) match {
+		case Some((id, f)) => onBeatFailed(id -> f); true
+		case None => false
+	}
+
 	inline final def runOnBeat(): Unit = try {
 		_onBeat.foreach(_.tf(this))
 	} catch {
-		case t: Throwable => 
+		case t: Throwable => _onBeatFailed.foreach(_.f(t))
 	}
 }

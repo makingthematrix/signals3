@@ -2,7 +2,7 @@ package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.*
 import Actor.{InvalidIdException, UnhandledMsgException}
-import .PF
+import io.github.makingthematrix.signals3.Behaviors.*
 import SystemMsg.*
 import io.github.makingthematrix.signals3.Utils.*
 import actors.Utils.*

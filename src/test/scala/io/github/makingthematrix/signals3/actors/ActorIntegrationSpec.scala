@@ -2,7 +2,7 @@ package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.*
 import actors.Actor.InvalidIdException
-import .PF
+import io.github.makingthematrix.signals3.Behaviors.*
 import Utils.*
 
 import SystemMsg.*
@@ -53,7 +53,7 @@ class ActorIntegrationSpec extends FunSuite {
     val addedCount = SourceSignal(0)
     
     // Create a custom behavior that records its ID when added
-    def createTrackingBehavior(id: String): ActorBehaviors.PF[String, String] = {
+    def createTrackingBehavior(id: String): PF[String, String] = {
       case (msg, _) if msg == id.hashCode.toString => Some(s"Behavior-$id: $msg")
     }
     

@@ -3,7 +3,7 @@ package io.github.makingthematrix.signals3.actors
 import io.github.makingthematrix.signals3.Utils.*
 import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, EventContext, Signal, SourceSignal, SourceStream, Stream, Threading}
 import munit.FunSuite
-
+import io.github.makingthematrix.signals3.Behaviors.*
 import scala.concurrent.TimeoutException
 import scala.concurrent.duration.*
 import scala.util.Try
@@ -739,7 +739,7 @@ class ActorSpec extends FunSuite {
   // an actor whose onBeat increments a counter in its state and reports it to `beats`
   private class BeatingActor(beats: SourceSignal[Int])
     extends ActorImpl[Unit, Int]("beating", 0, HeartBeatStrategy.Linear(20L.millis)) {
-    onBeat = { actor =>
+    onBeat { actor =>
       actor.state += 1
       beats ! actor.state
     }
@@ -807,7 +807,7 @@ class ActorSpec extends FunSuite {
   test("SetOnBeat via ? responds with Done") {
     val beats = Signal(0)
     val actor = create[Unit, Int](0, { case _ => None })
-    val cf = actor ? SystemMsg.SetOnBeat[Unit, Int] { _ => beats.mutate(_ + 1) }
+    val cf = actor ? SystemMsg.addOnBeat[Unit, Int] { _ => beats.mutate(_ + 1) }
     assertEquals(resultCF(cf), SystemMsg.Done)
     assert(waitFor(beats.map(_ >= 2), true))
     close(actor)
@@ -816,7 +816,7 @@ class ActorSpec extends FunSuite {
   test("SetOnBeat via ! applies the callback") {
     val beats = Signal(0)
     val actor = create[Unit, Int](0, { case _ => None })
-    actor ! SystemMsg.SetOnBeat[Unit, Int] { _ => beats.mutate(_ + 1) }
+    actor ! SystemMsg.addOnBeat[Unit, Int] { _ => beats.mutate(_ + 1) }
     assert(waitFor(beats.map(_ >= 2), true))
     close(actor)
   }
@@ -830,7 +830,7 @@ class ActorSpec extends FunSuite {
       .withOnBeat { _ => beats1.mutate(_ + 1) }
       .build()
     assert(waitFor(beats1.map(_ >= 2), true))
-    val cf = actor ? SystemMsg.SetOnBeat[Unit, Int] { _ => beats2.mutate(_ + 1) }
+    val cf = actor ? SystemMsg.addOnBeat[Unit, Int] { _ => beats2.mutate(_ + 1) }
     assertEquals(resultCF(cf), SystemMsg.Done)
     val count1 = beats1.currentValue.getOrElse(0)
     assert(waitFor(beats2.map(_ >= 2), true)) // at least two beats since the swap
@@ -853,7 +853,7 @@ class ActorSpec extends FunSuite {
     Thread.sleep(50L) // let a beat already in progress finish
     val countWhenPaused = beats1.currentValue.getOrElse(0)
     // system messages are processed even while the actor is paused
-    val cf = actor ? SystemMsg.SetOnBeat[Unit, Int] { _ => beats2.mutate(_ + 1) }
+    val cf = actor ? SystemMsg.addOnBeat[Unit, Int] { _ => beats2.mutate(_ + 1) }
     assertEquals(resultCF(cf), SystemMsg.Done)
     // neither the old nor the new callback runs while paused
     Thread.sleep(100L)
@@ -874,7 +874,7 @@ class ActorSpec extends FunSuite {
       .withOnBeat { _ => beats.mutate(_ + 1) }
       .build()
     assert(waitFor(beats.map(_ >= 2), true))
-    val cf = actor ? SystemMsg.SetOnBeat[Unit, Int](Actor.DoNothing)
+    val cf = actor ? SystemMsg.addOnBeat[Unit, Int](Actor.DoNothing)
     assertEquals(resultCF(cf), SystemMsg.Done)
     val count = beats.currentValue.getOrElse(0)
     Thread.sleep(100L) // several beats - the callback must stay disabled
@@ -903,7 +903,7 @@ class ActorSpec extends FunSuite {
     val child = spawn[Unit, Int](parent) {
       SystemMsg.Spawn(actorId = "boring-child", state = Some(0))
     }
-    val cf = child ? SystemMsg.SetOnBeat[Unit, Int] { _ => beats.mutate(_ + 1) }
+    val cf = child ? SystemMsg.addOnBeat[Unit, Int] { _ => beats.mutate(_ + 1) }
     assertEquals(resultCF(cf), SystemMsg.Done)
     assert(waitFor(beats.map(_ >= 2), true))
     close(child)

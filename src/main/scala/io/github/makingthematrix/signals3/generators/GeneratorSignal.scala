@@ -52,10 +52,9 @@ abstract class GeneratorSignal[V] protected[signals3] (init: V, interval: Finite
     beat.restart()
   }
 
-  override protected def tryInitialize(): Unit = beat
+	onInit { beat; () }
 
-  override protected def onInitializationFailed(t: Throwable): Unit =
-    println(s"GeneratorStream initialization failed: ${t.getMessage}")
+	onInitFailed { t => println(s"GeneratorStream initialization failed: ${t.getMessage}") }
 }
 
 object GeneratorSignal {

@@ -22,8 +22,8 @@ trait CanBeClosed {
    */
   def isClosed: Boolean = closed.get()
 
-	private final inline def runOnClose(): Unit = _onClose.foreach(_.f())
-	
+	protected final inline def runOnClose(): Unit = _onClose.foreach(_.f())
+
   protected def closeAndCheck(): Boolean =
     if (!closed.getAndSet(true)) {
       try {
@@ -36,7 +36,7 @@ trait CanBeClosed {
           false
       }
     } else false
-	
+
   
 
   /**
@@ -44,8 +44,8 @@ trait CanBeClosed {
    * @param beh Logic that is going to be executed when the closeable is closed.
    */
   def onClose(beh: Beh): Unit =
-		_onClose ::= beh  
-  inline final def onClose(body: => Unit): Unit = onClose((IdGenerator.generate("onClose"), () => body))
+		_onClose ::= beh
+  def onClose(body: => Any): Unit = onClose((IdGenerator.generate("onClose"), () => body))
 	inline final def onClose(id: String, f: () => Unit): Unit = onClose(id -> f)
 
 	final def onClose(id: String): Boolean = Behaviors.getBeh(id) match {
@@ -54,13 +54,13 @@ trait CanBeClosed {
 	}
 
 	private var _onClose: List[Beh] = Nil
-	
+
   private final inline def runOnCloseFailed(t: Throwable): Unit = _onCloseFailed.foreach(_.f(t))
-	
+
 	def onCloseFailed(fail: Fail): Unit =
 		_onCloseFailed ::= fail
 
-	inline final def onCloseFailed(f: Throwable => Unit): Unit = 
+	inline final def onCloseFailed(f: Throwable => Unit): Unit =
 		onCloseFailed((IdGenerator.generate("onCloseFailed"), f))
 
 	inline final def onCloseFailed(id: String, f: Throwable => Unit): Unit = onCloseFailed(id -> f)

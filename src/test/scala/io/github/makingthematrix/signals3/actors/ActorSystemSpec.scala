@@ -5,7 +5,7 @@ import Actor.{InvalidIdException, NoRefFound}
 import SystemMsg.*
 import actors.Utils.*
 import munit.FunSuite
-
+import io.github.makingthematrix.signals3.Behaviors.*
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration.*
 import scala.concurrent.{Await, Future}
@@ -405,7 +405,7 @@ class ActorSystemSpec extends FunSuite {
   test("cross-system AddBehavior and RemoveBehavior reach the peer's actor") {
     val (a, b) = crossRegistered()
     val onB    = newActor(b, "onB", { case (msg, _) if msg.startsWith("d:") => Some(s"D: $msg") })
-    val extra: ActorBehaviors.PF[String, Int] = { case (msg, _) if msg.startsWith("e:") => Some(s"E: $msg") }
+    val extra: PF[String, Int] = { case (msg, _) if msg.startsWith("e:") => Some(s"E: $msg") }
 
     awaitRef(b, "onB")
     val ref = remoteRef(a, "onB", "B")

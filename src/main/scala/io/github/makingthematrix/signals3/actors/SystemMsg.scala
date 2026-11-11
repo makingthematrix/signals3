@@ -4,6 +4,7 @@ import scala.annotation.static
 import scala.concurrent.ExecutionContext
 import scala.reflect.{ClassTag, TypeTest}
 import io.github.makingthematrix.signals3.Behaviors.*
+import io.github.makingthematrix.signals3.IdGenerator
 
 /**
 	* Represents system-level messages that can be used to control or affect the behavior
@@ -57,10 +58,12 @@ enum SystemMsg {
 	case AskForSystem(systemId: String = "", tags: Set[ActorTag] = Set.empty)
 	case AskForSystemAsync[Msg](sender: Actor[Msg, ?], systemId: String = "", tags: Set[ActorTag] = Set.empty)
 	case RemoteRef[Msg](ref: RemoteSystem[Msg])
-	case SetOnBeat[Msg, State](tbeh: TBeh[Msg, State])
+	case AddOnBeat[Msg, State](tbeh: TBeh[Msg, State])
 }
 
 object SystemMsg {
+	def addOnBeat[Msg, State](f: MutableActor[Msg, State] => Any): SystemMsg.AddOnBeat[Msg, State] =
+		SystemMsg.AddOnBeat(IdGenerator.generate("onBeat") -> f)
 	/**
 		* Creates a "trusted" [[scala.reflect.TypeTest]] used to match on `SystemMsg` cases with type parameters
 		* (like `AddBehavior[Msg, State]`) without giving up the full static type of the matched message.
