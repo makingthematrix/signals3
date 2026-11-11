@@ -179,4 +179,34 @@ class RepeatableFutureSpec extends munit.FunSuite {
     cf.pause()
     assert(!cf.isPaused, "pause() should be ignored on a closed repeat")
   }
+
+  test("pause stops the repeated executions and unpause resumes them") {
+    var count = 0
+    val firstBeats = new CountDownLatch(2)
+    val resumedBeats = new CountDownLatch(2)
+    val resumed = new java.util.concurrent.atomic.AtomicBoolean(false)
+    val cf = CloseableFuture.repeat(HeartBeatMs) {
+      count += 1
+      if (resumed.get()) resumedBeats.countDown() else firstBeats.countDown()
+    }
+
+    assert(await(firstBeats), "the repeat didn't execute two times before the pause")
+    resumed.set(true)
+    cf.pause()
+    assert(cf.isPaused)
+
+    // while paused, the pending execution is cancelled and the body is never called
+    val countWhenPaused = count
+    Thread.sleep(3 * HeartBeatMs.toMillis)
+    assertEquals(count, countWhenPaused, "the body executed while the repeat was paused")
+
+    // after the unpause a new task is scheduled with a full interval and the repetitions continue
+    cf.unpause()
+    assert(!cf.isPaused)
+    assert(await(resumedBeats), "the repeat didn't execute two times after the unpause")
+
+    Thread.sleep(20L) // let the last beat finish rescheduling itself before closing
+    cf.close()
+    assert(cf.isClosed)
+  }
 }

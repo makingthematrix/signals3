@@ -533,6 +533,26 @@ class ActorSpec extends FunSuite {
     waitFor(received, true)
   }
 
+  test("a failed close behavior keeps the actor open and the close can be retried") {
+    val actor = create[Unit] { case _ => None }
+    var firstAttempt = true
+    var failed: Option[Throwable] = None
+    actor.onClose { if (firstAttempt) { firstAttempt = false; throw new RuntimeException("close failed") } }
+    actor.onCloseFailed { t => failed = Some(t) }
+
+    // the close request fails with CloseFailedException
+    intercept[Actor.CloseFailedException] { resultCF(actor ? SystemMsg.Close) }
+
+    // nothing was closed: the actor stays open...
+    assert(!actor.isClosed)
+    // ...and the exception was reported to the close-failure behaviors
+    assert(failed.exists(_.getMessage.contains("close failed")))
+
+    // a retry, now without the throwing behavior, closes the actor normally
+    assertEquals(resultCF(actor ? SystemMsg.Close), Done)
+    waitFor(actor.isClosedSignal, true)
+  }
+
   // ==================== in/out Stream Tests =====================
 
   test("in stream receives messages sent to actor") {
@@ -932,5 +952,63 @@ class ActorSpec extends FunSuite {
     assert(!ids.contains("child-no-onbeat"))
     close(child)
     close(parent)
+  }
+
+  // ==================== *ById wiring ====================
+
+  test("onInitById attaches an initialization behavior before the actor is initialized") {
+    var initialized = false
+    assert(registerBeh("spec-oninit-byid" -> (() => initialized = true)))
+
+    // the by-id behaviors must be attached before the actor is initialized
+    val actor = new ActorImpl[Unit, Int]("spec-oninit-byid-actor", 0)
+    assert(!actor.isInitialized)
+    assert(actor.onInitById("spec-oninit-byid"))
+    // an unregistered id is reported and attaches nothing
+    assert(!actor.onInitById("spec-never-registered-oninit"))
+
+    actor.initialize()
+    assert(actor.isInitialized)
+    assert(initialized)
+
+    // a behavior attached after the initialization is registered but will never run
+    var late = false
+    assert(registerBeh("spec-oninit-byid-late" -> (() => late = true)))
+    assert(actor.onInitById("spec-oninit-byid-late"))
+    assert(!late)
+
+    close(actor)
+  }
+
+  test("onBeatById attaches a heartbeat behavior from the behavior library") {
+    val actor = new ActorImpl[Unit, Int]("spec-onbeat-byid-actor", 0, HeartBeatStrategy.Linear(20L.millis))
+    assert(registerTBeh[Unit, Int]("spec-onbeat-byid" -> { a => a.state += 1 }))
+    assert(!actor.isInitialized)
+    assert(actor.onBeatById("spec-onbeat-byid"))
+    assert(!actor.onBeatById("spec-never-registered-tbeh"))
+
+    actor.initialize()
+    Thread.sleep(120L) // at 20ms beats the attached behavior must fire several times
+    assert(actor.state >= 2)
+
+    close(actor)
+  }
+
+  test("a throwing onBeat behavior prevents the remaining ones from running and notifies onBeatFailed") {
+    // the beat behaviors run in a single try-catch: the first one that throws (the last registered,
+    // as they run in reverse order) aborts the remaining ones on every beat
+    var beatCount = 0
+    var failed: Option[Throwable] = None
+    val actor = new ActorImpl[Unit, Int]("spec-onbeat-throwing", 0, HeartBeatStrategy.Linear(20L.millis)) {
+      onBeat { _ => beatCount += 1 }
+      onBeat { _ => throw new RuntimeException("beat failed") }
+      onBeatFailed { t => failed = Some(t) }
+    }
+    actor.initialize()
+    Thread.sleep(120L) // several beats; on every one of them the throwing behavior aborts the rest
+
+    assert(failed.exists(_.getMessage.contains("beat failed")))
+    assertEquals(beatCount, 0, "the older beat behavior should never run")
+    close(actor)
   }
 }

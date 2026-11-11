@@ -18,7 +18,7 @@ trait CanBePaused {
 	inline final def onPause(body: => Any): Unit = onPause((IdGenerator.generate("onPause"), () => body): Beh)
 	inline final def onPause(id: String, f: () => Unit): Unit = onPause((id -> f): Beh)
 
-	final def onPause(id: String): Boolean = Behaviors.getBeh(id) match {
+	final def onPauseById(id: String): Boolean = Behaviors.getBeh(id) match {
 		case Some(beh) => onPause(beh); true
 		case None => false
 	}
@@ -83,6 +83,7 @@ trait Pausable extends CanBePaused {
 			runOnPause()
 		} catch {
 			case t: Throwable =>
+				paused.set(false)
 				runOnPauseFailed(t)
 				pausedSignal.clear()
 		}
@@ -93,6 +94,7 @@ trait Pausable extends CanBePaused {
 			runOnUnpause()
 		} catch {
 			case t: Throwable =>
+				paused.set(true)
 				runOnUnpauseFailed(t)
 				pausedSignal.set()
 		}

@@ -317,27 +317,31 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	/**
 		* Closes the actor and performs necessary checks to ensure all messages are completed before finalizing the closure.
 		*
-		* This method first invokes `beat.closeAndCheck()` to attempt closure at the heartbeat
-		* level. If this is successful, it asynchronously processes any pending messages
-		* using `processMessages` if messages are present. Once the processing is complete,
-		* it delegates to `super.closeAndCheck()` to finalize the closure process.
+		* The actor's own `onClose` behaviors run first (through `closeAndCheck` of `CanBeClosed`). If any of them throws,
+		* the close is aborted: `closeAndCheck` returns `false`, the actor stays open, closed is rolled back, and the
+		* failure is reported to the `onCloseFailed` behaviors. The close can then be retried.
+		*
+		* If the user behaviors succeed, this method closes the heartbeat, processes any pending messages,
+		* closes the `in`/`out` streams and the children, notifies the parent and the system, and returns
+		* a future which succeeds when the heartbeat is closed.
 		*
 		* @return `true` if the actor and its heartbeat are successfully closed, `false` otherwise.
 		*/
 	override def closeAndCheck(): Boolean = Try(Await.ready(shutdown(), heartbeat.timeout + 5.seconds)).isSuccess
 
-	protected def shutdown(): Future[SystemMsg] = {
-		super.closeAndCheck()
-		children.values.foreach(child => child ! SystemMsg.Close)
-		in.close()
-		out.close()
-		beat.closeAndCheck()
-		flushMsgEntries().collect { case (_, Some(p), _) => p }.foreach(_.tryFailure(actorIsClosed))
-		flushSystemEntries().collect { case (_, Some(p)) => p }.foreach(_.tryFailure(actorIsClosed))
-		parent.foreach(_ ! ActorClosed(id))
-		system.foreach(_ ! ActorClosed(id))
-		beat.isClosedSignal.onTrue.map(_ => ActorClosed(id))
-	}
+	protected def shutdown(): Future[SystemMsg] =
+		if (!super.closeAndCheck()) Future.failed(CloseFailedException(id))
+		else {
+			children.values.foreach(child => child ! SystemMsg.Close)
+			in.close()
+			out.close()
+			beat.closeAndCheck()
+			flushMsgEntries().collect { case (_, Some(p), _) => p }.foreach(_.tryFailure(actorIsClosed))
+			flushSystemEntries().collect { case (_, Some(p)) => p }.foreach(_.tryFailure(actorIsClosed))
+			parent.foreach(_ ! ActorClosed(id))
+			system.foreach(_ ! ActorClosed(id))
+			beat.isClosedSignal.onTrue.map(_ => ActorClosed(id))
+		}
 
 	override def state: State = _state
 

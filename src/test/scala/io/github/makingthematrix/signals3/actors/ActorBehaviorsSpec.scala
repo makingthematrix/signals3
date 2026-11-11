@@ -6,7 +6,9 @@ import io.github.makingthematrix.signals3.Behaviors.*
 import munit.FunSuite
 
 /**
-	* Tests of the behavior library: registering, unregistering, and retrieving partial and total behaviors by id.
+	* Tests of the behavior library: registering, unregistering, and retrieving behaviors by id.
+	* This covers the partial and total behaviors (PBeh/TBeh) and the total and failure behaviors
+	* of the lifecycle events (Beh/Fail).
 	*
 	* The retrieved functions are applied to a real (uninitialized) actor to verify that the type parameters
 	* survive the round trip through the registry.
@@ -82,5 +84,90 @@ class ActorBehaviorsSpec extends FunSuite {
 		// nothing is registered under this id any more
 		assert(!unregister("spec-unreg"))
 		assert(!unregister("spec-never-registered"))
+	}
+
+	test("register and retrieve a Beh - a total behavior of a lifecycle event") {
+		var ran = false
+		val f: () => Unit = () => { ran = true }
+		val beh: Beh = "spec-beh" -> f
+
+		assert(registerBeh(beh))
+		assertEquals(getBeh("spec-beh"), Some(beh))
+		// the retrieved function is the one registered
+		getBeh("spec-beh").foreach(_.f())
+		assert(ran)
+
+		// the Beh registry is separate from the partial/total behavior registries
+		assert(getPBeh[Int, Unit]("spec-beh").isEmpty)
+		assert(getTBeh[Int, Unit]("spec-beh").isEmpty)
+	}
+
+	test("registering a Beh with a taken id fails and keeps the original") {
+		val f1: () => Unit = () => ()
+		val f2: () => Unit = () => ()
+		val beh1: Beh = "spec-beh-dup" -> f1
+		val beh2: Beh = "spec-beh-dup" -> f2
+
+		assert(registerBeh(beh1))
+		assert(!registerBeh(beh2))
+		assertEquals(getBeh("spec-beh-dup"), Some(beh1))
+	}
+
+	test("register and retrieve a Fail - a behavior run when a lifecycle event fails") {
+		var received: Option[Throwable] = None
+		val f: Throwable => Unit = t => received = Some(t)
+		val fail: Fail = "spec-fail" -> f
+		val ex = new RuntimeException("spec failure")
+
+		assert(registerFail(fail))
+		assertEquals(getFail("spec-fail"), Some(fail))
+		// the retrieved function is the one registered, with the exception passed on
+		getFail("spec-fail").foreach(_.f(ex))
+		assert(received.contains(ex))
+
+		// the Fail registry is separate from the Beh registry
+		assert(getBeh("spec-fail").isEmpty)
+	}
+
+	test("registering a Fail with a taken id fails and keeps the original") {
+		val f1: Throwable => Unit = _ => ()
+		val f2: Throwable => Unit = _ => ()
+		val fail1: Fail = "spec-fail-dup" -> f1
+		val fail2: Fail = "spec-fail-dup" -> f2
+
+		assert(registerFail(fail1))
+		assert(!registerFail(fail2))
+		assertEquals(getFail("spec-fail-dup"), Some(fail1))
+	}
+
+	test("unregisterBeh and unregisterFail remove the behaviors and report if nothing was removed") {
+		val beh: Beh = "spec-unreg-beh" -> (() => ())
+		val fail: Fail = "spec-unreg-fail" -> (_ => ())
+
+		assert(registerBeh(beh))
+		assert(registerFail(fail))
+
+		assert(unregisterBeh("spec-unreg-beh"))
+		assert(unregisterFail("spec-unreg-fail"))
+
+		assert(getBeh("spec-unreg-beh").isEmpty)
+		assert(getFail("spec-unreg-fail").isEmpty)
+
+		// both registries report that there was nothing to remove
+		assert(!unregisterBeh("spec-unreg-beh"))
+		assert(!unregisterFail("spec-unreg-fail"))
+		assert(!unregisterBeh("spec-never-registered"))
+		assert(!unregisterFail("spec-never-registered"))
+	}
+
+	test("a Beh and a Fail can share the same id") {
+		val beh: Beh = "spec-shared-kind" -> (() => ())
+		val fail: Fail = "spec-shared-kind" -> (_ => ())
+
+		assert(registerBeh(beh))
+		assert(registerFail(fail))
+		// each registry returns its own kind of behavior
+		assertEquals(getBeh("spec-shared-kind"), Some(beh))
+		assertEquals(getFail("spec-shared-kind"), Some(fail))
 	}
 }

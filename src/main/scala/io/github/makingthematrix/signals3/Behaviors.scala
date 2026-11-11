@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3
 
-import io.github.makingthematrix.signals3.actors.{Actor, MutableActor}
+import io.github.makingthematrix.signals3.actors.MutableActor
 
 import scala.collection.mutable
 
@@ -12,9 +12,9 @@ import scala.collection.mutable
 	* a reusable behavior here and then ask for it by id, which makes it possible to e.g. add a behavior to an actor
 	* without passing the function around, only its id.
 	*
-	* The library keeps fourkinds of behaviors:
+	* The library keeps four kinds of behaviors:
 	* - '''Beh''' - a tuple of an id and a total function, meant for the four of five lifecycle events: 
-	*   `onInit`, onPause`, `onUnpause`, `onClose`.
+	*   `onInit`, `onPause`, `onUnpause`, `onClose`.
 	* - '''Fail''' - a tuple of an id and function that takes a Throwable: meant for when one of the lifecycle
 	* events fail
 	*  - '''PBeh''' - a ''partial'' behavior: a partial function which tries to process an incoming message
@@ -23,10 +23,11 @@ import scala.collection.mutable
 	*    Total behaviors are meant for the fifth lifecycle event of an actor: `onBeat`
 	*
 	* Registration is dynamic: new behaviors can be registered (and unregistered) at runtime through the methods
-	* of this object, and some generally useful behaviors are hardcoded in the library from the start.
+	* of this object.
 	*
-	* Each kind has its own registry, so ids are unique within a kind, but a partial and a total behavior
-	* may share the same id.
+	* The '''Beh''' and '''Fail''' behaviors each have their own registry, so ids are unique within a kind.
+	* '''PBeh''' and '''TBeh''' behaviors share the id space: a partial and a total behavior cannot be registered
+	* with the same id.
 	*/
 object Behaviors {
 	type Beh = (id: String, f: () => Any)
@@ -81,12 +82,6 @@ object Behaviors {
 		* A ''total'' behavior: a total function (`TF`) paired with a unique id.
 		*/
 	type TBeh[Msg, State] = (id: String, tf: TF[Msg, State])
-
-	/**
-		* A `TBeh` that does nothing - the default value of the five lifecycle events of an actor
-		* (`onInit`, `onBeat`, `onPause`, `onUnpause`, `onClose`), recognizable by the empty id.
-		*/
-	val NothingTBeh: (String, MutableActor[?, ?] => Unit) = "" -> Actor.DoNothing
 
 	// Behaviors of all message and state types share one registry, so the stored functions are untyped
 	// and the type parameters are restored with unchecked casts at retrieval.

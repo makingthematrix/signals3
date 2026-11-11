@@ -8,20 +8,11 @@ class PausableSpec extends munit.FunSuite {
 
   // ===== Pausable Trait Tests =====
 
-  test("Pausable trait - initially not paused") {
+  test("Pausable trait - the isPaused state machine") {
     val pausable = new Pausable {}
     assert(!pausable.isPaused)
-  }
-
-  test("Pausable trait - pause sets isPaused to true") {
-    val pausable = new Pausable {}
     pausable.pause()
     assert(pausable.isPaused)
-  }
-
-  test("Pausable trait - unpause sets isPaused to false") {
-    val pausable = new Pausable {}
-    pausable.pause()
     pausable.unpause()
     assert(!pausable.isPaused)
   }
@@ -30,15 +21,6 @@ class PausableSpec extends munit.FunSuite {
     val pausable = new Pausable {}
     pausable.pause()
     pausable.pause()
-    pausable.pause()
-    assert(pausable.isPaused)
-  }
-
-  test("Pausable trait - pause after unpause works") {
-    val pausable = new Pausable {}
-    pausable.pause()
-    pausable.unpause()
-    assert(!pausable.isPaused)
     pausable.pause()
     assert(pausable.isPaused)
   }
@@ -63,20 +45,6 @@ class PausableSpec extends munit.FunSuite {
     callbackCalled = false
     pausable.unpause()
     assert(!callbackCalled)
-  }
-
-  test("Pausable trait - onPause callback is triggered on each pause call") {
-    val pausable = new Pausable {}
-    var callbackCount = 0
-    pausable.onPause { callbackCount += 1 }
-    
-    pausable.pause()
-    pausable.unpause()
-    pausable.pause()
-    pausable.unpause()
-    pausable.pause()
-    pausable.unpause()
-    assertEquals(callbackCount, 3) // Callback is called each time pause() is called
   }
 
   test("Pausable trait - onPause callback is triggered on each separate pause") {
@@ -123,7 +91,7 @@ class PausableSpec extends munit.FunSuite {
     waitForResult(received, Seq(1, 4))
   }
 
-  test("Stream - events dispatched after unpause include those sent while paused") {
+  test("Stream - events sent while paused are lost and not dispatched after unpause") {
     // This is actually NOT the case - events sent while paused are LOST
     // The pause only affects future dispatch calls, not buffering
     val src = CloseableSourceStream[Int]()
@@ -513,7 +481,7 @@ class PausableSpec extends munit.FunSuite {
 
   // ===== onPause callback edge cases =====
 
-  test("Stream - onPause callback can be set multiple times, only last one counts") {
+  test("Stream - all registered onPause callbacks are called") {
     val src = CloseableSourceStream[Int]()
     var firstCalled = false
     var secondCalled = false
@@ -527,7 +495,7 @@ class PausableSpec extends munit.FunSuite {
     assert(secondCalled)
   }
 
-  test("Signal - onPause callback can be set multiple times, only last one counts") {
+  test("Signal - all registered onPause callbacks are called") {
     val sig = CloseableSourceSignal(0)
     var firstCalled = false
     var secondCalled = false
@@ -638,18 +606,39 @@ class PausableSpec extends munit.FunSuite {
     assert(caught.exists(_.getMessage.contains("unpause failed")))
   }
 
-  test("Pausable trait - failed unpause does not re-pause") {
+  test("Pausable trait - a failed pause rolls back and stays unpaused") {
+    val pausable = new Pausable {}
+    var caught: Option[Throwable] = None
+    pausable.onPause { throw new RuntimeException("pause failed") }
+    pausable.onPauseFailed { t => caught = Some(t) }
+
+    pausable.pause()
+
+    assert(caught.exists(_.getMessage.contains("pause failed")))
+    // the failed pause rolls back the state - the object stays unpaused...
+    assert(!pausable.isPaused)
+    // ...and the paused signal agrees
+    assert(waitForResult(pausable.isPausedSignal, false))
+  }
+
+  test("Pausable trait - failed unpause rolls back and stays paused") {
     val pausable = new Pausable { }
+    var pauseCount = 0
+    pausable.onPause { pauseCount += 1 }
     pausable.onUnpause { throw new RuntimeException("unpause failed") }
 
     pausable.pause()
     pausable.unpause()
-    // The failed unpause must not trigger another pause (would cause an endless cycle)
-    assert(!pausable.isPaused)
-
-    // A subsequent pause must still work normally
-    pausable.pause()
+    // The failed unpause rolls back the state: the object is still paused...
     assert(pausable.isPaused)
+    assert(waitForResult(pausable.isPausedSignal, true))
+    // ...but the pause callbacks must not run again (would cause an endless cycle)
+    assertEquals(pauseCount, 1)
+
+    // A subsequent unpause attempt fails again in the same way
+    pausable.unpause()
+    assert(pausable.isPaused)
+    assertEquals(pauseCount, 1)
   }
 
   test("Stream - onUnpause callback is triggered") {
@@ -676,5 +665,40 @@ class PausableSpec extends munit.FunSuite {
     assert(!unpausedSignal.currentValue.contains(true))
     sig.unpause()
     waitForResult(unpausedSignal, true)
+  }
+
+  // ===== By-id wiring tests =====
+
+  test("Pausable trait - onPauseById and onUnpauseById attach behaviors from the behavior library") {
+    val pausable = new Pausable {}
+    var callbackCount = 0
+    assert(Behaviors.registerBeh("spec-onpause-byid" -> (() => callbackCount += 1)))
+    assert(Behaviors.registerBeh("spec-onunpause-byid" -> (() => callbackCount += 1)))
+
+    assert(pausable.onPauseById("spec-onpause-byid"))
+    assert(pausable.onUnpauseById("spec-onunpause-byid"))
+    // unregistered ids are reported and attach nothing
+    assert(!pausable.onPauseById("spec-never-registered-pause"))
+    assert(!pausable.onUnpauseById("spec-never-registered-unpause"))
+
+    pausable.pause()
+    assertEquals(callbackCount, 1)
+    pausable.unpause()
+    assertEquals(callbackCount, 2)
+    // the attached behaviors run on every consecutive pause/unpause, like the directly registered ones
+    pausable.pause()
+    assertEquals(callbackCount, 3)
+  }
+
+  test("Pausable trait - onUnpauseFailedById attaches a failure behavior from the behavior library") {
+    var caught: Option[Throwable] = None
+    assert(Behaviors.registerFail("spec-onunpausefailed-byid" -> ((t: Throwable) => caught = Some(t))))
+    val pausable = new Pausable {}
+    assert(pausable.onUnpauseFailedById("spec-onunpausefailed-byid"))
+    pausable.onUnpause { throw new RuntimeException("unpause failed") }
+
+    pausable.pause()
+    pausable.unpause()
+    assert(caught.exists(_.getMessage.contains("unpause failed")))
   }
 }

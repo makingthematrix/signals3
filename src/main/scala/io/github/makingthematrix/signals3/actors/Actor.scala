@@ -164,6 +164,12 @@ object Actor {
 	inline def ActorIsClosed[Msg](using ExecutionContext): CloseableFuture[Msg] = CloseableFuture.failed[Msg](actorIsClosed)
 
 	/**
+		* A special type of failure indicating that the actor could not be closed because one of its
+		* `onClose` behaviors threw an exception. The actor stays open and the close can be retried.
+		*/
+	final case class CloseFailedException(actorId: String) extends IllegalStateException(s"Failed to close actor $actorId")
+
+	/**
 		* A special type of failure indicating that the actor ID is invalid
 		*/
 	final case class InvalidIdException(actorId: String) extends IllegalArgumentException(s"Invalid id: $actorId")

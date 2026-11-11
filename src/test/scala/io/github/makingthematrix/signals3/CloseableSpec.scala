@@ -125,17 +125,6 @@ class CloseableSpec extends munit.FunSuite {
     assertEquals(res, 1)
   }
 
-  test("Complete a closeable future delayed in another way") {
-    var res = 0
-
-    val cf: CloseableFuture[Unit] = CloseableFuture.delayed(500.millis) { res = 1 }
-    assertEquals(res, 0)
-
-    await(cf)
-
-    assertEquals(res, 1)
-  }
-
   test("Close a delayed future") {
     var res = 0
 
@@ -360,19 +349,6 @@ class CloseableSpec extends munit.FunSuite {
     val s = Signal(0)
 
     val cf = CloseableFuture { Thread.sleep(200); s ! 1 }.tap { _.onClose { s ! 2 } }
-    assert(cf.isCloseable)
-
-    CloseableFuture.delayed(50.millis) { assert(cf.closeAndCheck()) }
-
-    await(cf)
-
-    assert(waitForResult(s, 2))
-  }
-
-  test("Closing a delayed future triggers its onClose task") {
-    val s = Signal(0)
-
-    val cf = CloseableFuture.delayed(200.millis){ s ! 1 }.tap { _.onClose { s ! 2 } }
     assert(cf.isCloseable)
 
     CloseableFuture.delayed(50.millis) { assert(cf.closeAndCheck()) }
@@ -639,5 +615,67 @@ class CloseableSpec extends munit.FunSuite {
     assert(waitForResult(received, Seq(0, 1)))
   }
 
+  // ===== By-id wiring tests =====
 
+  test("onCloseById attaches a behavior from the behavior library") {
+    val s = Signal(0)
+    assert(Behaviors.registerBeh("spec-onclose-byid" -> (() => { s ! 2 })))
+
+    val cf = CloseableFuture { Thread.sleep(200); s ! 1 }
+    assert(cf.onCloseById("spec-onclose-byid"))
+    // an unregistered id is reported and attaches nothing
+    assert(!cf.onCloseById("spec-never-registered-onclose"))
+
+    CloseableFuture.delayed(50.millis) { assert(cf.closeAndCheck()) }
+    await(cf)
+    assert(waitForResult(s, 2))
+  }
+
+  test("onCloseFailedById attaches a failure behavior run when closing fails") {
+    val s = Signal("")
+    assert(Behaviors.registerFail("spec-onclosefailed-byid" -> ((t: Throwable) => s ! t.getMessage)))
+
+    val closeable = new Closeable { }
+    assert(closeable.onCloseFailedById("spec-onclosefailed-byid"))
+    closeable.onClose { throw new RuntimeException("close failed") }
+
+    // the close fails and the attached failure behavior receives the exception
+    assert(!closeable.closeAndCheck())
+    assert(waitForResult(s, "close failed"))
+
+    // the failed close rolls back: the closeable stays open...
+    assert(!closeable.isClosed)
+    // ...and a retry fails again in the same way, as the throwing behavior is still attached
+    assert(!closeable.closeAndCheck())
+  }
+
+  test("onClose behaviors run in reverse registration order") {
+    val closeable = new Closeable { }
+    val order = scala.collection.mutable.ListBuffer[String]()
+    closeable.onClose { order += "first" }
+    closeable.onClose { order += "second" }
+    closeable.onClose { order += "third" }
+
+    assert(closeable.closeAndCheck())
+
+    // Callbacks are prepended to the list, so the last registered runs first
+    assertEquals(order.toList, List("third", "second", "first"))
+  }
+
+  test("a throwing onClose behavior prevents the remaining ones from running") {
+    // the close behaviors run in a single try-catch: the first one that throws (the last registered,
+    // as they run in reverse order) aborts the remaining ones and fails the whole close
+    val order = scala.collection.mutable.ListBuffer[String]()
+    var failed: Option[Throwable] = None
+    val closeable = new Closeable { }
+    closeable.onClose { order += "first" }
+    closeable.onClose { order += "second" }
+    closeable.onClose { order += "throwing"; throw new RuntimeException("close failed") }
+    closeable.onCloseFailed { t => failed = Some(t) }
+
+    assert(!closeable.closeAndCheck())
+    assertEquals(order.toList, List("throwing"), "the older close behaviors should not run after the throwing one")
+    assert(failed.exists(_.getMessage.contains("close failed")))
+    assert(!closeable.isClosed)
+  }
 }
