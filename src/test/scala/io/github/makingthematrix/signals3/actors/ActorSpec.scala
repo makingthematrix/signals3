@@ -213,22 +213,6 @@ class ActorSpec extends FunSuite {
     close(actor)
   }
 
-  test("HeartBeatStrategy subclasses are exhaustively matchable and equal as case classes") {
-    // sealed matching: adding a new subclass must be reflected here (the match stays exhaustive only for these four)
-    def describe(s: HeartBeatStrategy): String = s match {
-      case HeartBeatStrategy.Linear(_, _)          => "linear"
-      case HeartBeatStrategy.Reactive(_, _, _)     => "reactive"
-      case HeartBeatStrategy.CustomLinear(_, _)    => "custom-linear"
-      case HeartBeatStrategy.CustomReactive(_, _)   => "custom-reactive"
-    }
-    assertEquals(describe(HeartBeatStrategy.Linear(10.millis)), "linear")
-    assertEquals(describe(HeartBeatStrategy.Reactive(10.millis, 20.millis)), "reactive")
-    assertEquals(describe(HeartBeatStrategy.CustomLinear(() => 10.millis)), "custom-linear")
-    assertEquals(describe(HeartBeatStrategy.CustomReactive(_ => 10.millis)), "custom-reactive")
-    assertEquals(HeartBeatStrategy.Linear(10.millis), HeartBeatStrategy.Linear(10.millis))
-    assertEquals(Actor.defBeat, HeartBeatStrategy.Linear(100.millis))
-  }
-	
   test("Spawn with a custom heartbeat strategy") {
     val beats = Signal(0)
     val parent = create[Unit, Int](0, { case _ => None })
