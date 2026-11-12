@@ -8,9 +8,10 @@
   - [x] Move Beh to Behaviors and rename it PBeh (Partial Behavior)
   - [x] Create TBeh (Total Behavior)
   - [x] Create mutable maps for both and a way to register new behaviors
-  - [ ] Hardcode some behaviors
-  - [ ] In all 5 events: onInit, onBeat, onPause, onUnpause, onClose; switch to TBeh
-  - [ ] Enable a way to add a TBeh only by id
+  - [x] Hardcode some behaviors
+  - [x] In all 5 events: onInit, onBeat, onPause, onUnpause, onClose; switch to behaviors
+  - [x] Enable a way to add a behaviors only by id
+  - [ ] Add, remove and reset behaviors with system messages
     // loop: implement -> test -> refactor
 - [ ] LogActor as a special subclass of ActorImpl
 - [ ] When an actor receives a reference of LogActor, it starts to gather logging and debugging data (not before)

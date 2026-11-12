@@ -3,6 +3,8 @@ package io.github.makingthematrix.signals3.actors
 import io.github.makingthematrix.signals3.Behaviors.{Fail, TBeh, TF}
 import io.github.makingthematrix.signals3.{Behaviors, IdGenerator, SourceStream}
 
+import scala.collection.mutable
+
 /**
 	* A trait representing a mutable actor, which is an extension of the `Actor` trait. This actor
 	* allows dynamic modification of its internal state and behavior at runtime. It introduces methods
@@ -32,35 +34,33 @@ trait MutableActor[Msg, State] extends Actor[Msg, State]{
 		*/
 	override def out: SourceStream[Msg]
 
-	private var _onBeat: List[TBeh[Msg, State]] = Nil
+	private val _onBeat = mutable.ArrayBuffer[TBeh[Msg, State]]()
+
+	protected final def runOnBeat(): Boolean = try {
+		_onBeat.foreach(_.f(this)); true
+	} catch {
+		case t: Throwable => _onBeatFailed.foreach(_.f(t)); false
+	}
 
 	// Registers a function that should be called exactly once when the actor is initialized
 	protected def onBeat(tbeh: TBeh[Msg, State]): Unit =
-		_onBeat ::= tbeh
+		_onBeat.addOne(tbeh)
 
-	inline final def onBeat(tf: TF[Msg, State]): Unit =
-		onBeat((IdGenerator.generate("onBeat"), tf): TBeh[Msg, State])
-
-	inline final def onBeat(id: String, tf: TF[Msg, State]): Unit = onBeat((id -> tf): TBeh[Msg, State])
+	inline final def onBeat(f: TF[Msg, State]): Unit = onBeat((IdGenerator.generate("onBeat"), f): TBeh[Msg, State])
+	inline final def onBeat(id: String, f: TF[Msg, State]): Unit = onBeat((id -> f): TBeh[Msg, State])
 
 	final def onBeatById(id: String): Boolean = Behaviors.getTBeh(id) match {
-		case Some((id, tf)) => onBeat(id -> tf.asInstanceOf[TF[Msg, State]]); true
+		case Some((id, f)) => onBeat(id -> f.asInstanceOf[TF[Msg, State]]); true
 		case None => false
 	}
 
-	def resetOnBeat(): Unit = {
-		_onBeat = Nil
-		_onBeatFailed = Nil
-	}
-
-	private var _onBeatFailed: List[Fail] = Nil
+	private val _onBeatFailed = mutable.ArrayBuffer[Fail]()
 
 	// Registers a function that should be called exactly once when the actor is initialized
 	protected def onBeatFailed(fail: Fail): Unit =
-		_onBeatFailed ::= fail
+		_onBeatFailed.addOne(fail)
 
-	inline final def onBeatFailed(f: Throwable => Unit): Unit =
-		onBeatFailed((IdGenerator.generate("onBeatFailed"), f): Fail)
+	inline final def onBeatFailed(f: Throwable => Unit): Unit = onBeatFailed((IdGenerator.generate("onBeatFailed"), f): Fail)
 
 	inline final def onBeatFailed(id: String, f: Throwable => Unit): Unit = onBeatFailed((id -> f): Fail)
 
@@ -69,9 +69,8 @@ trait MutableActor[Msg, State] extends Actor[Msg, State]{
 		case None => false
 	}
 
-	inline final def runOnBeat(): Unit = try {
-		_onBeat.foreach(_.tf(this))
-	} catch {
-		case t: Throwable => _onBeatFailed.foreach(_.f(t))
+	def resetOnBeat(): Unit = {
+		_onBeat.remove(0, _onBeat.size)
+		_onBeatFailed.remove(0, _onBeatFailed.size)
 	}
 }

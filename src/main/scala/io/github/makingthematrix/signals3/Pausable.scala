@@ -1,101 +1,67 @@
 package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.Behaviors.{Beh, Fail}
+import io.github.makingthematrix.signals3.priv.BehaviorRegistry
 
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.ExecutionContext
+import scala.util.chaining.scalaUtilChainingOps
 
 trait CanBePaused {
 	protected val paused: AtomicBoolean = new AtomicBoolean(false)
-	protected lazy val pausedSignal = FlagSignal()
 
-	protected var _onPause: List[Beh] = Nil
-
-	protected final inline def runOnPause(): Unit = _onPause.foreach(_.f())
-
-	protected def onPause(beh: Beh): Unit =
-		_onPause ::= beh
-	inline final def onPause(body: => Any): Unit = onPause((IdGenerator.generate("onPause"), () => body): Beh)
-	inline final def onPause(id: String, f: () => Unit): Unit = onPause((id -> f): Beh)
-
-	final def onPauseById(id: String): Boolean = Behaviors.getBeh(id) match {
-		case Some(beh) => onPause(beh); true
-		case None => false
-	}
+	private val pauseRegistry = BehaviorRegistry("Pause")
+	private val unpauseRegistry = BehaviorRegistry("Unpause)")
 
 	def isPaused: Boolean = paused.get()
 
-	protected final inline def runOnPauseFailed(t: Throwable): Unit = _onPauseFailed.foreach(_.f(t))
+	protected final inline def runOnPause(): Boolean = pauseRegistry.run()
 
-	protected def onPauseFailed(fail: Fail): Unit =
-		_onPauseFailed ::= fail
+	protected def onPause(beh: Beh): Unit = pauseRegistry.add(beh)
+	inline final def onPause(body: => Any): Unit = pauseRegistry.add(body)
+	inline final def onPause(id: String, f: () => Any): Unit = pauseRegistry.add(id, f)
+	inline final def onPauseById(id: String): Boolean = pauseRegistry.addById(id)
 
-	inline final def onPauseFailed(f: Throwable => Unit): Unit =
-		onPauseFailed((IdGenerator.generate("onPauseFailed"), f): Fail)
+	protected def onPauseFailed(fail: Fail): Unit = pauseRegistry.addFail(fail)
+	inline final def onPauseFailed(f: Throwable => Any): Unit = pauseRegistry.addFail(f)
+	inline final def onPauseFailed(id: String, f: Throwable => Any): Unit = pauseRegistry.addFail(id, f)
+	inline final def onPauseFailedById(id: String): Boolean = pauseRegistry.addFailById(id)
 
-	inline final def onPauseFailed(id: String, f: Throwable => Unit): Unit = onPauseFailed((id -> f): Fail)
+	protected final inline def runOnUnpause(): Boolean = unpauseRegistry.run()
 
-	final def onPauseFailedById(id: String): Boolean = Behaviors.getFail(id) match {
-		case Some(fail) => onPauseFailed(fail); true
-		case None => false
+	protected def onUnpause(beh: Beh): Unit = unpauseRegistry.add(beh)
+	inline final def onUnpause(body: => Any): Unit = unpauseRegistry.add(body)
+	inline final def onUnpause(id: String, f: () => Any): Unit = unpauseRegistry.add(id, f)
+	inline final def onUnpauseById(id: String): Boolean = unpauseRegistry.addById(id)
+
+	protected def onUnpauseFailed(fail: Fail): Unit = unpauseRegistry.addFail(fail)
+	inline final def onUnpauseFailed(f: Throwable => Any): Unit = unpauseRegistry.addFail(f)
+	inline final def onUnpauseFailed(id: String, f: Throwable => Any): Unit = unpauseRegistry.addFail(id, f)
+	inline final def onUnpauseFailedById(id: String): Boolean = unpauseRegistry.addFailById(id)
+
+	final def isPausedSignal(using ExecutionContext): Signal[Boolean] = FlagSignal().tap { signal =>
+		if (isPaused) signal.set() else signal.clear()
+		onPause(signal.set())
+		onPauseFailed(_ => signal.clear())
+		onUnpause(signal.clear())
+		onUnpauseFailed(_ => signal.set())
 	}
-
-	private var _onPauseFailed: List[Fail] = Nil
-
-	private var _onUnpause: List[Beh] = Nil
-
-	protected final inline def runOnUnpause(): Unit = _onUnpause.foreach(_.f())
-
-	protected def onUnpause(beh: Beh): Unit =
-		_onUnpause ::= beh
-	inline final def onUnpause(body: => Any): Unit = onUnpause((IdGenerator.generate("onUnpause"), () => {body; ()}): Beh)
-	inline final def onUnpause(id: String, f: () => Unit): Unit = onUnpause((id -> f): Beh)
-
-	final def onUnpauseById(id: String): Boolean = Behaviors.getBeh(id) match {
-		case Some(beh) => onUnpause(beh); true
-		case None => false
-	}
-
-	protected final inline def runOnUnpauseFailed(t: Throwable): Unit = _onUnpauseFailed.foreach(_.f(t))
-
-	protected def onUnpauseFailed(fail: Fail): Unit =
-		_onUnpauseFailed ::= fail
-
-	inline final def onUnpauseFailed(f: Throwable => Unit): Unit =
-		onUnpauseFailed((IdGenerator.generate("onUnpauseFailed"), f): Fail)
-
-	inline final def onUnpauseFailed(id: String, f: Throwable => Unit): Unit = onUnpauseFailed((id -> f): Fail)
-
-	final def onUnpauseFailedById(id: String): Boolean = Behaviors.getFail(id) match {
-		case Some(fail) => onUnpauseFailed(fail); true
-		case None => false
-	}
-
-	private var _onUnpauseFailed: List[Fail] = Nil
-
-	inline def isPausedSignal: Signal[Boolean] = pausedSignal
 }
 
 trait Pausable extends CanBePaused {
-	def pause()(using ExecutionContext): Unit =
-		if (!paused.getAndSet(true)) try {
-			pausedSignal.set()
-			runOnPause()
-		} catch {
-			case t: Throwable =>
+	def pause(): Boolean =
+		if (!paused.getAndSet(true)) {
+			if (runOnPause()) true else {
 				paused.set(false)
-				runOnPauseFailed(t)
-				pausedSignal.clear()
-		}
+				false
+			}
+		} else false
 
-	def unpause()(using ExecutionContext): Unit =
-		if (paused.getAndSet(false)) try {
-			pausedSignal.clear()
-			runOnUnpause()
-		} catch {
-			case t: Throwable =>
+	def unpause(): Boolean =
+		if (paused.getAndSet(false)) {
+			if (runOnUnpause()) true else {
 				paused.set(true)
-				runOnUnpauseFailed(t)
-				pausedSignal.set()
-		}
+				false
+			}
+		} else false
 }

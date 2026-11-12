@@ -572,7 +572,7 @@ class PausableSpec extends munit.FunSuite {
     assertEquals(callbackCount, 3)
   }
 
-  test("Pausable trait - multiple onUnpause callbacks run in reverse registration order") {
+  test("Pausable trait - multiple onUnpause callbacks run in the original registration order") {
     val pausable = new Pausable {}
     val callOrder = scala.collection.mutable.ListBuffer[String]()
 
@@ -584,7 +584,7 @@ class PausableSpec extends munit.FunSuite {
     pausable.unpause()
 
     // Callbacks are prepended to the list, so the last registered runs first
-    assertEquals(callOrder.toList, List("third", "second", "first"))
+    assertEquals(callOrder.toList, List("first", "second", "third"))
   }
 
   test("Pausable trait - unpause with no onUnpause callback set does not throw") {

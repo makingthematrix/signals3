@@ -9,7 +9,6 @@ import scala.concurrent.duration.*
 	* semantics of `initialize`, the initialization signal, and the ordering of the `onInit` behaviors.
 	*/
 class InitializableSpec extends FunSuite {
-  import EventContext.Implicits.global
   import Threading.defaultContext
   import Utils.*
 
@@ -48,7 +47,7 @@ class InitializableSpec extends FunSuite {
     assertEquals(attempts, 2)
   }
 
-  test("onInit behaviors run in reverse registration order") {
+  test("onInit behaviors run in the origianl registration order") {
     val initializable = new Initializable { }
     val order = scala.collection.mutable.ListBuffer[String]()
     initializable.onInit { order += "first" }
@@ -58,7 +57,7 @@ class InitializableSpec extends FunSuite {
     initializable.initialize()
 
     // Callbacks are prepended to the list, so the last registered runs first
-    assertEquals(order.toList, List("third", "second", "first"))
+    assertEquals(order.toList, List("first", "second", "third"))
   }
 
   test("isInitializedSignal flips to true when the object is initialized") {

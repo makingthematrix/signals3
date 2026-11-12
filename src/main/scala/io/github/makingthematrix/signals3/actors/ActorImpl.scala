@@ -306,12 +306,10 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		close()
 	}
 
-	override def pause()(using ExecutionContext): Unit = if (!isClosed) super.pause()
-
-	override def unpause()(using ExecutionContext): Unit = if (!isClosed) super.unpause()
+	override def pause(): Boolean = if (!isClosed) super.pause() else false
+	override def unpause(): Boolean = if (!isClosed) super.unpause() else false
 
 	onPauseFailed { t => println(s"Failed to pause actor $id: ${t.getMessage}") }
-
 	onCloseFailed { t =>  println(s"Failed to close actor $id: ${t.getMessage}") }
 
 	/**

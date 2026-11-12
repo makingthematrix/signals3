@@ -46,7 +46,7 @@ class ActorBehaviorsSpec extends FunSuite {
 		assert(registerTBeh(tbeh))
 		assertEquals(getTBeh[String, Int]("spec-tbeh"), Some(tbeh))
 		// the retrieved function runs and can mutate the actor
-		getTBeh[String, Int]("spec-tbeh").foreach(_.tf(actor))
+		getTBeh[String, Int]("spec-tbeh").foreach(_.f(actor))
 		assertEquals(actor.state, 1)
 	}
 
@@ -56,7 +56,7 @@ class ActorBehaviorsSpec extends FunSuite {
 
 		assert(registerTBeh("spec-tbeh-dup" -> tf1))
 		assert(!registerTBeh("spec-tbeh-dup" -> tf2))
-		assertEquals(getTBeh[Int, Unit]("spec-tbeh-dup").map(_.tf), Some(tf1))
+		assertEquals(getTBeh[Int, Unit]("spec-tbeh-dup").map(_.f), Some(tf1))
 	}
 
 	test("a partial and a total behavior can't share the same id") {

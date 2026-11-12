@@ -81,7 +81,7 @@ object Behaviors {
 	/**
 		* A ''total'' behavior: a total function (`TF`) paired with a unique id.
 		*/
-	type TBeh[Msg, State] = (id: String, tf: TF[Msg, State])
+	type TBeh[Msg, State] = (id: String, f: TF[Msg, State])
 
 	// Behaviors of all message and state types share one registry, so the stored functions are untyped
 	// and the type parameters are restored with unchecked casts at retrieval.
@@ -117,7 +117,7 @@ object Behaviors {
 	def registerTBeh[Msg, State](beh: TBeh[Msg, State]): Boolean =
 		if (behs.contains(beh.id) || pbehs.contains(beh.id) || tbehs.contains(beh.id)) false
 		else {
-			tbehs += beh.id -> beh.tf.asInstanceOf[AnyTF]
+			tbehs += beh.id -> beh.f.asInstanceOf[AnyTF]
 			true
 		}
 

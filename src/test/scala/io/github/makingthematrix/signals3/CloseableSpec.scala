@@ -649,7 +649,7 @@ class CloseableSpec extends munit.FunSuite {
     assert(!closeable.closeAndCheck())
   }
 
-  test("onClose behaviors run in reverse registration order") {
+  test("onClose behaviors run in the original registration order") {
     val closeable = new Closeable { }
     val order = scala.collection.mutable.ListBuffer[String]()
     closeable.onClose { order += "first" }
@@ -659,7 +659,7 @@ class CloseableSpec extends munit.FunSuite {
     assert(closeable.closeAndCheck())
 
     // Callbacks are prepended to the list, so the last registered runs first
-    assertEquals(order.toList, List("third", "second", "first"))
+    assertEquals(order.toList, List("first", "second", "third"))
   }
 
   test("a throwing onClose behavior prevents the remaining ones from running") {
@@ -669,13 +669,17 @@ class CloseableSpec extends munit.FunSuite {
     var failed: Option[Throwable] = None
     val closeable = new Closeable { }
     closeable.onClose { order += "first" }
-    closeable.onClose { order += "second" }
     closeable.onClose { order += "throwing"; throw new RuntimeException("close failed") }
-    closeable.onCloseFailed { t => failed = Some(t) }
+    closeable.onClose { order += "second" }
+    closeable.onCloseFailed { t =>
+	    failed = Some(t)
+    }
 
-    assert(!closeable.closeAndCheck())
-    assertEquals(order.toList, List("throwing"), "the older close behaviors should not run after the throwing one")
-    assert(failed.exists(_.getMessage.contains("close failed")))
+	  closeable.close()
+
+    assertEquals(order.toList, List("first", "throwing"), "the older close behaviors should not run after the throwing one")
+    println(failed)
+	  assert(failed.exists(_.getMessage.contains("close failed")))
     assert(!closeable.isClosed)
   }
 }

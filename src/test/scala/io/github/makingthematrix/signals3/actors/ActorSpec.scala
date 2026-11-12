@@ -1000,8 +1000,8 @@ class ActorSpec extends FunSuite {
     var beatCount = 0
     var failed: Option[Throwable] = None
     val actor = new ActorImpl[Unit, Int]("spec-onbeat-throwing", 0, HeartBeatStrategy.Linear(20L.millis)) {
-      onBeat { _ => beatCount += 1 }
       onBeat { _ => throw new RuntimeException("beat failed") }
+      onBeat { _ => beatCount += 1 }
       onBeatFailed { t => failed = Some(t) }
     }
     actor.initialize()

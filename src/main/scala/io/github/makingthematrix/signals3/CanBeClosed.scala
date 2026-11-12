@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.Behaviors.{Beh, Fail}
-import io.github.makingthematrix.signals3.priv.DoneSignal
+import io.github.makingthematrix.signals3.priv.BehaviorRegistry
 
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.ExecutionContext
@@ -14,6 +14,7 @@ import scala.util.chaining.scalaUtilChainingOps
  */
 trait CanBeClosed {
   private val closed: AtomicBoolean = new AtomicBoolean(false)
+  private val registry = BehaviorRegistry("Close")
 
   /**
    * Checks if the stream/signal is already closed.
@@ -22,64 +23,36 @@ trait CanBeClosed {
    */
   def isClosed: Boolean = closed.get()
 
-	protected final inline def runOnClose(): Unit = _onClose.foreach(_.f())
-
   protected def closeAndCheck(): Boolean =
     if (!closed.getAndSet(true)) {
-      try {
-        runOnClose()
-        true 
-      } catch {
-        case t: Throwable =>
-          closed.set(false)
-          runOnCloseFailed(t)
-          false
+      if (runOnClose()) true
+      else {
+        closed.set(false)
+        false
       }
     } else false
 
-  
+  protected def runOnClose(): Boolean = registry.run()
 
   /**
    * Registers a block of code that should be called exactly once when the closeable is being closed.
    * @param beh Logic that is going to be executed when the closeable is closed.
    */
-  protected def onClose(beh: Beh): Unit =
-		_onClose ::= beh
+  protected def onClose(beh: Beh): Unit = registry.add(beh)
+	inline final def onClose(body: => Any): Unit = registry.add(body)
+	inline final def onClose(id: String, f: () => Any): Unit = registry.add(id, f)
+	inline final def onCloseById(id: String): Boolean = registry.addById(id)
 
-	inline final def onClose(body: => Any): Unit = onClose((IdGenerator.generate("onClose"), () => body): Beh)
+	protected def onCloseFailed(fail: Fail): Unit = registry.addFail(fail)
+	def onCloseFailed(f: Throwable => Any): Unit =
+		registry.addFail(f)
+	inline final def onCloseFailed(id: String, f: Throwable => Any): Unit = registry.addFail(id, f)
+	inline final def onCloseFailedById(id: String): Boolean = registry.addFailById(id)
 
-	inline final def onClose(id: String, f: () => Unit): Unit = onClose((id -> f): Beh)
-
-	final def onCloseById(id: String): Boolean = Behaviors.getBeh(id) match {
-		case Some(beh) => onClose(beh); true
-		case None => false
+	final def isClosedSignal(using ExecutionContext): Signal[Boolean] = FlagSignal().tap { signal =>
+		if (isClosed) signal.set() else {
+			onClose(signal.set())
+			onCloseFailed(_ => signal.clear())
+		}
 	}
-
-	private var _onClose: List[Beh] = Nil
-
-  private final inline def runOnCloseFailed(t: Throwable): Unit = _onCloseFailed.foreach(_.f(t))
-
-	protected def onCloseFailed(fail: Fail): Unit =
-		_onCloseFailed ::= fail
-
-	inline final def onCloseFailed(f: Throwable => Unit): Unit = onCloseFailed((IdGenerator.generate("onCloseFailed"), f): Fail)
-
-	inline final def onCloseFailed(id: String, f: Throwable => Unit): Unit = onCloseFailed((id -> f): Fail)
-
-	final def onCloseFailedById(id: String): Boolean = Behaviors.getFail(id) match {
-		case Some(fail) => onCloseFailed(fail); true
-		case None => false
-	}
-
-	private var _onCloseFailed: List[Fail] = Nil
-
-  /**
-   * Returns a signal that works on a given [[scala.concurrent.ExecutionContext]]; it starts with the value set to `false` (unless it's
-   * created after the closeable is already closed) and it will be set to `true` when the closeable is closed.
-   *
-   * @param ec The execution context on which the signal will be executed (implicit).
-   * @return A signal that will be set to `true` when the closeable is closed.
-   */
-  def isClosedSignal(using ExecutionContext): Signal[Boolean] =
-    DoneSignal().tap { signal => if (isClosed) signal.done() else onClose(signal.done()) }
 }
