@@ -622,9 +622,9 @@ class CloseableSpec extends munit.FunSuite {
     assert(Behaviors.registerBeh("spec-onclose-byid" -> (() => { s ! 2 })))
 
     val cf = CloseableFuture { Thread.sleep(200); s ! 1 }
-    assert(cf.onCloseById("spec-onclose-byid"))
+    assert(cf.onCloseId("spec-onclose-byid"))
     // an unregistered id is reported and attaches nothing
-    assert(!cf.onCloseById("spec-never-registered-onclose"))
+    assert(!cf.onCloseId("spec-never-registered-onclose"))
 
     CloseableFuture.delayed(50.millis) { assert(cf.closeAndCheck()) }
     await(cf)
@@ -636,7 +636,7 @@ class CloseableSpec extends munit.FunSuite {
     assert(Behaviors.registerFail("spec-onclosefailed-byid" -> ((t: Throwable) => s ! t.getMessage)))
 
     val closeable = new Closeable { }
-    assert(closeable.onCloseFailedById("spec-onclosefailed-byid"))
+    assert(closeable.onCloseFailedId("spec-onclosefailed-byid"))
     closeable.onClose { throw new RuntimeException("close failed") }
 
     // the close fails and the attached failure behavior receives the exception

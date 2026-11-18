@@ -957,9 +957,9 @@ class ActorSpec extends FunSuite {
     // the by-id behaviors must be attached before the actor is initialized
     val actor = new ActorImpl[Unit, Int]("spec-oninit-byid-actor", 0)
     assert(!actor.isInitialized)
-    assert(actor.onInitById("spec-oninit-byid"))
+    assert(actor.onInitId("spec-oninit-byid"))
     // an unregistered id is reported and attaches nothing
-    assert(!actor.onInitById("spec-never-registered-oninit"))
+    assert(!actor.onInitId("spec-never-registered-oninit"))
 
     actor.initialize()
     assert(actor.isInitialized)
@@ -968,7 +968,7 @@ class ActorSpec extends FunSuite {
     // a behavior attached after the initialization is registered but will never run
     var late = false
     assert(registerBeh("spec-oninit-byid-late" -> (() => late = true)))
-    assert(actor.onInitById("spec-oninit-byid-late"))
+    assert(actor.onInitId("spec-oninit-byid-late"))
     assert(!late)
 
     close(actor)

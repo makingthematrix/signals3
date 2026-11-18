@@ -26,9 +26,11 @@ import scala.util.chaining.scalaUtilChainingOps
 	* Registration is dynamic: new behaviors can be registered (and unregistered) at runtime through the methods
 	* of this object.
 	*
-	* The '''Beh''' and '''Fail''' behaviors each have their own registry, so ids are unique within a kind.
-	* '''PBeh''' and '''TBeh''' behaviors share the id space: a partial and a total behavior cannot be registered
-	* with the same id.
+	* All behaviors share one global id space: an id is unique across all four kinds - no two behaviors
+	* anywhere in the system share an id. This is on purpose: ids double as debugging handles (they show up
+	* in logs, crash traces, and serialized state), so they must never be ambiguous. Every registration
+	* method checks all the registries and refuses an id that is already taken; every kind is however kept
+	* in its own registry, so retrieval is by kind (e.g. [[getBeh]] only sees [[Beh]]).
 	*/
 object Behaviors {
 	type Beh = (id: String, f: () => Any)
@@ -38,24 +40,34 @@ object Behaviors {
 	private val fails = mutable.HashMap[String, Throwable => Any]()
 	
 	def registerBeh(beh: Beh): Boolean =
-		if (behs.contains(beh.id)) false
+		if (idTaken(beh.id)) false
 		else {
 			behs += beh.id -> beh.f
 			true
 		}
 
-	inline def registerF(f: () => Any): String =
-		IdGenerator.generate("beh").tap { id => registerBeh(id -> f) }
+	/**
+		* Registers a [[Beh]] function under a newly generated id and returns that id. The id prefix
+		* defaults to `"beh"` but can be customized to make the ids easier to tell apart in logs
+		* (e.g. `"onInit"` for the `onInit` lifecycle event).
+		*/
+	inline def registerF(f: () => Any, prefix: String = "beh"): String =
+		IdGenerator.generate(prefix).tap { id => registerBeh(id -> f) }
 	
 	def registerFail(fail: Fail): Boolean =
-		if (fails.contains(fail.id)) false
+		if (idTaken(fail.id)) false
 		else {
 			fails += fail.id -> fail.f
 			true
 		}
 
-	inline def registerFailCase(f: Throwable => Any): String =
-		IdGenerator.generate("fail").tap { id => registerFail(id -> f) }
+	/**
+		* Registers a [[Fail]] function under a newly generated id and returns that id. The id prefix
+		* defaults to `"fail"` but can be customized (e.g. `"onCloseFailed"` for the failure handlers
+		* of the `onClose` lifecycle event).
+		*/
+	inline def registerFailCase(f: Throwable => Any, prefix: String = "fail"): String =
+		IdGenerator.generate(prefix).tap { id => registerFail(id -> f) }
 	
 	inline def getBeh(id: String): Option[Beh] = behs.get(id).map(f => id -> f)
 	inline def getFail(id: String): Option[Fail] = fails.get(id).map(f => id -> f)
@@ -76,9 +88,10 @@ object Behaviors {
 	/**
 		* The type of a total behavior function: it takes the actor and always runs, no matter what message came in.
 		*
-		* Total behaviors are meant for the five lifecycle events of an actor: `onInit`, `onBeat`, `onPause`,
-		* `onUnpause`, `onClose` - functions which should be executed at a given point of the actor's lifecycle
-		* rather than in response to a particular message.
+		* Total behaviors are meant for the fifth lifecycle event of an actor: `onBeat` - functions which should
+		* be executed at every heartbeat of the actor rather than in response to a particular message.
+		* The other four lifecycle events - `onInit`, `onPause`, `onUnpause`, `onClose` - use the simpler [[Beh]]
+		* functions instead (with failures handled by [[Fail]]).
 		*/
 	type TF[Msg, State] = MutableActor[Msg, State] => Any
 
@@ -97,43 +110,49 @@ object Behaviors {
 	// The registry of total behaviors, keyed by id.
 	private val tbehs = mutable.HashMap[String, AnyTF]()
 
+	// Ids are globally unique across all four registries - see the object scaladoc. Every `register*`
+	// method checks all of them before accepting an id.
+	private def idTaken(id: String): Boolean =
+		behs.contains(id) || fails.contains(id) || pbehs.contains(id) || tbehs.contains(id)
+
 	/**
 		* Registers a new partial behavior in the library.
 		*
 		* @param beh The partial behavior to register: a tuple of a unique id and a partial function.
-		* @return `true` if the behavior was registered, `false` if a partial behavior with this id already exists
-		*         (the existing one is kept).
+		* @return `true` if the behavior was registered, `false` if this id is already taken by any behavior
+		*         of any kind (the existing one is kept).
 		*/
 	def registerPBeh[Msg, State](beh: PBeh[Msg, State]): Boolean =
-		if (behs.contains(beh.id) || pbehs.contains(beh.id) || tbehs.contains(beh.id)) false
+		if (idTaken(beh.id)) false
 		else {
 			pbehs += beh.id -> beh.pf.asInstanceOf[AnyPF]
 			true
 		}
 		
-	inline def registerPF[Msg, State](pf: PF[Msg, State]): String =
-		IdGenerator.generate("pbeh").tap { id => registerPBeh(id -> pf) }
+	inline def registerPF[Msg, State](pf: PF[Msg, State], prefix: String = "pbeh"): String =
+		IdGenerator.generate(prefix).tap { id => registerPBeh(id -> pf) }
 
 	/**
 		* Registers a new total behavior in the library.
 		*
 		* @param beh The total behavior to register: a tuple of a unique id and a total function.
-		* @return `true` if the behavior was registered, `false` if a total behavior with this id already exists
-		*         (the existing one is kept).
+		* @return `true` if the behavior was registered, `false` if this id is already taken by any behavior
+		*         of any kind (the existing one is kept).
 		*/
 	def registerTBeh[Msg, State](beh: TBeh[Msg, State]): Boolean =
-		if (behs.contains(beh.id) || pbehs.contains(beh.id) || tbehs.contains(beh.id)) false
+		if (idTaken(beh.id)) false
 		else {
 			tbehs += beh.id -> beh.f.asInstanceOf[AnyTF]
 			true
 		}
 
-	inline def registerTF[Msg, State](tf: TF[Msg, State]): String =
-		IdGenerator.generate("tbeh").tap { id => registerTBeh(id -> tf) }
+	inline def registerTF[Msg, State](tf: TF[Msg, State], prefix: String = "tbeh"): String =
+		IdGenerator.generate(prefix).tap { id => registerTBeh(id -> tf) }
 
 	/**
-		* Unregisters the behavior with the given id - partial or total (or both, if a partial and a total
-		* behavior share the id).
+		* Unregisters the behavior with the given id - whatever kind it is: a [[Beh]], a [[Fail]], a partial,
+		* or a total behavior. Under the global id-uniqueness rule at most one behavior holds the id,
+		* but all four registries are checked, which is a harmless safety net.
 		*
 		* @param id The id of the behavior to remove.
 		* @return `true` if any behavior was removed, `false` if nothing was registered under this id.

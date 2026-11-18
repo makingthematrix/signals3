@@ -669,17 +669,17 @@ class PausableSpec extends munit.FunSuite {
 
   // ===== By-id wiring tests =====
 
-  test("Pausable trait - onPauseById and onUnpauseById attach behaviors from the behavior library") {
+  test("Pausable trait - onPauseId and onUnpauseId attach behaviors from the behavior library") {
     val pausable = new Pausable {}
     var callbackCount = 0
     assert(Behaviors.registerBeh("spec-onpause-byid" -> (() => callbackCount += 1)))
     assert(Behaviors.registerBeh("spec-onunpause-byid" -> (() => callbackCount += 1)))
 
-    assert(pausable.onPauseById("spec-onpause-byid"))
-    assert(pausable.onUnpauseById("spec-onunpause-byid"))
+    assert(pausable.onPauseId("spec-onpause-byid"))
+    assert(pausable.onUnpauseId("spec-onunpause-byid"))
     // unregistered ids are reported and attach nothing
-    assert(!pausable.onPauseById("spec-never-registered-pause"))
-    assert(!pausable.onUnpauseById("spec-never-registered-unpause"))
+    assert(!pausable.onPauseId("spec-never-registered-pause"))
+    assert(!pausable.onUnpauseId("spec-never-registered-unpause"))
 
     pausable.pause()
     assertEquals(callbackCount, 1)
@@ -694,7 +694,7 @@ class PausableSpec extends munit.FunSuite {
     var caught: Option[Throwable] = None
     assert(Behaviors.registerFail("spec-onunpausefailed-byid" -> ((t: Throwable) => caught = Some(t))))
     val pausable = new Pausable {}
-    assert(pausable.onUnpauseFailedById("spec-onunpausefailed-byid"))
+    assert(pausable.onUnpauseFailedId("spec-onunpausefailed-byid"))
     pausable.onUnpause { throw new RuntimeException("unpause failed") }
 
     pausable.pause()

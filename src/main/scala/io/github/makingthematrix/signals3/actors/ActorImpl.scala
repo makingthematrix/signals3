@@ -7,7 +7,6 @@ import io.github.makingthematrix.signals3.{Behaviors, Closeable, CloseableFuture
 import io.github.makingthematrix.signals3.Behaviors.*
 import io.github.makingthematrix.signals3.actors.SystemMsg.Done
 
-import java.util.UUID
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.Conversion.into
 import scala.annotation.static
@@ -122,7 +121,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 
 	private def getBehavior(id: String): Option[PBeh[Msg, State]] =
 		behMap.collectFirst { case (behId, pf) if behId == id => behId -> pf }
-	
+
 	private[actors] def addBehaviors(behs: Iterable[PBeh[Msg, State]]): Unit = {
 		behaviors = behs.toList ::: behaviors
 		behMap ++= behs.map(b => b.id -> b.pf)

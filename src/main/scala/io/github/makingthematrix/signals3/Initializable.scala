@@ -1,6 +1,5 @@
 package io.github.makingthematrix.signals3
 
-import io.github.makingthematrix.signals3.Behaviors.{Beh, Fail}
 import io.github.makingthematrix.signals3.priv.BehaviorRegistry
 
 import java.util.concurrent.atomic.AtomicBoolean
@@ -16,18 +15,50 @@ trait CanBeInitialized {
 		* Before initialization, the actor cannot receive messages.
 		*/
 	def isInitialized: Boolean = initialized.get()
+	
+	/**
+		* Registers an initialization behavior: the block of code will run when the actor is initialized,
+		* exactly once. The function is registered in [[Behaviors]] under a generated id and unregistered
+		* there after a successful initialization.
+		*
+		* @param body The code to run on initialization.
+		* @return The generated id of the registered function - save it to `Behaviors.unregister` the
+		*         function manually, if you ever need to.
+		*/
+	inline final def onInit(body: => Any): String = registry.add(body)
 
-	protected def onInit(beh: Beh): Unit = registry.add(beh)
-	inline final def onInit(body: => Any): Unit = registry.add(body)
-	inline final def onInit(id: String, f: () => Any): Unit = registry.add(id, f)
-	inline final def onInitById(id: String): Boolean = registry.addById(id)
+	inline final def onInitOneShot(body: => Any): Unit = registry.addOneShot(body)
+	
+	/**
+		* Registers an already registered initialization behavior by its id.
+		*
+		* @param id The id of a [[Behaviors]] behavior.
+		* @return `true` if the id was added; `false` if there is no behavior registered under it.
+		*/
+	inline final def onInitId(id: String): Boolean = registry.addId(id)
 
-	protected inline final def runOnInit(): Boolean = registry.run()
+	protected def runOnInit(): Boolean = registry.run()
+	
+	protected def resetOnInit(): Unit = registry.reset()
+	
+	/**
+		* Registers a failure behavior with a function taking the exception; the function is registered
+		* in [[Behaviors]] under a generated id.
+		*
+		* @param f The function to run when the initialization fails.
+		* @return The generated id of the registered function.
+		*/
+	inline final def onInitFailed(f: Throwable => Any): String = registry.addFail(f)
 
-	protected def onInitFailed(fail: Fail): Unit = registry.addFail(fail)
-	inline final def onInitFailed(f: Throwable => Any): Unit = registry.addFail(f)
-	inline final def onInitFailed(id: String, f: Throwable => Any): Unit = registry.addFail(id, f)
-	inline final def onInitFailedById(id: String): Boolean = registry.addFailById(id)
+	inline final def onInitFailedOneShot(f: Throwable => Any): Unit = registry.addFailOneShot(f)
+	
+	/**
+		* Registers an already registered failure behavior by its id.
+		*
+		* @param id The id of a [[Behaviors]] failure behavior.
+		* @return `true` if the id was added; `false` if there is no failure behavior registered under it.
+		*/
+	inline final def onInitFailedId(id: String): Boolean = registry.addFailId(id)
 
 	final def isInitializedSignal(using ExecutionContext): Signal[Boolean] = FlagSignal().tap { signal =>
 		if (isInitialized) signal.set()

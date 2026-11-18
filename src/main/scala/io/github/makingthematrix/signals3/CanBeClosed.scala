@@ -1,6 +1,5 @@
 package io.github.makingthematrix.signals3
 
-import io.github.makingthematrix.signals3.Behaviors.{Beh, Fail}
 import io.github.makingthematrix.signals3.priv.BehaviorRegistry
 
 import java.util.concurrent.atomic.AtomicBoolean
@@ -33,26 +32,53 @@ trait CanBeClosed {
     } else false
 
   protected def runOnClose(): Boolean = registry.run()
-
+	
+	protected def resetOnClose(): Unit = registry.reset()
+	
   /**
    * Registers a block of code that should be called exactly once when the closeable is being closed.
-   * @param beh Logic that is going to be executed when the closeable is closed.
+   * The function is registered in [[Behaviors]] under a generated id and unregistered there after
+   * a successful close.
+   *
+   * @param body The code to run when the closeable is closed.
+   * @return The generated id of the registered function - save it to `Behaviors.unregister` the
+   *         function manually, if you ever need to.
    */
-  protected def onClose(beh: Beh): Unit = registry.add(beh)
-	inline final def onClose(body: => Any): Unit = registry.add(body)
-	inline final def onClose(id: String, f: () => Any): Unit = registry.add(id, f)
-	inline final def onCloseById(id: String): Boolean = registry.addById(id)
+  inline final def onClose(body: => Any): String = registry.add(body)
 
-	protected def onCloseFailed(fail: Fail): Unit = registry.addFail(fail)
-	def onCloseFailed(f: Throwable => Any): Unit =
-		registry.addFail(f)
-	inline final def onCloseFailed(id: String, f: Throwable => Any): Unit = registry.addFail(id, f)
-	inline final def onCloseFailedById(id: String): Boolean = registry.addFailById(id)
+	inline final def onCloseOneShot(body: => Any): Unit = registry.addOneShot(body)
+	
+  /**
+   * Registers an already registered close behavior by its id.
+   *
+   * @param id The id of a [[Behaviors]] behavior.
+   * @return `true` if the id was added; `false` if there is no behavior registered under it.
+   */
+  inline final def onCloseId(id: String): Boolean = registry.addId(id)
+	
+  /**
+   * Registers a failure behavior with a function taking the exception; the function is registered
+   * in [[Behaviors]] under a generated id.
+   *
+   * @param f The function to run when the close fails.
+   * @return The generated id of the registered function.
+   */
+  inline final def onCloseFailed(f: Throwable => Any): String = registry.addFail(f)
 
-	final def isClosedSignal(using ExecutionContext): Signal[Boolean] = FlagSignal().tap { signal =>
-		if (isClosed) signal.set() else {
-			onClose(signal.set())
-			onCloseFailed(_ => signal.clear())
-		}
-	}
+	inline final def onCloseFailedOneShot(f: Throwable => Any): Unit = registry.addFailOneShot(f)
+	
+  /**
+   * Registers an already registered failure behavior by its id.
+   *
+   * @param id The id of a [[Behaviors]] failure behavior.
+   * @return `true` if the id was added; `false` if there is no failure behavior registered under it.
+   */
+  inline final def onCloseFailedId(id: String): Boolean = registry.addFailId(id)
+
+  final def isClosedSignal(using ExecutionContext): Signal[Boolean] = FlagSignal().tap { signal =>
+    if (isClosed) signal.set() else {
+      onClose(signal.set())
+      onCloseFailed(_ => signal.clear())
+    }
+  }
 }

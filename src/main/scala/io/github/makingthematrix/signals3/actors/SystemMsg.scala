@@ -1,7 +1,5 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.Behaviors.*
-
 import scala.annotation.static
 import scala.concurrent.ExecutionContext
 import scala.reflect.{ClassTag, TypeTest}

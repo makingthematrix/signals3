@@ -1,6 +1,5 @@
 package io.github.makingthematrix.signals3.generators
 
-import io.github.makingthematrix.signals3.Behaviors.Beh
 import io.github.makingthematrix.signals3.{Closeable, Pausable}
 
 import scala.concurrent.ExecutionContext
