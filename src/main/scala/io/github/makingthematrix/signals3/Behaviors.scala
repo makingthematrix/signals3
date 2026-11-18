@@ -3,6 +3,7 @@ package io.github.makingthematrix.signals3
 import io.github.makingthematrix.signals3.actors.MutableActor
 
 import scala.collection.mutable
+import scala.util.chaining.scalaUtilChainingOps
 
 /**
 	* A singleton storage of behaviors - the ''behavior library''.
@@ -43,6 +44,9 @@ object Behaviors {
 			true
 		}
 
+	inline def registerF(f: () => Any): String =
+		IdGenerator.generate("beh").tap { id => registerBeh(id -> f) }
+	
 	def registerFail(fail: Fail): Boolean =
 		if (fails.contains(fail.id)) false
 		else {
@@ -50,9 +54,9 @@ object Behaviors {
 			true
 		}
 
-	inline def unregisterBeh(id: String): Boolean = behs.remove(id).isDefined
-	inline def unregisterFail(id: String): Boolean = fails.remove(id).isDefined
-
+	inline def registerFailCase(f: Throwable => Any): String =
+		IdGenerator.generate("fail").tap { id => registerFail(id -> f) }
+	
 	inline def getBeh(id: String): Option[Beh] = behs.get(id).map(f => id -> f)
 	inline def getFail(id: String): Option[Fail] = fails.get(id).map(f => id -> f)
 
@@ -106,6 +110,9 @@ object Behaviors {
 			pbehs += beh.id -> beh.pf.asInstanceOf[AnyPF]
 			true
 		}
+		
+	inline def registerPF[Msg, State](pf: PF[Msg, State]): String =
+		IdGenerator.generate("pbeh").tap { id => registerPBeh(id -> pf) }
 
 	/**
 		* Registers a new total behavior in the library.
@@ -121,6 +128,9 @@ object Behaviors {
 			true
 		}
 
+	inline def registerTF[Msg, State](tf: TF[Msg, State]): String =
+		IdGenerator.generate("tbeh").tap { id => registerTBeh(id -> tf) }
+
 	/**
 		* Unregisters the behavior with the given id - partial or total (or both, if a partial and a total
 		* behavior share the id).
@@ -129,7 +139,7 @@ object Behaviors {
 		* @return `true` if any behavior was removed, `false` if nothing was registered under this id.
 		*/
 	def unregister(id: String): Boolean =
-		behs.remove(id).isDefined || pbehs.remove(id).isDefined || tbehs.remove(id).isDefined
+		behs.remove(id).isDefined || fails.remove(id).isDefined || pbehs.remove(id).isDefined || tbehs.remove(id).isDefined
 
 	/**
 		* Returns the partial behavior function registered under the given id, if any.

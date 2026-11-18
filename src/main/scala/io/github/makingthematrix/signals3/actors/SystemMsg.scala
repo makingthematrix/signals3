@@ -1,10 +1,10 @@
 package io.github.makingthematrix.signals3.actors
 
+import io.github.makingthematrix.signals3.Behaviors.*
+
 import scala.annotation.static
 import scala.concurrent.ExecutionContext
 import scala.reflect.{ClassTag, TypeTest}
-import io.github.makingthematrix.signals3.Behaviors.*
-import io.github.makingthematrix.signals3.IdGenerator
 
 /**
 	* Represents system-level messages that can be used to control or affect the behavior
@@ -31,15 +31,17 @@ import io.github.makingthematrix.signals3.IdGenerator
 	*/
 enum SystemMsg {
 	case Pause, Unpause, Close, Done, InvalidId
-	case AddBehavior[Msg, State](beh: PBeh[Msg, State])
-	case RemoveBehavior(behId: String)
-	case AddBehaviorPF[Msg, State](pf: PF[Msg, State])
+	case AddBehavior(behId: String)
+	case RemoveBehavior(pbehId: String)
 	case Spawn[Msg, State](actorId: String = "",
 	                       state: Option[State] = None,
-	                       behaviors: List[PBeh[Msg, State]] = Nil,
+	                       behaviors: List[String] = Nil,
 	                       heartbeat: Option[HeartBeatStrategy] = None,
-	                       onInit: MutableActor[Msg, State] => Unit = Actor.DoNothing,
-	                       onBeat: MutableActor[Msg, State] => Unit = Actor.DoNothing,
+	                       onInit: List[String] = Nil,
+	                       onBeat: List[String] = Nil,
+	                       onPause: List[String] = Nil,
+	                       onUnpause: List[String] = Nil,
+	                       onClose: List[String] = Nil,
 	                       useSerialDispatch: Boolean = false,
 	                       executionContext: Option[ExecutionContext] = None
 	                      )
@@ -58,13 +60,11 @@ enum SystemMsg {
 	case AskForSystem(systemId: String = "", tags: Set[ActorTag] = Set.empty)
 	case AskForSystemAsync[Msg](sender: Actor[Msg, ?], systemId: String = "", tags: Set[ActorTag] = Set.empty)
 	case RemoteRef[Msg](ref: RemoteSystem[Msg])
-	case AddOnBeat[Msg, State](tbeh: TBeh[Msg, State])
+	case AddOnBeat(tbehId: String)
 	case ResetOnBeat
 }
 
 object SystemMsg {
-	def addOnBeat[Msg, State](f: MutableActor[Msg, State] => Any): SystemMsg.AddOnBeat[Msg, State] =
-		SystemMsg.AddOnBeat(IdGenerator.generate("onBeat") -> f)
 	/**
 		* Creates a "trusted" [[scala.reflect.TypeTest]] used to match on `SystemMsg` cases with type parameters
 		* (like `AddBehavior[Msg, State]`) without giving up the full static type of the matched message.

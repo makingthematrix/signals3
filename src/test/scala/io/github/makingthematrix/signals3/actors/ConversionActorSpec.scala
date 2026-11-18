@@ -69,7 +69,7 @@ class ConversionActorSpec extends FunSuite {
     eventContext.stop()
   
   private def newActor[Msg](sys: ActorSystem[Msg, Int], id: String, behaviors: (String, PF[Msg, Int])*): Actor[Msg, Int] & Closeable =
-    behaviors.foldRight(ActorBuilder[Msg, Int](0).withId(id))((beh, b) => b.withBehavior(beh._1, beh._2))
+    behaviors.foldRight(ActorBuilder[Msg, Int](0).withId(id))((beh, b) => b.addBehavior(beh._1, beh._2))
       .withSystem(sys).build()
 
   /** Two actor systems with different message types: B is registered on A through a conversion bridge. */

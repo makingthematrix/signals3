@@ -232,7 +232,7 @@ class ActorSystemRemoteSpec extends FunSuite {
     val lower: PF[String, Int] = { case (msg, _) => Some(s"l:$msg") }
     val multi = ActorBuilder[String, Int](0)
       .withId("multiB")
-      .withBehavior("upper", upper).withBehavior("lower", lower)
+      .addBehavior("upper", upper).addBehavior("lower", lower)
       .withSystem(b).build()
 
     awaitRef(b, "multiB")

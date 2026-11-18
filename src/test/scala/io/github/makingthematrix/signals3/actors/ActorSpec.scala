@@ -1,7 +1,7 @@
 package io.github.makingthematrix.signals3.actors
 
 import io.github.makingthematrix.signals3.Utils.*
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, EventContext, Signal, SourceSignal, SourceStream, Stream, Threading}
+import io.github.makingthematrix.signals3.{Behaviors, Closeable, CloseableFuture, EventContext, Signal, SourceSignal, SourceStream, Stream, Threading}
 import munit.FunSuite
 import io.github.makingthematrix.signals3.Behaviors.*
 import io.github.makingthematrix.signals3.actors.SystemMsg.{Done, ResetOnBeat, addOnBeat}
@@ -227,8 +227,8 @@ class ActorSpec extends FunSuite {
   }
 
   test("Actor.apply accepts a custom heartbeat strategy") {
-    val behavior: PBeh[Int, Unit] = "beh" -> { case (msg: Int, _) => Some(msg + 1) }
-    val actor = Actor(behavior, HeartBeatStrategy.CustomLinear(() => 20.millis))
+    val pf: PF[Int, Unit] = { case (msg: Int, _) => Some(msg + 1) }
+    val actor = Actor(pf, HeartBeatStrategy.CustomLinear(() => 20.millis))
       .asInstanceOf[Actor[Int, Unit] & Closeable]
     assertEquals(resultCF(actor ? 1), 2)
     close(actor)
@@ -241,8 +241,11 @@ class ActorSpec extends FunSuite {
     val behavior42: PF[MyMsg, Unit] = { case (MyInt(42), _) => Some(MyStr("Special: 42")) }
     val behavior99: PF[MyMsg, Unit] = { case (MyInt(99), _) => Some(MyStr("Special: 99")) }
 
-    val cf42 = actor ? SystemMsg.AddBehavior("special_42", behavior42)
-    val cf99 = actor ? SystemMsg.AddBehavior("special_99", behavior99)
+	  Behaviors.registerPBeh("special_42" -> behavior42)
+	  Behaviors.registerPBeh("special_99" -> behavior99)
+
+	  val cf42 = actor ? SystemMsg.AddBehavior("special_42")
+    val cf99 = actor ? SystemMsg.AddBehavior("special_99")
     awaitCF(cf42)
     awaitCF(cf99)
     
@@ -263,10 +266,11 @@ class ActorSpec extends FunSuite {
 
   test("Duplicate behavior IDs are NOT replaced") {
     val actor = create[String]{ case (msg, _) => Some(s"Default: $msg") }
-    
+
     // Add first behavior that handles 42
     val behavior1: PF[String, Unit] = { case ("42", _) => Some("First: 42") }
-    val cf1 = actor ? SystemMsg.AddBehavior("duplicate_id", behavior1)
+	  Behaviors.registerPBeh("duplicate_id" -> behavior1)
+    val cf1 = actor ? SystemMsg.AddBehavior("duplicate_id")
     awaitCF(cf1)
     
     // Verify first behavior works
@@ -274,7 +278,8 @@ class ActorSpec extends FunSuite {
     
     // Add second behavior with the same ID but different response
     val behavior2: PF[String, Unit] = { case ("42", _) => Some("Second: 42") }
-    val cf2 = actor ? SystemMsg.AddBehavior("duplicate_id", behavior2)
+	  Behaviors.registerPBeh("duplicate_id" -> behavior2)
+    val cf2 = actor ? SystemMsg.AddBehavior("duplicate_id")
     awaitCF(cf2)
     
     // The second behavior should have replaced the first
@@ -290,7 +295,8 @@ class ActorSpec extends FunSuite {
     
     // Add a special behavior
     val behavior: PF[String, Unit] = { case ("42", _) => Some("Special: 42") }
-    val cfAdd = actor ? SystemMsg.AddBehavior("special_42", behavior)
+	  Behaviors.registerPBeh("special_42" -> behavior)
+    val cfAdd = actor ? SystemMsg.AddBehavior("special_42")
     awaitCF(cfAdd)
 
     // Message 42 should be handled by the special behavior when using its ID
@@ -309,9 +315,12 @@ class ActorSpec extends FunSuite {
     // Add behaviors via system messages
     val defaultBehavior: PF[Int, Unit] = { case _ => received ! true; None }
     val specialBehavior: PF[Int, Unit] = { case _ => receivedSpecial ! true; None }
-    
-    awaitCF(actor ? SystemMsg.AddBehavior("default", defaultBehavior))
-    awaitCF(actor ? SystemMsg.AddBehavior("special", specialBehavior))
+
+	  Behaviors.registerPBeh("default" -> defaultBehavior)
+	  Behaviors.registerPBeh("special" -> specialBehavior)
+
+    awaitCF(actor ? SystemMsg.AddBehavior("default"))
+    awaitCF(actor ? SystemMsg.AddBehavior("special"))
     
     // Send via bang without behavior ID - should use normal processing
     actor ! 1
@@ -414,9 +423,10 @@ class ActorSpec extends FunSuite {
     val actor = create[String] { case (msg, _) => Some(s"Default: $msg") }
     
     val behavior: PF[String, Unit] = { case ("42", _) => Some("Special: 42") }
-    
-    actor ! SystemMsg.AddBehavior("testId", behavior)
-    assertEquals(resultCF(actor ? "42"), "Special: 42")
+
+	  Behaviors.registerPBeh("testId" -> behavior)
+	  actor ! SystemMsg.AddBehavior("testId")
+	  assertEquals(resultCF(actor ? "42"), "Special: 42")
     
     actor ! SystemMsg.RemoveBehavior("testId")
     assertEquals(resultCF(actor ? "42"), "Default: 42")

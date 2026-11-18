@@ -1,6 +1,7 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.{CanBeClosed, CanBeInitialized, CanBePaused, CloseableFuture, DispatchQueue, IdGenerator, SourceStream, Stream}
+import io.github.makingthematrix.signals3.Behaviors.PF
+import io.github.makingthematrix.signals3.{Behaviors, CanBeClosed, CanBeInitialized, CanBePaused, CloseableFuture, DispatchQueue, IdGenerator, SourceStream, Stream}
 
 import scala.Conversion.into
 import scala.annotation.static
@@ -137,8 +138,6 @@ trait Actor[Msg, State] extends CanBeClosed with CanBePaused with CanBeInitializ
 }
 
 object Actor {
-	import io.github.makingthematrix.signals3.Behaviors.PBeh
-	
 	@static private val noResponse: Failure[Nothing] = Failure[Nothing](new IllegalStateException("No response"))
 	@static private val ignored: Success[Option[Nothing]] = Success[Option[Nothing]](None)
 	@static private[actors] val actorIsClosed = IllegalStateException("Actor is closed")
@@ -178,8 +177,8 @@ object Actor {
 		* A special type of response, indicating that an invalid actor ID was provided.
 		* @return a failed `CloseableFuture` with an `InvalidIdException`.
 		*/
-	inline def invalidId[Msg](actorId: String)(using ExecutionContext): CloseableFuture[Msg] =
-		CloseableFuture.failed(InvalidIdException(actorId))
+	inline def invalidId[Msg](id: String)(using ExecutionContext): CloseableFuture[Msg] =
+		CloseableFuture.failed(InvalidIdException(id))
 	
 		
 	/**
@@ -229,14 +228,14 @@ object Actor {
 		* For a bigger system, use [[ActorSystem]] and/or [[ActorBuilder]].
 		*
 		* @param state    The initial state of the actor.
-		* @param behavior The behavior of the actor, responsible for handling incoming messages.
+		* @param pf The behavior of the actor, responsible for handling incoming messages.
 		* @param beat     The heartbeat strategy used to configure the actor's responsiveness.
 		* @return An initialized actor instance.
 		*/
-	def apply[Msg, State](state: State, behavior: PBeh[Msg, State], beat: HeartBeatStrategy)
+	def apply[Msg, State](state: State, pf: PF[Msg, State], beat: HeartBeatStrategy)
 	                          (using ExecutionContext): Actor[Msg, State] =
 		new ActorImpl(IdGenerator.generate(), state, beat).tap { actor =>
-			actor.addBehavior(behavior)
+			actor.addBehavior(Behaviors.registerPF(pf))
 			actor.initialize()
 		}
 
@@ -248,12 +247,12 @@ object Actor {
 		* For a bigger system, use [[ActorSystem]] and/or [[ActorBuilder]].
 		*
 		* @param state    The initial state of the actor.
-		* @param behavior The behavior of the actor, responsible for handling incoming messages.
+		* @param pf       The behavior of the actor, responsible for handling incoming messages.
 		* @param beat     The heartbeat strategy used to configure the actor's responsiveness.
 		* @return An initialized serial actor instance.
 		*/
-	inline def serial[Msg, State](state: State, behavior: PBeh[Msg, State], beat: HeartBeatStrategy): Actor[Msg, State] =
-		apply(state, behavior, beat)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
+	inline def serial[Msg, State](state: State, pf: PF[Msg, State], beat: HeartBeatStrategy): Actor[Msg, State] =
+		apply(state, pf, beat)(using DispatchQueue(DispatchQueue.Serial, ExecutionContext.global))
 
 	/**
 		* Creates a actor with the specified behavior and heartbeat strategy.
@@ -263,13 +262,12 @@ object Actor {
 		* Use only when you want a single independent actor.
 		* For a bigger system, use [[ActorSystem]] and/or [[ActorBuilder]].
 		*
-		* @param behavior The behavior of the actor, responsible for handling incoming messages.
+		* @param pf       The behavior of the actor, responsible for handling incoming messages.
 		* @param beat     The heartbeat strategy used to configure the actor's responsiveness.
 		* @return An initialized serial actor instance.
 		*/
-	inline def apply[Msg](behavior: PBeh[Msg, Unit], beat: HeartBeatStrategy)
-	                          (using ExecutionContext): Actor[Msg, Unit] =
-		apply((), behavior, beat)
+	inline def apply[Msg](pf: PF[Msg, Unit], beat: HeartBeatStrategy)(using ExecutionContext): Actor[Msg, Unit] =
+		apply((), pf, beat)
 
 	/**
 		* Creates a actor with the specified behavior and heartbeat strategy.
@@ -278,12 +276,12 @@ object Actor {
 		* Use only when you want a single independent actor.
 		* For a bigger system, use [[ActorSystem]] and/or [[ActorBuilder]].
 		*
-		* @param behavior The behavior of the actor, responsible for handling incoming messages.
+		* @param pf       The behavior of the actor, responsible for handling incoming messages.
 		* @param beat     The heartbeat strategy used to configure the actor's responsiveness.
 		* @return An initialized serial actor instance.
 		*/
-	inline def serial[Msg](behavior: PBeh[Msg, Unit], beat: HeartBeatStrategy): Actor[Msg, Unit] =
-		serial((), behavior, beat)
+	inline def serial[Msg](pf: PF[Msg, Unit], beat: HeartBeatStrategy): Actor[Msg, Unit] =
+		serial((), pf, beat)
 
 
 	/**
@@ -294,11 +292,11 @@ object Actor {
 		* Use only when you want a single independent actor.
 		* For a bigger system, use [[ActorSystem]] and/or [[ActorBuilder]].
 		*
-		* @param behavior The behavior of the actor, responsible for handling incoming messages.
+		* @param pf The behavior of the actor, responsible for handling incoming messages.
 		* @return An initialized serial actor instance.
 		*/
-	inline def apply[Msg](behavior: PBeh[Msg, Unit])(using ExecutionContext): Actor[Msg, Unit] =
-		apply((), behavior, defBeat)
+	inline def apply[Msg](pf: PF[Msg, Unit])(using ExecutionContext): Actor[Msg, Unit] =
+		apply((), pf, defBeat)
 
 
 	/**
@@ -308,8 +306,8 @@ object Actor {
 		* Use only when you want a single independent actor.
 		* For a bigger system, use [[ActorSystem]] and/or [[ActorBuilder]].
 		*
-		* @param behavior The behavior of the actor, responsible for handling incoming messages.
+		* @param pf The behavior of the actor, responsible for handling incoming messages.
 		* @return An initialized serial actor instance.
 		*/
-	inline def serial[Msg](behavior: PBeh[Msg, Unit]): Actor[Msg, Unit] = serial((), behavior, defBeat)
+	inline def serial[Msg](pf: PF[Msg, Unit]): Actor[Msg, Unit] = serial((), pf, defBeat)
 }

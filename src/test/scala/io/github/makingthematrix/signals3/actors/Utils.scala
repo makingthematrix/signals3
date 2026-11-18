@@ -96,7 +96,7 @@ object Utils {
 	/** Builds an actor with named behaviors; the first behavior in the list is the first one tried. */
 	def createWithBehaviors[Msg](behaviors: (String, PF[Msg, Unit])*)
 	                            (using ExecutionContext): Actor[Msg, Unit] & Closeable & Pausable =
-		behaviors.foldRight(ActorBuilder[Msg]())((beh, b) => b.withBehavior(beh._1, beh._2)).build()
+		behaviors.foldRight(ActorBuilder[Msg]())((beh, b) => b.addBehavior(beh._1, beh._2)).build()
 
 	def newSystem[Msg](id: String)(using ExecutionContext): ActorSystem[Msg, Int] & Closeable & Pausable =
 		ActorSystem[Msg, Int](id, 0, Actor.defBeat)
@@ -110,11 +110,11 @@ object Utils {
 
 	def newActor[Msg, State](sys: ActorSystem[Msg, ?], id: String, defState: State, pf: PF[Msg, State])
 	            (using ExecutionContext): Actor[Msg, State] & Closeable & Pausable =
-		ActorBuilder[Msg, State](defState).withId(id).withBehavior("default", pf).withSystem(sys).build()
+		ActorBuilder[Msg, State](defState).withId(id).addBehavior("default", pf).withSystem(sys).build()
 
 	def newActor(sys: ActorSystem[String, ?], id: String, pf: PF[String, Int])
 	            (using ExecutionContext): Actor[String, Int] & Closeable & Pausable =
-		ActorBuilder[String, Int](0).withId(id).withBehavior("default", pf).withSystem(sys).build()
+		ActorBuilder[String, Int](0).withId(id).addBehavior("default", pf).withSystem(sys).build()
 		
 	def awaitRef[Msg](sys: ActorSystem[Msg, ?], id: String): ActorRef[Msg] = {
 		val start = System.currentTimeMillis()
@@ -183,7 +183,7 @@ object Utils {
 	                  (using ExecutionContext): Actor[String, Int] & Closeable & Pausable = {
 		val a = ActorBuilder[String, Int](0)
 			.withId(id)
-			.withBehavior("default", { case (msg, _) => Some(s"$id: $msg") })
+			.addBehavior("default", { case (msg, _) => Some(s"$id: $msg") })
 			.build()
 		resultCF(sys ? Register(a, tags.toSet)) match {
 			case Ref(_) => a

@@ -70,7 +70,7 @@ i.e. ths server's app id, with its counterpart from that other app. And in the s
 living on that other server.
 
 When we call `actorRef ! msg`, we actually call `actorDict.transfer(actorId, msg)`. That actorDict then finds out
-to which server `actorId` belongs to. If it's on the same server, then actorDict has its JVM reference and can
+to which server `id` belongs to. If it's on the same server, then actorDict has its JVM reference and can
 transfer `msg` directly. If not, it will serialize `msg` and send it to that other server together with the id of
 the receiver.
 
@@ -210,7 +210,7 @@ messages, message loss) is respected throughout.
 - **Unused `self =>` removed (fourth pass #7).**
 - **Remote features are tested (fourth pass #8).** `ActorSystemRemoteSpec`
   covers routing regressions, system lifecycle (`SystemClosed`, re-registration,
-  `UnregisterSystem`), stale refs, `behId` routing through refs and paths, the
+  `UnregisterSystem`), stale refs, `pbehId` routing through refs and paths, the
   message-loss policy, cross-system concurrency, and the TOCTOU regressions;
   `ActorPathSpec` covers path parsing and formatting; `ActorSystemSpec` covers
   the own-system-id lookup.

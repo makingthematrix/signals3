@@ -3,8 +3,9 @@ package io.github.makingthematrix.signals3.actors
 import io.github.makingthematrix.signals3.actors.Actor.*
 import io.github.makingthematrix.signals3.actors.HeartBeatStrategy.*
 import io.github.makingthematrix.signals3.generators.GeneratorStream
-import io.github.makingthematrix.signals3.{Closeable, CloseableFuture, CloseableSourceStream, Initializable, Pausable, SerialDispatchQueue, SourceStream, Stream}
+import io.github.makingthematrix.signals3.{Behaviors, Closeable, CloseableFuture, CloseableSourceStream, Initializable, Pausable, SerialDispatchQueue, SourceStream, Stream}
 import io.github.makingthematrix.signals3.Behaviors.*
+import io.github.makingthematrix.signals3.actors.SystemMsg.Done
 
 import java.util.UUID
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
@@ -95,15 +96,17 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		* The behavior is appended to the list of existing behaviors,
 		* meaning it will be executed only if all preceding behaviors fail to handle the message.
 		*
-		* @param behavior The behavior to be added, represented as a tuple containing a unique identifier
+		* @param id The behavior to be added, represented as a tuple containing a unique identifier
 		*                 and a partial function that defines the behavior logic.
 		*/
-	private[actors] def addBehavior(behavior: PBeh[Msg, State]): Boolean =
-		if (behMap.contains(behavior.id)) false
-		else {
-			behMap += behavior.id -> behavior.pf
-			behaviors ::= behavior
-			true
+	private[actors] def addBehavior(id: String, p: Option[Promise[SystemMsg]] = None): Unit =
+		if (behMap.contains(id)) respond(p, invalidId(id))
+		else Behaviors.getPBeh[Msg, State](id) match {
+			case Some(beh) =>
+				behMap += beh.id -> beh.pf
+				behaviors ::= beh
+				respond(p, Done)
+			case _ => respond(p, invalidId(id))
 		}
 
 	/**
@@ -119,23 +122,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 
 	private def getBehavior(id: String): Option[PBeh[Msg, State]] =
 		behMap.collectFirst { case (behId, pf) if behId == id => behId -> pf }
-
-	/**
-		* Adds a behavior function to the actor and returns a unique identifier for it.
-		* The behavior is prepended to the list of existing behaviors, which are evaluated
-		* in order when processing a message. The newly added behavior can then take over
-		* processing of a message from another behavior if their domains overlap.
-		*
-		* @param pf A partial function that represents the behavior logic.
-		* @return A unique identifier for the newly added behavior.
-		*/
-	inline private[actors] def addBehaviorPF(pf: PF[Msg, State]): String =
-		UUID.randomUUID().toString.tap { id => addBehavior(id -> pf) } // we assume uuids are unique
-
-	// adds all new behavior functions in front of the list of behaviors but maintains their own internal order
-	inline private[actors] def addBehaviorPFs(pfs: Iterable[PF[Msg, State]]): Unit =
-		addBehaviors(pfs.map(pf => UUID.randomUUID().toString -> pf))
-
+	
 	private[actors] def addBehaviors(behs: Iterable[PBeh[Msg, State]]): Unit = {
 		behaviors = behs.toList ::: behaviors
 		behMap ++= behs.map(b => b.id -> b.pf)
@@ -212,23 +199,24 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	// so instead of unchecked type patterns - which the compiler reports as warnings - these cases are matched
 	// through trusted `TypeTest` instances created by `SystemMsg.trusted`. Each test verifies only the runtime
 	// class of the message and takes the type arguments on trust - see `SystemMsg.trusted` for the details.
-	private given AddBehaviorT: TypeTest[SystemMsg, AddBehavior[Msg, State]] = trusted[SystemMsg, AddBehavior[Msg, State]]
-	private given AddBehaviorPFT: TypeTest[SystemMsg, AddBehaviorPF[Msg, State]] = trusted[SystemMsg, AddBehaviorPF[Msg, State]]
 	private given SpawnT: TypeTest[SystemMsg, Spawn[Msg, State]] = trusted[SystemMsg, Spawn[Msg, State]]
-	private given AddOnBeatT: TypeTest[SystemMsg, AddOnBeat[Msg, State]] = trusted[SystemMsg, AddOnBeat[Msg, State]]
 
 	protected def processSysEntry(msg: SysEntry): Unit = msg match {
 		case (Pause, p)              => pause(); respond(p, Done)
 		case (Unpause, p)            => unpause(); respond(p, Done)
 		case (Close, p)              => if (p.isEmpty) close() else respond(p, shutdown().map(_ => Done))
-		case (AddBehaviorT(ab), p)   => addBehavior(ab.beh); respond(p, Done)
+		case (AddBehavior(pbehId), p)=> addBehavior(pbehId, p)
 		case (RemoveBehavior(id), p) => removeBehavior(id); respond(p, Done)
-		case (AddBehaviorPFT(ab), p) => addBehaviorPF(ab.pf); respond(p, Done)
 		case (SpawnT(data), p)       => spawn(data, p)
 		case (ActorClosed(id), p)    => removeChild(id, p)
-		case (AddOnBeatT(sob), p)    => onBeat(sob.tbeh); respond(p, Done)
+		case (AddOnBeat(tbehId), p)  => addOnBeat(tbehId, p)
 		case (ResetOnBeat, p)        => resetOnBeat(); respond(p, Done)
 		case (other, p)              => respond(p, unhandledMsg(other.toString))
+	}
+
+	private def addOnBeat(tbehId: String, p: Option[Promise[SystemMsg]]): Unit = Behaviors.getTBeh[Msg, State](tbehId) match {
+		case Some(tbeh) => onBeat(tbeh.id, tbeh.f); respond(p, Done)
+		case None => respond(p, invalidId(tbehId))
 	}
 
 	private def processMsgEntry(entry: MsgEntry): Unit = {
@@ -268,7 +256,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		if (children.contains(data.actorId)) respond(p, invalidId(data.actorId)) else {
 			val b1 = ActorBuilder[Msg, State](data.state.getOrElse(this.state))
 				.withIdIf(data.actorId.nonEmpty, data.actorId)
-				.withBehaviorsIf(data.behaviors.nonEmpty, data.behaviors, this.behaviors)
+				.withBehaviorsIf(data.behaviors.nonEmpty, data.behaviors, this.behaviors.map(_.id))
 				.withHeartbeat(data.heartbeat.getOrElse(this.heartbeat))
 				.withTags(tags + ActorTag.Child)
 				.withParent(this)

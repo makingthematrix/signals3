@@ -191,7 +191,7 @@ class ActorSystemSpec extends FunSuite {
     val received = SourceSignal(0)
     val a = ActorBuilder[String, Int](0)
       .withId("a")
-      .withBehavior("default", { case (msg, _) => received.mutate(_ + 1); Some(s"A: $msg") })
+      .addBehavior("default", { case (msg, _) => received.mutate(_ + 1); Some(s"A: $msg") })
       .withSystem(sys).build()
     val ref = awaitRef(sys, "a")
     ref ! "42"
@@ -411,7 +411,8 @@ class ActorSystemSpec extends FunSuite {
     val ref = remoteRef(a, "onB", "B")
     assert(tryResultCF(ref ? "e:1").isFailure, "the default behavior should not handle 'e:' messages")
 
-    expectSuccessCF(a.ask(AddBehavior[String, Int]("extra" -> extra), ActorPath.Remote("B", "onB")), Done)
+	  Behaviors.registerPBeh("extra" -> extra)
+    expectSuccessCF(a.ask(AddBehavior("extra"), ActorPath.Remote("B", "onB")), Done)
     expectSuccessCF(ref ? "e:1", "E: e:1")
 
     expectSuccessCF(a.ask(RemoveBehavior("extra"), ActorPath.Remote("B", "onB")), Done)
@@ -961,7 +962,7 @@ class ActorSystemSpec extends FunSuite {
     val sys = newSystem[String]("sys")
     val a = ActorBuilder[String, Int](0)
       .withId("built")
-      .withBehavior("default", { case (msg, _) => Some(s"built: $msg") })
+      .addBehavior("default", { case (msg, _) => Some(s"built: $msg") })
       .withTags(Set(ActorTag.Log))
       .withSystem(sys)
       .build()
@@ -998,7 +999,7 @@ class ActorSystemSpec extends FunSuite {
     val sys    = newSystem[String]("sys")
     val parent = ActorBuilder[String, Int](0)
       .withId("parent")
-      .withBehavior("default", { case (msg, _) => Some(s"parent: $msg") })
+      .addBehavior("default", { case (msg, _) => Some(s"parent: $msg") })
       .withTags(Set(ActorTag.Log))
       .withSystem(sys)
       .build()

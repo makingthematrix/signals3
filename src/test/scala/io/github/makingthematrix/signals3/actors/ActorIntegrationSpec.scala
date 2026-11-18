@@ -63,8 +63,9 @@ class ActorIntegrationSpec extends FunSuite {
         (0 until behaviorsPerThread).foreach { i =>
           val behaviorId = s"thread-$threadId-behavior-$i"
           val behavior = createTrackingBehavior(behaviorId)
-          // Add behavior via system message
-          val cf = actor.ask(SystemMsg.AddBehavior(behaviorId, behavior))
+	        Behaviors.registerPBeh(behaviorId -> behavior)
+	        // Add behavior via system message
+          val cf = actor.ask(SystemMsg.AddBehavior(behaviorId))
           // Wait for completion to ensure it's processed
           awaitCF(cf)
           // Increment count atomically
@@ -116,8 +117,10 @@ class ActorIntegrationSpec extends FunSuite {
         receivedCount.mutate(_ + 1)
         Some(MyStr(s"Recorded: $n"))
     }
-    
-    expectSuccessCF(actor ? SystemMsg.AddBehavior("recorder", recordingBehavior), Done)
+
+	  Behaviors.registerPBeh("recorder" -> recordingBehavior)
+
+	  expectSuccessCF(actor ? SystemMsg.AddBehavior("recorder"), Done)
     
     // Send messages
     val futures: Seq[Future[MyMsg]] = (0 until numMessages).map { i =>
@@ -134,7 +137,8 @@ class ActorIntegrationSpec extends FunSuite {
         val behavior: PF[MyMsg, Unit] = {
           case (MyInt(n), _) if n == -999999 - i => Some(MyStr(s"Temp: $n"))
         }
-        val future = actor.ask(SystemMsg.AddBehavior(behaviorId, behavior))
+	      Behaviors.registerPBeh(behaviorId -> behavior)
+	      val future = actor.ask(SystemMsg.AddBehavior(behaviorId))
         Await.result(future, 1.second)
         Thread.sleep(1) // Small delay
         val removeFuture = actor.ask(SystemMsg.RemoveBehavior(behaviorId))
@@ -180,7 +184,8 @@ class ActorIntegrationSpec extends FunSuite {
   test("Spawn with explicit behaviors overrides inheritance") {
     val parent = create[String] { case (msg, _) => Some(s"Parent: $msg") }
     val childBeh: PF[String, Unit] = { case (msg, _) => Some(s"Child: $msg") }
-    val child = spawn(parent)(Spawn(behaviors = List("c" -> childBeh)))
+	  Behaviors.registerPBeh("c" -> childBeh)
+    val child = spawn(parent)(Spawn(behaviors = List("c")))
     expectSuccessCF(child ? "1", "Child: 1")
     expectSuccessCF(parent ? "1", "Parent: 1")
     close(child)
