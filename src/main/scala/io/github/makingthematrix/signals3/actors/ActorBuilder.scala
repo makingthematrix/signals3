@@ -29,46 +29,46 @@ import scala.concurrent.duration.*
   * The `TF`/`TFs` variants (`addOnBeatTF`/`TFs`, and `withBehaviorPF`/`PFs` for the message
   * behaviors) register functions which ALSO receive the actor.
   *
-  * In accordance with the convention of the whole behavior system, the most recently registered
-  * behavior runs first and can take over the processing of a message from the earlier behaviors.
-  * The id fields are therefore kept newest-first, and the ids are attached to the actor at build
-  * time in a way which preserves that order.
+  * The id fields are `Set`s: an id is present at most once (adding an already present
+  * id is silently ignored), and there is ''no guaranteed relative order'' among the behaviors
+  * configured through the builder. Behaviors added to the actor at runtime (through system
+  * messages) still take over the processing from the earlier ones - see `ActorImpl.addBehavior`.
   *
   * @tparam Msg   The type of incoming messages the actor will process
   * @tparam State The type of internal state maintained by the actor
   */
 final class ActorBuilder[Msg, State] (val id: String,
-                                      state: State,
-                                      val pbehIds: List[String] = Nil,
-                                      private val heartbeat: HeartBeatStrategy = defBeat,
-                                      val onInitIds: List[String] = Nil,
-                                      private val useSerialDispatch: Boolean = false,
-                                      private val executionContext: Option[ExecutionContext] = None,
-                                      private val tags: Set[ActorTag] = Set.empty,
-                                      val onBeatIds: List[String] = Nil,
-                                      private val parent: Option[ActorRef[Msg]] = None,
-                                      private val system: Option[ActorSystem[Msg, ?]] = None,
-                                      val onPauseIds: List[String] = Nil,
-                                      val onUnpauseIds: List[String] = Nil,
-                                      val onCloseIds: List[String] = Nil
+                                      val state: State,
+                                      val pbehIds: Set[String] = Set.empty,
+                                      val heartbeat: HeartBeatStrategy = defBeat,
+                                      val onInitIds: Set[String] = Set.empty,
+                                      val useSerialDispatch: Boolean = false,
+                                      val executionContext: Option[ExecutionContext] = None,
+                                      val tags: Set[ActorTag] = Set.empty,
+                                      val onBeatIds: Set[String] = Set.empty,
+                                      val parent: Option[ActorRef[Msg]] = None,
+                                      val system: Option[ActorSystem[Msg, ?]] = None,
+                                      val onPauseIds: Set[String] = Set.empty,
+                                      val onUnpauseIds: Set[String] = Set.empty,
+                                      val onCloseIds: Set[String] = Set.empty
                                      ) {
 
   // The single point of copying all the fields - every `with*` method goes through it,
   // so no field can be accidentally dropped on the way.
   private def copy(id: String = id,
                    state: State = state,
-                   pbehIds: List[String] = pbehIds,
+                   pbehIds: Set[String] = pbehIds,
                    heartbeat: HeartBeatStrategy = heartbeat,
-                   onInitIds: List[String] = onInitIds,
+                   onInitIds: Set[String] = onInitIds,
                    useSerialDispatch: Boolean = useSerialDispatch,
                    executionContext: Option[ExecutionContext] = executionContext,
                    tags: Set[ActorTag] = tags,
-                   onBeatIds: List[String] = onBeatIds,
+                   onBeatIds: Set[String] = onBeatIds,
                    parent: Option[ActorRef[Msg]] = parent,
                    system: Option[ActorSystem[Msg, ?]] = system,
-                   onPauseIds: List[String] = onPauseIds,
-                   onUnpauseIds: List[String] = onUnpauseIds,
-                   onCloseIds: List[String] = onCloseIds
+                   onPauseIds: Set[String] = onPauseIds,
+                   onUnpauseIds: Set[String] = onUnpauseIds,
+                   onCloseIds: Set[String] = onCloseIds
                   ): ActorBuilder[Msg, State] =
     new ActorBuilder(id, state, pbehIds, heartbeat, onInitIds, useSerialDispatch, executionContext,
       tags, onBeatIds, parent, system, onPauseIds, onUnpauseIds, onCloseIds)
@@ -103,12 +103,13 @@ final class ActorBuilder[Msg, State] (val id: String,
 
   /**
    * Adds a behavior by the id of a partial behavior registered in [[Behaviors]].
-   * The behavior is prepended, so it will be tried before the behaviors added earlier.
+   * The id is kept in a set: there is no guaranteed relative order among the behaviors configured
+   * through the builder, and adding an already present id is silently ignored.
    *
    * @param behaviorId The id of the behavior.
    * @return A new builder with the added behavior
    */
-  inline def addBehavior(behaviorId: String): ActorBuilder[Msg, State] = copy(pbehIds = behaviorId :: pbehIds)
+  inline def addBehavior(behaviorId: String): ActorBuilder[Msg, State] = copy(pbehIds = pbehIds + behaviorId)
 
   inline def addBehaviorIf(p: => Boolean, behaviorId: => String): ActorBuilder[Msg, State] =
     if (p) addBehavior(behaviorId) else this
@@ -124,18 +125,17 @@ final class ActorBuilder[Msg, State] (val id: String,
    * @return A new builder with the added behavior
    */
   inline def withBehaviorPF(pf: PF[Msg, State]): ActorBuilder[Msg, State] =
-    copy(pbehIds = Behaviors.registerPF(pf) :: pbehIds)
+    copy(pbehIds = pbehIds + Behaviors.registerPF(pf))
 
   /**
    * Registers all the given partial behaviors in [[Behaviors]] under generated ids and adds those
-   * ids to the builder, preserving the order of the given collection (the first pf in the collection
-   * is tried first among them).
+   * ids to the builder, with no guaranteed relative order among them.
    *
    * @param pfs The partial functions to register and add.
    * @return A new builder with the added behaviors
    */
   inline def withBehaviorPFs(pfs: Iterable[PF[Msg, State]]): ActorBuilder[Msg, State] =
-    copy(pbehIds = pfs.map(Behaviors.registerPF(_)).toList ::: pbehIds)
+    copy(pbehIds = pbehIds ++ pfs.map(Behaviors.registerPF(_)))
 
   /**
    * Adds multiple behavior ids.
@@ -144,7 +144,7 @@ final class ActorBuilder[Msg, State] (val id: String,
    * @return A new builder with the added behavior ids
    */
   inline def withBehaviors(newBehaviors: Iterable[String]): ActorBuilder[Msg, State] =
-    copy(pbehIds = newBehaviors.toList ::: pbehIds)
+    copy(pbehIds = pbehIds ++ newBehaviors)
 
   inline def withBehaviorsIf(p: => Boolean, newBehaviors: => Iterable[String]): ActorBuilder[Msg, State] =
     if (p) withBehaviors(newBehaviors) else this
@@ -192,10 +192,8 @@ final class ActorBuilder[Msg, State] (val id: String,
    * @param newInitIds The ids of the behaviors to call on initialization
    * @return A new builder with the initialization behaviors
    */
-  def addOnInits(newInitIds: Iterable[String]): ActorBuilder[Msg, State] = {
-	  val uniqueIds = newInitIds.filterNot(onInitIds.contains)
-	  copy(onInitIds = uniqueIds.toList ::: onInitIds)
-  }
+  inline def addOnInits(newInitIds: Iterable[String]): ActorBuilder[Msg, State] =
+    copy(onInitIds = onInitIds ++ newInitIds)
 
   /**
    * Registers an initialization function: it is registered in [[Behaviors]] under a generated id
@@ -208,9 +206,8 @@ final class ActorBuilder[Msg, State] (val id: String,
 
   /**
    * Registers a collection of initialization functions: each function is registered in [[Behaviors]]
-   * under a generated id and the ids are added to the init ids, preserving the order of the collection
-   * (the first function in the collection runs first among them). The ids are readable through
-   * `onInitIds`.
+   * under a generated id and the ids are added to the init ids, with no guaranteed relative order among them.
+   * The ids are readable through `onInitIds`.
    *
    * @param fs The functions to run when the actor is initialized.
    * @return A new builder with the initialization functions
@@ -228,7 +225,7 @@ final class ActorBuilder[Msg, State] (val id: String,
   inline def addOnInitIf(p: => Boolean, behId: String): ActorBuilder[Msg, State] = addOnInitsIf(p, List(behId))
   inline def addOnInitIf(p: => Boolean, behId: String, orElse: => String): ActorBuilder[Msg, State] = addOnInitsIf(p, List(behId), List(orElse))
 
-  inline def withNoInit(): ActorBuilder[Msg, State] = copy(onInitIds = Nil)
+  inline def withNoInit(): ActorBuilder[Msg, State] = copy(onInitIds = Set.empty)
 
   inline def withNoInit(p: => Boolean): ActorBuilder[Msg, State] = if (p) withNoInit() else this
 
@@ -239,10 +236,8 @@ final class ActorBuilder[Msg, State] (val id: String,
    * @param newPauseIds The ids of the behaviors to call on pause
    * @return A new builder with the pause behaviors
    */
-  def addOnPauses(newPauseIds: Iterable[String]): ActorBuilder[Msg, State] = {
-	  val uniqueIds = newPauseIds.filterNot(onPauseIds.contains)
-	  copy(onPauseIds = uniqueIds.toList ::: onPauseIds)
-  }
+  inline def addOnPauses(newPauseIds: Iterable[String]): ActorBuilder[Msg, State] =
+    copy(onPauseIds = onPauseIds ++ newPauseIds)
 
   inline def addOnPausesIf(p: => Boolean, newPauseIds: Iterable[String]): ActorBuilder[Msg, State] =
     if (p) addOnPauses(newPauseIds) else this
@@ -257,7 +252,7 @@ final class ActorBuilder[Msg, State] (val id: String,
 
   /**
    * Registers a pause behavior: the function is registered in [[Behaviors]] under a generated id
-   * and that id is prepended to the pause ids (readable through `onPauseIds`).
+   * and that id is added to the pause ids (readable through `onPauseIds`).
    *
    * @param f The function to run every time the actor is paused.
    * @return A new builder with the pause behavior
@@ -266,17 +261,16 @@ final class ActorBuilder[Msg, State] (val id: String,
 
   /**
    * Registers a collection of pause behaviors: each function is registered in [[Behaviors]] under
-   * a generated id and the ids are prepended to the pause ids, preserving the order of the
-   * collection (the first function in the collection runs first among them). The ids are readable
-   * through `onPauseIds`.
+   * a generated id and the ids are added to the pause ids, with no guaranteed relative order among
+   * them. The ids are readable through `onPauseIds`.
    *
    * @param fs The functions to run every time the actor is paused.
    * @return A new builder with the pause behaviors
    */
   inline def addOnPauseFs(fs: Iterable[() => Any]): ActorBuilder[Msg, State] =
-    copy(onPauseIds = fs.map(Behaviors.registerF(_, "onPause")).toList ::: onPauseIds)
+    copy(onPauseIds = onPauseIds ++ fs.map(Behaviors.registerF(_, "onPause")))
 
-  inline def withNoPause(): ActorBuilder[Msg, State] = copy(onPauseIds = Nil)
+  inline def withNoPause(): ActorBuilder[Msg, State] = copy(onPauseIds = Set.empty)
 
   inline def withNoPause(p: => Boolean): ActorBuilder[Msg, State] =
     if (p) withNoPause() else this
@@ -288,10 +282,8 @@ final class ActorBuilder[Msg, State] (val id: String,
    * @param newUnpauseIds The ids of the behaviors to call on unpause
    * @return A new builder with the unpause behaviors
    */
-  inline def addOnUnpauses(newUnpauseIds: Iterable[String]): ActorBuilder[Msg, State] = {
-	  val uniqueIds = newUnpauseIds.filterNot(onUnpauseIds.contains)
-	  copy(onUnpauseIds = uniqueIds.toList ::: onUnpauseIds)
-  }
+  inline def addOnUnpauses(newUnpauseIds: Iterable[String]): ActorBuilder[Msg, State] =
+    copy(onUnpauseIds = onUnpauseIds ++ newUnpauseIds)
 
   inline def addOnUnpausesIf(p: => Boolean, newUnpauseIds: Iterable[String]): ActorBuilder[Msg, State] =
     if (p) addOnUnpauses(newUnpauseIds) else this
@@ -306,7 +298,7 @@ final class ActorBuilder[Msg, State] (val id: String,
 
   /**
    * Registers an unpause behavior: the function is registered in [[Behaviors]] under a generated id
-   * and that id is prepended to the unpause ids (readable through `onUnpauseIds`).
+   * and that id is added to the unpause ids (readable through `onUnpauseIds`).
    *
    * @param f The function to run every time the actor is unpaused.
    * @return A new builder with the unpause behavior
@@ -315,17 +307,16 @@ final class ActorBuilder[Msg, State] (val id: String,
 
   /**
    * Registers a collection of unpause behaviors: each function is registered in [[Behaviors]] under
-   * a generated id and the ids are prepended to the unpause ids, preserving the order of the
-   * collection (the first function in the collection runs first among them). The ids are readable
-   * through `onUnpauseIds`.
+   * a generated id and the ids are added to the unpause ids, with no guaranteed relative order among
+   * them. The ids are readable through `onUnpauseIds`.
    *
    * @param fs The functions to run every time the actor is unpaused.
    * @return A new builder with the unpause behaviors
    */
   inline def addOnUnpauseFs(fs: Iterable[() => Any]): ActorBuilder[Msg, State] =
-    copy(onUnpauseIds = fs.map(Behaviors.registerF(_, "onUnpause")).toList ::: onUnpauseIds)
+    copy(onUnpauseIds = onUnpauseIds ++ fs.map(Behaviors.registerF(_, "onUnpause")))
 
-  inline def withNoUnpause(): ActorBuilder[Msg, State] = copy(onUnpauseIds = Nil)
+  inline def withNoUnpause(): ActorBuilder[Msg, State] = copy(onUnpauseIds = Set.empty)
 
   inline def withNoUnpause(p: => Boolean): ActorBuilder[Msg, State] =
     if (p) withNoUnpause() else this
@@ -337,10 +328,8 @@ final class ActorBuilder[Msg, State] (val id: String,
    * @param newCloseIds The ids of the behaviors to call on close
    * @return A new builder with the close behaviors
    */
-  def addOnCloses(newCloseIds: Iterable[String]): ActorBuilder[Msg, State] = {
-	  val uniqueIds = newCloseIds.filterNot(onCloseIds.contains)
-	  copy(onCloseIds = uniqueIds.toList ::: onCloseIds)
-  }
+  inline def addOnCloses(newCloseIds: Iterable[String]): ActorBuilder[Msg, State] =
+    copy(onCloseIds = onCloseIds ++ newCloseIds)
 
   inline def addOnClosesIf(p: => Boolean, newCloseIds: Iterable[String]): ActorBuilder[Msg, State] =
     if (p) addOnCloses(newCloseIds) else this
@@ -355,7 +344,7 @@ final class ActorBuilder[Msg, State] (val id: String,
 
   /**
    * Registers a close behavior: the function is registered in [[Behaviors]] under a generated id
-   * and that id is prepended to the close ids (readable through `onCloseIds`).
+   * and that id is added to the close ids (readable through `onCloseIds`).
    *
    * @param f The function to run when the actor is closed.
    * @return A new builder with the close behavior
@@ -364,17 +353,16 @@ final class ActorBuilder[Msg, State] (val id: String,
 
   /**
    * Registers a collection of close behaviors: each function is registered in [[Behaviors]] under
-   * a generated id and the ids are prepended to the close ids, preserving the order of the
-   * collection (the first function in the collection runs first among them). The ids are readable
-   * through `onCloseIds`.
+   * a generated id and the ids are added to the close ids, with no guaranteed relative order among
+   * them. The ids are readable through `onCloseIds`.
    *
    * @param fs The functions to run when the actor is closed.
    * @return A new builder with the close behaviors
    */
   inline def addOnCloseFs(fs: Iterable[() => Any]): ActorBuilder[Msg, State] =
-    copy(onCloseIds = fs.map(Behaviors.registerF(_, "onClose")).toList ::: onCloseIds)
+    copy(onCloseIds = onCloseIds ++ fs.map(Behaviors.registerF(_, "onClose")))
 
-  inline def withNoClose(): ActorBuilder[Msg, State] = copy(onCloseIds = Nil)
+  inline def withNoClose(): ActorBuilder[Msg, State] = copy(onCloseIds = Set.empty)
 
   inline def withNoClose(p: => Boolean): ActorBuilder[Msg, State] =
     if (p) withNoClose() else this
@@ -446,10 +434,8 @@ final class ActorBuilder[Msg, State] (val id: String,
    * @param newBeatIds The ids of the behaviors to call at every heartbeat
    * @return A new builder with the beat behaviors
    */
-  def addOnBeats(newBeatIds: Iterable[String]): ActorBuilder[Msg, State] = {
-	  val uniqueIds = newBeatIds.filterNot(onBeatIds.contains)
-	  copy(onBeatIds = uniqueIds.toList ::: onBeatIds)
-  }
+  inline def addOnBeats(newBeatIds: Iterable[String]): ActorBuilder[Msg, State] =
+    copy(onBeatIds = onBeatIds ++ newBeatIds)
 
   /**
    * Registers a beat behavior: the total function is registered in [[Behaviors]] under a generated
@@ -462,15 +448,14 @@ final class ActorBuilder[Msg, State] (val id: String,
 
   /**
    * Registers a collection of beat behaviors: each total function is registered in [[Behaviors]]
-   * under a generated id and the ids are prepended to the beat ids, preserving the order of the
-   * collection (the first function in the collection runs first among them). The ids are readable
-   * through `onBeatIds`.
+   * under a generated id and the ids are added to the beat ids, with no guaranteed relative order
+   * among them. The ids are readable through `onBeatIds`.
    *
    * @param tfs The functions to run at every heartbeat - each takes the actor.
    * @return A new builder with the beat behaviors
    */
   inline def addOnBeatTFs(tfs: Iterable[TF[Msg, State]]): ActorBuilder[Msg, State] =
-	  copy(onBeatIds = tfs.toList.map(Behaviors.registerTF(_, "onBeat")) ::: onBeatIds)
+	  copy(onBeatIds = onBeatIds ++ tfs.map(Behaviors.registerTF(_, "onBeat")))
 
 	inline def addOnBeatsIf(p: => Boolean, newBeatIds: Iterable[String]): ActorBuilder[Msg, State] =
     if (p) addOnBeats(newBeatIds) else this
@@ -483,7 +468,7 @@ final class ActorBuilder[Msg, State] (val id: String,
   inline def addOnBeatIf(p: => Boolean, beatId: String, orElse: => String): ActorBuilder[Msg, State] =
     addOnBeatsIf(p, List(beatId), List(orElse))
 
-  inline def withNoBeat(): ActorBuilder[Msg, State] = copy(onBeatIds = Nil)
+  inline def withNoBeat(): ActorBuilder[Msg, State] = copy(onBeatIds = Set.empty)
 
   inline def withNoBeatIf(p: => Boolean): ActorBuilder[Msg, State] = if (p) withNoBeat() else this
 
@@ -525,13 +510,13 @@ final class ActorBuilder[Msg, State] (val id: String,
 
   private def buildActor(state: State, ec: ExecutionContext): Actor[Msg, State] & Closeable & Pausable = {
     val actor = new ActorImpl[Msg, State](id, state, heartbeat, tags, parent, system)(using ec)
-    // Attaching an id prepends, so the ids are attached in reverse here - the most recently added
-    // id ends up first and runs first, preserving the newest-first order of the builder's lists.
+    // The builder's ids are unordered sets, so the behaviors configured here have no guaranteed
+    // relative run order - the actor also doesn't attach them in any particular order.
 	  val (validInits, invalidInits) = onInitIds.partition(Behaviors.isRegistered)
 	  if (invalidInits.nonEmpty) {
 		  println(s"Invalid onInit ids found when building Actor ${id}: $invalidInits")
 	  }
-    validInits.reverse.foreach(actor.onInitId)
+    validInits.foreach(actor.onInitId)
 
     val (validPBehs, invalidPbehs) = pbehIds.partition(Behaviors.isRegistered)
     if (invalidPbehs.nonEmpty) {
@@ -543,25 +528,25 @@ final class ActorBuilder[Msg, State] (val id: String,
 	  if (invalidBeats.nonEmpty) {
 		  println(s"Invalid onBeat ids found when building Actor ${id}: $invalidBeats")
 	  }
-	  validBeats.reverse.foreach(actor.onBeatId)
+	  validBeats.foreach(actor.onBeatId)
 
     val (validPauses, invalidPauses) = onPauseIds.partition(Behaviors.isRegistered)
 	  if (invalidPauses.nonEmpty) {
 		  println(s"Invalid onPause ids found when building Actor ${id}: $invalidPauses")
 	  }
-	  validPauses.reverse.foreach(actor.onPauseId)
+	  validPauses.foreach(actor.onPauseId)
 
 	  val (validUnpauses, invalidUnpauses) = onUnpauseIds.partition(Behaviors.isRegistered)
 	  if (invalidUnpauses.nonEmpty) {
 		  println(s"Invalid onUnpause ids found when building Actor ${id}: $invalidUnpauses")
 	  }
-	  validUnpauses.reverse.foreach(actor.onUnpauseId)
+	  validUnpauses.foreach(actor.onUnpauseId)
 
 	  val (validCloses, invalidCloses) = onCloseIds.partition(Behaviors.isRegistered)
 	  if (invalidCloses.nonEmpty) {
 		  println(s"Invalid onClose ids found when building Actor ${id}: $invalidCloses")
 	  }
-	  validCloses.reverse.foreach(actor.onCloseId)
+	  validCloses.foreach(actor.onCloseId)
 
 	  actor.initialize()
     actor

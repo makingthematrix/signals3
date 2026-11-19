@@ -32,9 +32,9 @@ trait CanBeClosed {
     } else false
 
   protected def runOnClose(): Boolean = registry.run()
-	
+
 	protected def resetOnClose(): Unit = registry.reset()
-	
+
   /**
    * Registers a block of code that should be called exactly once when the closeable is being closed.
    * The function is registered in [[Behaviors]] under a generated id and unregistered there after
@@ -47,7 +47,7 @@ trait CanBeClosed {
   inline final def onClose(body: => Any): String = registry.add(body)
 
 	inline final def onCloseOneShot(body: => Any): Unit = registry.addOneShot(body)
-	
+
   /**
    * Registers an already registered close behavior by its id.
    *
@@ -55,7 +55,7 @@ trait CanBeClosed {
    * @return `true` if the id was added; `false` if there is no behavior registered under it.
    */
   inline final def onCloseId(id: String): Boolean = registry.addId(id)
-	
+
   /**
    * Registers a failure behavior with a function taking the exception; the function is registered
    * in [[Behaviors]] under a generated id.
@@ -66,7 +66,7 @@ trait CanBeClosed {
   inline final def onCloseFailed(f: Throwable => Any): String = registry.addFail(f)
 
 	inline final def onCloseFailedOneShot(f: Throwable => Any): Unit = registry.addFailOneShot(f)
-	
+
   /**
    * Registers an already registered failure behavior by its id.
    *

@@ -168,7 +168,7 @@ final class ActorSystem[Msg, State] private (
 		case _ => super.processSysEntry(msg)
 	}
 
-	override protected def spawn(data: Spawn[Msg, State], p: Option[Promise[SystemMsg]] = None): Unit =
+	override protected def spawn(data: Spawn[State], p: Option[Promise[SystemMsg]] = None): Unit =
 		if (children.contains(data.actorId)) respond(p, invalidId(data.actorId)) else {
 			val b1 = ActorBuilder[Msg, State](data.state.getOrElse(this.state))
 				.withIdIf(data.actorId.nonEmpty, data.actorId)
@@ -179,6 +179,9 @@ final class ActorSystem[Msg, State] private (
 				.withSystem(this)
 				.addOnInits(data.onInit)
 				.addOnBeats(data.onBeat)
+				.addOnPauses(data.onPause)
+				.addOnUnpauses(data.onUnpause)
+				.addOnCloses(data.onClose)
 			val b2 = data.executionContext.fold(b1)(b1.withParallelDispatch)
 			val b3 = if (data.useSerialDispatch) b2.withSerialDispatch() else b2
 			val child = LocalActorRef(b3.build())

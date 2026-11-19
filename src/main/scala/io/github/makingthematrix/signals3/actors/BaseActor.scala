@@ -24,7 +24,7 @@ abstract class BaseActor[Msg](override val id: String,
 	inline protected def invalidActorId(actorId: String): Try[Option[Msg]] = Failure(InvalidIdException(actorId))
 	inline protected def unhandledMsg(msg: Msg): Try[Option[Msg]] = Failure(UnhandledMsgException(msg.toString))
 
-	override protected def spawn(data: SystemMsg.Spawn[Msg, Unit], p: Option[Promise[SystemMsg]] = None): Unit
+	override protected def spawn(data: SystemMsg.Spawn[Unit], p: Option[Promise[SystemMsg]] = None): Unit
 	
 	override protected def onMessage(msg: Msg): Try[Option[Msg]]
 }

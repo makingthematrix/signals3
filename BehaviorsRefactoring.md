@@ -324,14 +324,17 @@ The maintainer tightened the rule: **no implicit cleanup at all**.
    hooks are groundwork. P8 note from the maintainer: one-shots (whose ids are unobservable - `Unit`)
    are to be tested behaviorally - add a behavior, test it works, sever/reset it with `resetOnEVENT`,
    test it does not work anymore.
-7. **Ordering convention (after P5, per the maintainer):** behavior registries store ids as `List[String]`
-   and PREPEND new ids, everywhere - `BehaviorRegistry` (lifecycle events), `MutableActor.onBeat`,
-   and `ActorImpl.addBehavior`/`addBehaviors`. Consequently the most recently registered behavior runs
-   first and can take over processing from the earlier ones. Note: this made the long-standing
-   `BehaviorRegistry` doc true - it always claimed reverse-order runs while the ArrayBuffer actually ran
-   in registration order; the switch to prepend is a real semantic change for every lifecycle event
-   (streams' `onClose` chains included). P8 must check the main-module specs for order-sensitive
-   assertions.
+7. **Ordering convention (after P5) - ABANDONED (decision by the maintainer):** behavior ids are now
+   kept in `mutable.HashSet`s in `BehaviorRegistry` and `ActorBuilder`. An id is present at most once
+   (duplicate attaches are silently ignored - this also resolved the old point 5), and there is NO
+   guaranteed relative run order among behaviors configured through the builder or attached to a
+   lifecycle registry. All order-tracking bookkeeping (newest-first lists, reversed attaches,
+   dedup checks) was removed. **Still ordered, out of scope of this decision:** `ActorImpl.behaviors`
+   (a `List` - a runtime `AddBehavior` through a system message still runs first in the message
+   dispatch and can take over) and `MutableActor._onBeat` (a `List`). The maintainer may want to
+   unify them later. **P8 must watch out for:** order-sensitive test expectations (`createWithBehaviors`
+   docs, behavior-takeover assertions for builder-configured behaviors - takeover via runtime
+   `AddBehavior` is preserved).
 
 Consequences for later phases:
 - P5-P7: library-internal by-name wiring that is genuinely run-once (e.g. `ActorImpl`'s `onInit {...}`,
@@ -353,6 +356,14 @@ Consequences for later phases:
 | D6 | Hardening: store Msg/State ClassTags at registration, verify at `getPBeh`/`getTBeh` | **Deferred**: revisit after the refactoring is done. Until then the trust-based unchecked cast stands; misuse surfaces as a ClassCastException at processing time |
 
 ## Notes (decisions to revisit)
+
+- **Partial behaviors are OUT of this refactoring (decision by the maintainer).** `Spawn.behaviors`
+  stays a `List[String]` and `ActorImpl.behaviors`/`behSet` keeps its `List` (+prepend, runtime
+  `AddBehavior` takeover semantics) - they have not been converted to sets. **Future plan (the
+  maintainer):** a very different refactoring of partial behaviors is intended later - to allow
+  only ONE partial behavior at a time per actor (replacing the current lists/chains of partial
+  behaviors and their dispatch precedence entirely). Until then, they stay as-is - both in the actor
+  and in `Spawn`.
 
 - **Sugar naming (settled by the maintainer, after P6):** `withBehaviorPF`/`withBehaviorPFs` for
   message behaviors, and for every lifecycle event a function variant `withOnEVENTF(f)` plus a

@@ -14,10 +14,13 @@ import scala.reflect.{ClassTag, TypeTest}
 	* - `Close`: the actor should terminate its operations.
 	* - `Done`: a response message confirming that the operation was successful.
 	* - `InvalidId`: a response message indicating that the provided behavior ID is invalid, usually combined with `CloseableFuture.failed`
-	* - `AddBehavior(id, pf)` - adds a new behavior to the actor
-	* - `RemoveBehavior(id)` - removes a behavior from the actor
-	* - `AddBehaviorPF(pf)` - use instead of `AddBehavior`` if you don't care about persistence of behaviors
-	* - `Spawn(...)` - the actor should spawn a new sub-actor with the specified parameters.
+	* - `AddBehavior(pbehId)` - adds the partial behavior registered under this id to the actor
+	* - `RemoveBehavior(pbehId)` - removes the partial behavior from the actor
+	* - `AddOnBeat(tbehId)` - adds the total behavior registered under this id to the actor's heartbeat
+	* - `ResetOnBeat` - removes all the actor's heartbeat behaviors
+	* - `Spawn(...)` - the actor should spawn a new sub-actor with the specified parameters: id, initial
+	*   state, behavior ids, heartbeat, and the ids of the behaviors for all five lifecycle events
+	*   (`onInit`, `onBeat`, `onPause`, `onUnpause`, `onClose`).
 	* - `NewChild(child)` - the response for `Spawn` with the new actor's JVM reference (todo: change to ActorRef?)
 	* - `ActorClosed(actorId)` - informs that another actor has closed
 	* - `Register(actor)` - used to register a new actor with the system or another actor dictionary
@@ -31,15 +34,15 @@ enum SystemMsg {
 	case Pause, Unpause, Close, Done, InvalidId
 	case AddBehavior(behId: String)
 	case RemoveBehavior(pbehId: String)
-	case Spawn[Msg, State](actorId: String = "",
+	case Spawn[State](actorId: String = "",
 	                       state: Option[State] = None,
 	                       behaviors: List[String] = Nil,
 	                       heartbeat: Option[HeartBeatStrategy] = None,
-	                       onInit: List[String] = Nil,
-	                       onBeat: List[String] = Nil,
-	                       onPause: List[String] = Nil,
-	                       onUnpause: List[String] = Nil,
-	                       onClose: List[String] = Nil,
+	                       onInit: Set[String] = Set.empty,
+	                       onBeat: Set[String] = Set.empty,
+	                       onPause: Set[String] = Set.empty,
+	                       onUnpause: Set[String] = Set.empty,
+	                       onClose: Set[String] = Set.empty,
 	                       useSerialDispatch: Boolean = false,
 	                       executionContext: Option[ExecutionContext] = None
 	                      )
@@ -65,10 +68,10 @@ enum SystemMsg {
 object SystemMsg {
 	/**
 		* Creates a "trusted" [[scala.reflect.TypeTest]] used to match on `SystemMsg` cases with type parameters
-		* (like `AddBehavior[Msg, State]`) without giving up the full static type of the matched message.
+		* (like `Spawn[State]`) without giving up the full static type of the matched message.
 		*
 		* The type arguments of such cases are erased at runtime, so a plain type pattern like
-		* `case msg: AddBehavior[Msg, State]` cannot be checked - the compiler emits an unchecked warning
+		* `case msg: Spawn[State]` cannot be checked - the compiler emits an unchecked warning
 		* and falls back to testing only the runtime class of the message. A `TypeTest` created by this method
 		* does exactly that check, but in one auditable place: it verifies the runtime class of the scrutinee
 		* and then casts the message to the full type, taking the type arguments on trust. The trust is based on
@@ -79,7 +82,7 @@ object SystemMsg {
 		* which process system messages - see `ActorImpl.processSysEntry` and `ActorSystem.processSysEntry`.
 		*
 		* @tparam S the supertype of the matched values - in practice `SystemMsg`
-		* @tparam T the expected subtype of the matched values, e.g. `SystemMsg.AddBehavior[Msg, State]`
+		* @tparam T the expected subtype of the matched values, e.g. `SystemMsg.Spawn[State]`
 		* @return a `TypeTest[S, T]` which matches any value of the runtime class of `T`
 		*/
 	

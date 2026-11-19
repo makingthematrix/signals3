@@ -197,11 +197,11 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 
 	import SystemMsg.*
 
-	// The type arguments of `SystemMsg` cases like `AddBehavior[Msg, State]` are erased at runtime,
+	// The type arguments of `SystemMsg` cases like `Spawn[State]` are erased at runtime,
 	// so instead of unchecked type patterns - which the compiler reports as warnings - these cases are matched
 	// through trusted `TypeTest` instances created by `SystemMsg.trusted`. Each test verifies only the runtime
 	// class of the message and takes the type arguments on trust - see `SystemMsg.trusted` for the details.
-	private given SpawnT: TypeTest[SystemMsg, Spawn[Msg, State]] = trusted[SystemMsg, Spawn[Msg, State]]
+	private given SpawnT: TypeTest[SystemMsg, Spawn[State]] = trusted[SystemMsg, Spawn[State]]
 
 	protected def processSysEntry(msg: SysEntry): Unit = msg match {
 		case (Pause, p)              => pause(); respond(p, Done)
@@ -259,7 +259,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 			respond(p, Done)
 		} else respond(p, invalidId(id))
 
-	protected def spawn(data: SystemMsg.Spawn[Msg, State], p: Option[Promise[SystemMsg]] = None): Unit = {
+	protected def spawn(data: SystemMsg.Spawn[State], p: Option[Promise[SystemMsg]] = None): Unit = {
 		if (children.contains(data.actorId)) respond(p, invalidId(data.actorId)) else {
 			val b1 = ActorBuilder[Msg, State](data.state.getOrElse(this.state))
 				.withIdIf(data.actorId.nonEmpty, data.actorId)
@@ -270,6 +270,9 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 				.withSystemIf(system.nonEmpty, system.get)
 				.addOnInits(data.onInit)
 				.addOnBeats(data.onBeat)
+				.addOnPauses(data.onPause)
+				.addOnUnpauses(data.onUnpause)
+				.addOnCloses(data.onClose)
 			val b2 = data.executionContext.fold(b1)(b1.withParallelDispatch)
 			val b3 = if (data.useSerialDispatch) b2.withSerialDispatch() else b2
 			val child = LocalActorRef(b3.build())
