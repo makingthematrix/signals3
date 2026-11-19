@@ -38,7 +38,7 @@ The four kinds are stored in separate maps, and every `register*` method checks 
 - **`SystemMsg.scala`** - id-based cases only: `AddBehavior(behId)`, `RemoveBehavior(id)`,
   `AddOnBeat(tbehId)`, `Spawn(..., behaviors: List[String], onInit: List[String], onBeat: List[String], ...)`.
   Removed: `AddBehaviorPF`, typed `AddBehavior`, typed `AddOnBeat`, the `SystemMsg.addOnBeat` companion helper.
-- **`ActorBuilder.scala`** - fields are id lists (`behaviorIds`, `onInitIds`, `onBeatIds`, `onPauseIds`,
+- **`ActorBuilder.scala`** - fields are id lists (`pbehIds`, `onInitIds`, `onBeatIds`, `onPauseIds`,
   `onUnpauseIds`, `onCloseIds`); `buildActor` wires onInitIds via `onInitId`, behaviors via `getPBeh` +
   `addBehaviors`, onBeatIds via `onBeatById`.
 - **`ActorImpl.scala`** - `addBehavior(id, p)` and `addOnBeat(tbehId)` resolve through `Behaviors`
@@ -149,7 +149,20 @@ unaffected).
 - Fix `Pausable` typo `BehaviorRegistry("Unpause)")`.
 - Align `CanBeClosed.onCloseFailed(f)` (currently a non-`final def`, others are `inline final`).
 
-### P4. `MutableActor` - onBeat to ids
+### P4. `MutableActor` - onBeat to ids - **DONE**
+
+Implementation notes (on top of 2442d33): `_onBeat`/`_onBeatFailed` store ids only; `runOnBeat`
+resolves via `Behaviors.getTBeh[Msg, State]`/`getFail` at beat time, silently skipping unregistered
+ids; `onBeat(f: TF)` registers via `Behaviors.registerTF(f, "onBeat")` and returns the id;
+`onBeatFailed(f)` via `registerFailCase(f, "onBeatFailed")`, returns the id; `onBeatId(id)` /
+`onBeatFailedId(id)` are existence-check + append (the tuple and `(id, f)` forms and the old
+`onBeatById`/`onBeatFailedById` names are gone, per the revised conventions). `resetOnBeat()`
+clears local ids only, never unregistering (ids may be shared with other actors). Call sites:
+`ActorImpl.addOnBeat` now delegates to `onBeatId`; `ActorBuilder.buildActor` to `actor.onBeatId`.
+Verified by a 14-check smoke (real actors, 5ms heartbeat): sugar registration and firing,
+shared-tbeh attach, fail handler on a throwing beat (beats keep going), silent skip of a missing
+id, `resetOnBeat` stops beats with the function staying in `Behaviors`, and `AddOnBeat` /
+`ResetOnBeat` system messages (Done / InvalidId / no more beats). Smoke file deleted after.
 
 - `_onBeat` stores ids; `runOnBeat` resolves via `Behaviors.getTBeh[Msg, State]` at beat time; a missing id
   is skipped as a no-op (D2), consistent with `BehaviorRegistry.run()`.
@@ -162,7 +175,24 @@ unaffected).
   unregister them with the ids returned by the sugar.
 - `onBeatById`/`onBeatFailedById` shrink to an existence check + append id (drops their unchecked casts).
 
-### P5. `ActorImpl` - behaviors to ids
+### P5. `ActorImpl` - behaviors to ids - **DONE**
+
+Implementation notes (on top of 2442d33, after P4): `behaviors` is now `List[String]` plus a
+`behSet` HashSet for containment checks; `behMap`/`getBehavior` are gone. `addBehavior(id)` /
+`addBehaviors(ids)` validate against `Behaviors.getPBeh` and store ids only - never the functions;
+`removeBehavior` filters ids. `onMessage` resolves the pf fresh from `Behaviors` per processing:
+the unnamed dispatch walks the id list and takes the first attached behavior defined at the
+message; a missing id is a silent `NoResponse` (D2). **Semantics kept deliberately:** the named
+path (`ask(msg, behId)`) requires the behavior to be attached to *this* actor - a registered but
+unattached id does not respond (the old `behMap` behavior). Also fixed a long-standing doc/code
+contradiction: `addBehavior` PREPENDS, so the new behavior runs FIRST and can take over processing
+(the doc used to claim the opposite). Interim builder change (P6 will restructure further):
+`buildActor` keeps the invalid-id diagnostic against `getPBeh` and wires `validIds` directly.
+`spawn` sites in `ActorImpl` and `ActorSystem` pass `this.behaviors` (already ids). Verified by an
+18-check smoke: builder wiring, invalid-id skip, runtime `AddBehavior`/`RemoveBehavior` (precedence,
+double-add and unknown-id rejections, function surviving in `Behaviors`), the named-behavior path,
+mid-flight unregister skip, one pf shared by two actors, and spawn inheritance of behavior ids.
+Smoke file deleted after.
 
 - Replace `behaviors: List[PBeh]` + `behMap` with an ordered id list (+ a HashSet for containment checks).
 - `addBehavior(id)`: check the id exists in `Behaviors` (respond `InvalidId` otherwise), append the id -
@@ -185,14 +215,33 @@ resolved with the receiving actor's own `Msg`/`State`. The existing `trusted` Ty
 `Spawn`; misuse across types surfaces as a ClassCastException at processing time, which is the best
 available without ClassTag hardening (D6).
 
-### P6. `ActorBuilder`
+### P6. `ActorBuilder` - **DONE**
+
+Implementation notes: the builder was rewritten around a single private `copy` method with
+default-parameter overrides - every `with*`/`add*` method goes through it, which fixes the
+dropped-fields bug (the old forwarders silently lost `onPauseIds`/`onUnpauseIds`/`onCloseIds`).
+New setters for the missing events (mirroring the onInit family, incl. `If`/`add`/`withNo` variants):
+`addOnPauses`, `addOnUnpauses`, `addOnCloses`. They are applied in `buildActor` via
+`actor.onPauseId`/`onUnpauseId`/`onCloseId`. Bulk attaches process the builder lists in REVERSE
+(each attach prepends), so the builder's newest-first list order is preserved at runtime - the
+most recently added behavior runs first, per the ordering convention. D5 sugar restored as
+register-then-id wrappers: `withBehaviorPF`, `withBehaviorPFs` (in-group order preserved),
+`withOnBeat(f: TF)`, `withOnInit(f: TF)` (registered at build time - the function closes over the
+built actor; the generated id is therefore not visible on the builder - documented in the scaladoc),
+`addOnBeat`. Id fields (`pbehIds`, `onInitIds`, `onBeatIds`, `onPauseIds`, `onUnpauseIds`,
+`onCloseIds`, `initFuncs`) are public vals, so generated ids are recoverable (D3 rule 1).
+`sbt compile` now passes with ZERO warnings. Test-tree errors dropped from 63 to 41 (the sugar
+resolved most of them; the rest is P8). Verified by a 9-check smoke (deleted after): sugar
+registration + id readability, in-group order of `withBehaviorPFs`, the init sugar closing over
+the built actor, the beat sugar firing, builder-wired pause/unpause/close behaviors firing, and a
+regression chain proving the late fields survive a long `with*` chain.
 
 - Fix the dropped-fields bug: add the three trailing arguments to every forwarder (or introduce a
   private `copy` helper used by all `with*` methods).
-- Add `withOnPause`/`withOnUnpause`/`withOnClose` (+ `If`/`add` variants, mirroring onInit) to the
+- Add `addOnPauses`/`addOnUnpauses`/`addOnCloses` (+ `If`/`add` variants, mirroring onInit) to the
   builder **[Resolved D4]**, and apply the stored `onPauseIds`/`onUnpauseIds`/`onCloseIds` in `buildActor`
   via `onPauseById`/`onUnpauseId`/`onCloseId`.
-- `buildActor` stops pre-resolving PFs: pass `behaviorIds` straight to the actor (keep the invalid-id
+- `buildActor` stops pre-resolving PFs: pass `pbehIds` straight to the actor (keep the invalid-id
   diagnostic).
 - Restore sugar overloads as register-then-id wrappers **[Resolved D5]**, following the `Actor.apply` precedent:
   - `withBehaviorPF(pf)` / `withBehaviorPFs(pfs)` → `Behaviors.registerPF` + `addBehavior(id)`
@@ -200,7 +249,7 @@ available without ClassTag hardening (D6).
   - `withOnBeat(tf: TF)` → `Behaviors.registerTF` + `withOnBeat(List(id))`
   - `addOnBeat(id: String)` - symmetric with `addOnInit`.
 - **[Resolved D3]** The builder methods themselves keep returning `ActorBuilder` (chaining), but the
-  generated ids must be **recoverable**: make the id-list fields (`behaviorIds`, `onInitIds`, `onBeatIds`,
+  generated ids must be **recoverable**: make the id-list fields (`pbehIds`, `onInitIds`, `onBeatIds`,
   and the pause/unpause/close ones) readable through accessors, so the user can grab a generated id and
   unregister it later manually. The ids generated by `withOnInit(tf)`/`withOnBeat(tf)` sugar are only
   created at `buildActor` time (the actor instance is needed to close over), so they must land in the
@@ -210,8 +259,8 @@ available without ClassTag hardening (D6).
 ### P7. SystemMsg / ActorSystem
 
 - **[Resolved D4]** Add `onPause`/`onUnpause`/`onClose` id lists to `Spawn` and pass them through both
-  `spawn` implementations (`ActorImpl`, `ActorSystem`) into the builder's `withOnPause`/`withOnUnpause`/
-  `withOnClose`.
+  `spawn` implementations (`ActorImpl`, `ActorSystem`) into the builder's `addOnPauses`/`addOnUnpauses`/
+  `addOnCloses`.
 - Restore the `SystemMsg.addOnBeat(tf)` companion helper as a register-then-id wrapper (D5) - the tests
   use it.
 - Scaladoc cleanup (remove `AddBehaviorPF` etc.; `behId`/`pbehId` param naming).
@@ -275,6 +324,14 @@ The maintainer tightened the rule: **no implicit cleanup at all**.
    hooks are groundwork. P8 note from the maintainer: one-shots (whose ids are unobservable - `Unit`)
    are to be tested behaviorally - add a behavior, test it works, sever/reset it with `resetOnEVENT`,
    test it does not work anymore.
+7. **Ordering convention (after P5, per the maintainer):** behavior registries store ids as `List[String]`
+   and PREPEND new ids, everywhere - `BehaviorRegistry` (lifecycle events), `MutableActor.onBeat`,
+   and `ActorImpl.addBehavior`/`addBehaviors`. Consequently the most recently registered behavior runs
+   first and can take over processing from the earlier ones. Note: this made the long-standing
+   `BehaviorRegistry` doc true - it always claimed reverse-order runs while the ArrayBuffer actually ran
+   in registration order; the switch to prepend is a real semantic change for every lifecycle event
+   (streams' `onClose` chains included). P8 must check the main-module specs for order-sensitive
+   assertions.
 
 Consequences for later phases:
 - P5-P7: library-internal by-name wiring that is genuinely run-once (e.g. `ActorImpl`'s `onInit {...}`,
@@ -296,6 +353,16 @@ Consequences for later phases:
 | D6 | Hardening: store Msg/State ClassTags at registration, verify at `getPBeh`/`getTBeh` | **Deferred**: revisit after the refactoring is done. Until then the trust-based unchecked cast stands; misuse surfaces as a ClassCastException at processing time |
 
 ## Notes (decisions to revisit)
+
+- **Sugar naming (settled by the maintainer, after P6):** `withBehaviorPF`/`withBehaviorPFs` for
+  message behaviors, and for every lifecycle event a function variant `withOnEVENTF(f)` plus a
+  collection variant `withOnEVENTFs(fs)` - init takes `TF` functions (registered at build time,
+  closing over the built actor), pause/unpause/close take `() => Any` (registered immediately through
+  `Behaviors.registerF`, with the `onPause`/`onUnpause`/`onClose` prefixes; ids readable through the
+  id fields). The P6 `withOnInit(f: TF)` overload was RENAMED to `withOnInitF` by this rule
+  (`withOnInit(Iterable[String])` stays for ids). `addOnBeatTF` keeps its TF overload as is.
+  In-group order: the first function of a collection runs first among them; a later registration
+  runs before earlier ones (the global prepend convention).
 
 - **D1 (resolved for now, revisit later):** the `unregister` API stays unified; identifiers are globally
   unique across all behavior kinds. Register on debuggability - ids that appear in logs, crash traces,

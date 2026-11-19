@@ -40,7 +40,7 @@ object Behaviors {
 	private val fails = mutable.HashMap[String, Throwable => Any]()
 	
 	def registerBeh(beh: Beh): Boolean =
-		if (idTaken(beh.id)) false
+		if (isRegistered(beh.id)) false
 		else {
 			behs += beh.id -> beh.f
 			true
@@ -55,7 +55,7 @@ object Behaviors {
 		IdGenerator.generate(prefix).tap { id => registerBeh(id -> f) }
 	
 	def registerFail(fail: Fail): Boolean =
-		if (idTaken(fail.id)) false
+		if (isRegistered(fail.id)) false
 		else {
 			fails += fail.id -> fail.f
 			true
@@ -112,7 +112,7 @@ object Behaviors {
 
 	// Ids are globally unique across all four registries - see the object scaladoc. Every `register*`
 	// method checks all of them before accepting an id.
-	private def idTaken(id: String): Boolean =
+	def isRegistered(id: String): Boolean =
 		behs.contains(id) || fails.contains(id) || pbehs.contains(id) || tbehs.contains(id)
 
 	/**
@@ -123,7 +123,7 @@ object Behaviors {
 		*         of any kind (the existing one is kept).
 		*/
 	def registerPBeh[Msg, State](beh: PBeh[Msg, State]): Boolean =
-		if (idTaken(beh.id)) false
+		if (isRegistered(beh.id)) false
 		else {
 			pbehs += beh.id -> beh.pf.asInstanceOf[AnyPF]
 			true
@@ -140,7 +140,7 @@ object Behaviors {
 		*         of any kind (the existing one is kept).
 		*/
 	def registerTBeh[Msg, State](beh: TBeh[Msg, State]): Boolean =
-		if (idTaken(beh.id)) false
+		if (isRegistered(beh.id)) false
 		else {
 			tbehs += beh.id -> beh.f.asInstanceOf[AnyTF]
 			true

@@ -34,8 +34,10 @@ import scala.util.chaining.scalaUtilChainingOps
 	* from [[Behaviors]]: their functions are dead. A ''failed'' run keeps them, so a retry works.
 	*/
 private[signals3] final class BehaviorRegistry(name: String) {
-	private val behs = mutable.ArrayBuffer[String]()
-	private val fails = mutable.ArrayBuffer[String]()
+	// The behavior and failure ids, in reverse order of registration - the most recently added id
+	// is at the head of the list, so it runs first (same as the behavior lists of the actors).
+	private var behs: List[String] = Nil
+	private var fails: List[String] = Nil
 	// The ids registered by `addOneShot`/`addFailOneShot`. They are the only ids unregistered from
 	// Behaviors automatically - after a successful run of the event. Everything else stays there
 	// until the user unregisters it manually.
@@ -48,7 +50,7 @@ private[signals3] final class BehaviorRegistry(name: String) {
 		* @param body The code to run when the lifecycle event fires.
 		* @return The generated id of the registered function.
 		*/
-	def add(body: => Any): String = Behaviors.registerF(() => body, s"on$name").tap { id => behs += id }
+	def add(body: => Any): String = Behaviors.registerF(() => body, s"on$name").tap { id => behs ::= id }
 
 	/**
 		* Registers the given block of code in [[Behaviors]] under a newly generated id, adds that id to
@@ -59,7 +61,7 @@ private[signals3] final class BehaviorRegistry(name: String) {
 		*/
 	def addOneShot(body: => Any): Unit = {
 		val id = Behaviors.registerF(() => body, s"on$name")
-		behs += id
+		behs ::= id
 		oneshots += id
 	}
 
@@ -72,7 +74,7 @@ private[signals3] final class BehaviorRegistry(name: String) {
 		*         in [[Behaviors]].
 		*/
 	def addId(id: String): Boolean = Behaviors.getBeh(id) match {
-		case Some(_) => behs += id; true
+		case Some(_) => behs ::= id; true
 		case None    => false
 	}
 
@@ -84,7 +86,7 @@ private[signals3] final class BehaviorRegistry(name: String) {
 		* @return The generated id of the registered function.
 		*/
 	def addFail(f: Throwable => Any): String =
-		Behaviors.registerFailCase(f, s"on${name}Failed").tap { id => fails += id }
+		Behaviors.registerFailCase(f, s"on${name}Failed").tap { id => fails ::= id }
 
 	/**
 		* Registers the given function in [[Behaviors]] under a newly generated id, adds that id to the
@@ -95,7 +97,7 @@ private[signals3] final class BehaviorRegistry(name: String) {
 		*/
 	def addFailOneShot(f: Throwable => Any): Unit = {
 		val id = Behaviors.registerFailCase(f, s"on${name}Failed")
-		fails += id
+		fails ::= id
 		oneshots += id
 	}
 
@@ -107,7 +109,7 @@ private[signals3] final class BehaviorRegistry(name: String) {
 		*         in [[Behaviors]].
 		*/
 	def addFailId(id: String): Boolean = Behaviors.getFail(id) match {
-		case Some(_) => fails += id; true
+		case Some(_) => fails ::= id; true
 		case None    => false
 	}
 
@@ -136,12 +138,11 @@ private[signals3] final class BehaviorRegistry(name: String) {
 
 	/**
 		* Removes all behavior and failure ids from this registry. The functions registered in [[Behaviors]]
-		* - including the owned ones - stay there; this only severs the connection between this event
-		* and the behaviors.
+		* stay there; this only severs the connection between this event and the behaviors.
 		*/
 	def reset(): Unit = {
-		behs.clear()
-		fails.clear()
+		behs = Nil
+		fails = Nil
 		oneshots.clear()
 	}
 }

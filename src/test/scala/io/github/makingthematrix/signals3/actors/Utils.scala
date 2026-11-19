@@ -83,14 +83,14 @@ object Utils {
 	                      (using ExecutionContext): Actor[Msg, State] & Closeable & Pausable =
 		ActorBuilder[Msg, State](state)
 			.withBehaviorPF(pf)
-			.withOnInit(onInit)
+			.addOnInits(onInit)
 			.build()
 
 	def create[Msg](pf: PF[Msg, Unit], onInit: MutableActor[Msg, Unit] => Unit)
 	               (using ExecutionContext): Actor[Msg, Unit] & Closeable & Pausable =
 		ActorBuilder[Msg, Unit](())
 			.withBehaviorPF(pf)
-			.withOnInit(onInit)
+			.addOnInits(onInit)
 			.build()
 
 	/** Builds an actor with named behaviors; the first behavior in the list is the first one tried. */

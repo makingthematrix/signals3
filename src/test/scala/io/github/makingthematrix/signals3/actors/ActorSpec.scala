@@ -95,7 +95,7 @@ class ActorSpec extends FunSuite {
     val actor = ActorBuilder[Unit, Int](0)
       .withBehaviorPF { case _ => None }
       .withHeartbeat(HeartBeatStrategy.Reactive(20.millis, 200.millis))
-      .withOnBeat { _ => beats.mutate(_ + 1) }
+      .addOnBeatTF { _ => beats.mutate(_ + 1) }
       .build()
     waitFor(actor.isInitializedSignal, true)
     Thread.sleep(200L) // warm-up: let any initial beat burst settle
@@ -115,7 +115,7 @@ class ActorSpec extends FunSuite {
     val actor = ActorBuilder[Unit, Int](0)
       .withBehaviorPF { case _ => None }
       .withHeartbeat(HeartBeatStrategy.CustomLinear { () => calls.mutate(_ + 1); 20.millis })
-      .withOnBeat { _ => beats.mutate(_ + 1) }
+      .addOnBeatTF { _ => beats.mutate(_ + 1) }
       .build()
     waitFor(actor.isInitializedSignal, true)
     assert(waitFor(beats.map(_ >= 3), true))
@@ -129,7 +129,7 @@ class ActorSpec extends FunSuite {
     val actor = ActorBuilder[Unit, Int](0)
       .withBehaviorPF { case _ => None }
       .withHeartbeat(HeartBeatStrategy.CustomLinear { () => if fast then 20.millis else 300.millis })
-      .withOnBeat { _ => beats.mutate(_ + 1) }
+      .addOnBeatTF { _ => beats.mutate(_ + 1) }
       .build()
     waitFor(actor.isInitializedSignal, true)
     assert(waitFor(beats.map(_ >= 3), true))
@@ -183,7 +183,7 @@ class ActorSpec extends FunSuite {
     val actor = ActorBuilder[Int, Int](0)
       .withBehaviorPF { case (msg, _) => Some(msg + 1) }
       .withHeartbeat(HeartBeatStrategy.CustomReactive { hasMsg => if hasMsg then 20.millis else 250.millis })
-      .withOnBeat { _ => beats.mutate(_ + 1) }
+      .addOnBeatTF { _ => beats.mutate(_ + 1) }
       .build()
     waitFor(actor.isInitializedSignal, true)
     Thread.sleep(200L) // warm-up: let any initial beat burst settle
@@ -680,7 +680,7 @@ class ActorSpec extends FunSuite {
     val actor =
       ActorBuilder[String]()
         .withBehaviorPF { case (msg, _) => Some(s"Processed: $msg") }
-        .withOnInit { _ => initCalled ! true }
+        .addOnInits { _ => initCalled ! true }
         .withSerialDispatch()
         .build()
         .asInstanceOf[Actor[String, String] & Closeable]
@@ -797,7 +797,7 @@ class ActorSpec extends FunSuite {
     val beats = Signal(0)
     val actor = ActorBuilder[Unit, Int](0)
       .withBehaviorPF { case _ => None }
-      .withOnBeat { _ => beats.mutate(_ + 1) }
+      .addOnBeatTF { _ => beats.mutate(_ + 1) }
       .withSerialDispatch()
       .build()
     waitFor(actor.isInitializedSignal, true)
@@ -809,7 +809,7 @@ class ActorSpec extends FunSuite {
     val actor = ActorBuilder[String]()
       .withBehaviorPF { case (msg, _) => Some(s"Processed: $msg") }
       .withLinearHeartbeat(20L)
-      .withOnBeat { a => a.out ! "beat" }
+      .addOnBeatTF { a => a.out ! "beat" }
       .build()
     val beats = Signal(Seq.empty[String])
     actor.out.foreach { msg => beats.mutate(_ :+ msg) }
@@ -843,7 +843,7 @@ class ActorSpec extends FunSuite {
     val actor = ActorBuilder[Unit, Int](0)
       .withBehaviorPF { case _ => None }
       .withLinearHeartbeat(20L)
-      .withOnBeat { _ => beats1.mutate(_ + 1) }
+      .addOnBeatTF { _ => beats1.mutate(_ + 1) }
       .build()
     assert(waitFor(beats1.map(_ >= 2), true))
 	  expectSuccessCF(actor ? ResetOnBeat, Done)
@@ -862,7 +862,7 @@ class ActorSpec extends FunSuite {
     val actor = ActorBuilder[Unit, Int](0)
       .withBehaviorPF { case _ => None }
       .withLinearHeartbeat(20L)
-      .withOnBeat { _ => beats1.mutate(_ + 1) }
+      .addOnBeatTF { _ => beats1.mutate(_ + 1) }
       .build()
     assert(waitFor(beats1.map(_ >= 2), true))
     actor ! SystemMsg.Pause
@@ -889,7 +889,7 @@ class ActorSpec extends FunSuite {
     val actor = ActorBuilder[Unit, Int](0)
       .withBehaviorPF { case _ => None }
       .withLinearHeartbeat(20L)
-      .withOnBeat { _ => beats.mutate(_ + 1) }
+      .addOnBeatTF { _ => beats.mutate(_ + 1) }
       .build()
     assert(waitFor(beats.map(_ >= 2), true))
 	  expectSuccessCF(actor ? ResetOnBeat, Done)
@@ -934,7 +934,7 @@ class ActorSpec extends FunSuite {
     val parent = ActorBuilder[Unit, Int](0)
       .withBehaviorPF { case _ => None }
       .withLinearHeartbeat(20L)
-      .withOnBeat { a => beatenIds.mutate(_ + a.id) }
+      .addOnBeatTF { a => beatenIds.mutate(_ + a.id) }
       .build()
     val child = spawn[Unit, Int](parent) {
       SystemMsg.Spawn(actorId = "child-no-onbeat", state = Some(0))

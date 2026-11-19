@@ -1,9 +1,9 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.Behaviors.{Fail, TBeh, TF}
-import io.github.makingthematrix.signals3.{Behaviors, IdGenerator, SourceStream}
+import io.github.makingthematrix.signals3.{Behaviors, SourceStream}
+import io.github.makingthematrix.signals3.Behaviors.TF
 
-import scala.collection.mutable
+import scala.util.chaining.scalaUtilChainingOps
 
 /**
 	* A trait representing a mutable actor, which is an extension of the `Actor` trait. This actor
@@ -34,43 +34,83 @@ trait MutableActor[Msg, State] extends Actor[Msg, State]{
 		*/
 	override def out: SourceStream[Msg]
 
-	private val _onBeat = mutable.ArrayBuffer[TBeh[Msg, State]]()
+	// `onBeat` is a recurring event (it can happen many times), so - unlike the one-shot lifecycle
+	// events - none of its behaviors are ever unregistered automatically; see `priv.BehaviorRegistry`
+	// for the general rules. As everywhere else, the beat registry stores only ids; the functions
+	// live in `Behaviors` and are retrieved by the id at the moment of the run. New ids are prepended,
+	// so the most recently added behavior runs first - same as in `BehaviorRegistry`.
+	private var _onBeat: List[String] = Nil
+	private var _onBeatFailed: List[String] = Nil
 
+	/**
+		* Runs all the beat behaviors, at every heartbeat of the actor, inside a single try-catch
+		* (in the reverse order of registration - the most recently added behavior runs first).
+		* The functions are fetched from [[Behaviors]] by the stored ids at the moment of the run; an id
+		* whose function is no longer registered is silently skipped.
+		*
+		* @return `true` if all the behaviors run successfully; `false` if one of them threw an exception -
+		*         in that case all the failure behaviors are run with the exception (and, again, an
+		*         unregistered failure id is silently skipped).
+		*/
 	protected final def runOnBeat(): Boolean = try {
-		_onBeat.foreach(_.f(this)); true
+		_onBeat.foreach(id => Behaviors.getTBeh[Msg, State](id).foreach(_.f(this))); true
 	} catch {
-		case t: Throwable => _onBeatFailed.foreach(_.f(t)); false
+		case t: Throwable => _onBeatFailed.foreach(id => Behaviors.getFail(id).foreach(_.f(t))); false
 	}
 
-	// Registers a function that should be called exactly once when the actor is initialized
-	protected def onBeat(tbeh: TBeh[Msg, State]): Unit =
-		_onBeat.addOne(tbeh)
+	/**
+		* Registers a beat behavior: the function is registered in [[Behaviors]] under a generated id and
+		* that id is prepended to the actor's beat registry, so the behavior runs before the previously
+		* registered ones. It will run at every heartbeat of the actor.
+		*
+		* @param f The function to run at every heartbeat.
+		* @return The generated id of the registered function - save it to `Behaviors.unregister` the
+		*         function manually, if you ever need to.
+		*/
+	inline final def onBeat(f: TF[Msg, State]): String = Behaviors.registerTF(f, "onBeat").tap { id => _onBeat ::= id }
 
-	inline final def onBeat(f: TF[Msg, State]): Unit = onBeat((IdGenerator.generate("onBeat"), f): TBeh[Msg, State])
-	inline final def onBeat(id: String, f: TF[Msg, State]): Unit = onBeat((id -> f): TBeh[Msg, State])
+	/**
+		* Attaches an already registered beat behavior by its id. The behavior can be shared with
+		* other actors - unregistering it stays in the hands of whoever registered it.
+		*
+		* @param id The id of a [[Behaviors]] total behavior.
+		* @return `true` if the id was added; `false` if there is no total behavior registered under it.
+		*/
+	final def onBeatId(id: String): Boolean = Behaviors.getTBeh[Msg, State](id) match {
+		case Some(_) => _onBeat ::= id; true
+		case None    => false
+	}
 
-	final def onBeatById(id: String): Boolean = Behaviors.getTBeh(id) match {
-		case Some((id, f)) => onBeat(id -> f.asInstanceOf[TF[Msg, State]]); true
+	/**
+		* Registers a failure behavior which runs if a beat behavior throws an exception.
+		* The exception prevents the remaining beat behaviors from running.
+		*
+		* @param f The function taking the exception.
+		* @return The generated id of the registered function - save it to `Behaviors.unregister` the
+		*         function manually, if you ever need to.
+		*/
+	inline final def onBeatFailed(f: Throwable => Any): String =
+		Behaviors.registerFailCase(f, "onBeatFailed").tap { id => _onBeatFailed ::= id }
+
+	/**
+		* Attaches an already registered failure behavior by its id.
+		*
+		* @param id The id of a [[Behaviors]] failure behavior.
+		* @return `true` if the id was added; `false` if there is no failure behavior registered under it.
+		*/
+	final def onBeatFailedId(id: String): Boolean = Behaviors.getFail(id) match {
+		case Some(_) => _onBeatFailed ::= id; true
 		case None => false
 	}
 
-	private val _onBeatFailed = mutable.ArrayBuffer[Fail]()
-
-	// Registers a function that should be called exactly once when the actor is initialized
-	protected def onBeatFailed(fail: Fail): Unit =
-		_onBeatFailed.addOne(fail)
-
-	inline final def onBeatFailed(f: Throwable => Unit): Unit = onBeatFailed((IdGenerator.generate("onBeatFailed"), f): Fail)
-
-	inline final def onBeatFailed(id: String, f: Throwable => Unit): Unit = onBeatFailed((id -> f): Fail)
-
-	final def onBeatFailedById(id: String): Boolean = Behaviors.getFail(id) match {
-		case Some((id, f)) => onBeatFailed(id -> f); true
-		case None => false
-	}
-
+	/**
+		* Removes all behavior and failure ids from the actor's beat registry: until new ones are added,
+		* the actor beats empty. The functions registered in [[Behaviors]] - including the ones generated
+		* by [[onBeat]] - stay there: their ids may be shared with other actors (`AddOnBeat` can serve
+		* several of them), so this method never unregisters anything.
+		*/
 	def resetOnBeat(): Unit = {
-		_onBeat.remove(0, _onBeat.size)
-		_onBeatFailed.remove(0, _onBeatFailed.size)
+		_onBeat = Nil
+		_onBeatFailed = Nil
 	}
 }
