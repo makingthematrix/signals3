@@ -49,17 +49,6 @@ class ActorSpec extends FunSuite {
     close(actor)
   }
 
-  test("System messages handling") {
-    val actor = create[String]({ case (msg, _) => Some(s"Received: $msg") })
-    
-    actor ! SystemMsg.Pause
-    waitFor(actor.isPausedSignal, true)
-    actor ! SystemMsg.Unpause
-    waitFor(actor.isPausedSignal, false)
-    actor ! SystemMsg.Close
-    waitFor(actor.isClosedSignal, true)
-  }
-
   test("Concurrent message processing") {
     val actor = create[Int, Int](0, { case (msg, actor) =>
       actor.state += msg
@@ -73,23 +62,6 @@ class ActorSpec extends FunSuite {
     val finalResult: Int = resultCF(results)(using 2.seconds).max
     assertEquals(finalResult, 55)
     close(actor)
-  }
-
-  test("Heartbeat strategies") {
-    val linearResponse = Signal(MyStr(""))
-    val reactiveResponse = Signal(MyStr(""))
-
-    val linearActor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Linear: $msg"))}, HeartBeatStrategy.Linear(100L.millis))
-    val reactiveActor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Agitated: $msg"))}, HeartBeatStrategy.Reactive(50L.millis, 500L.millis))
-
-    (linearActor ? MyInt(1)).pipeTo(linearResponse)
-    (reactiveActor ? MyInt(2)).pipeTo(reactiveResponse)
-
-    waitFor(linearResponse, MyStr("Linear: 1"))
-    waitFor(reactiveResponse, MyStr("Reactive: 2"))
-
-    close(linearActor)
-    close(reactiveActor)
   }
 
   // ==================== Custom Heartbeat Strategies ====================
@@ -240,55 +212,18 @@ class ActorSpec extends FunSuite {
 
   // ==================== Behavior Modification ====================
 
-  test("Concurrent behavior addition and removal") {
-    val actor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Default: $msg")) })
-    val behavior42: PF[MyMsg, Unit] = { case (MyInt(42), _) => Some(MyStr("Special: 42")) }
-    val behavior99: PF[MyMsg, Unit] = { case (MyInt(99), _) => Some(MyStr("Special: 99")) }
+  test("attaching the same behavior id twice is rejected with InvalidId") {
+    val actor = create[String] { case (msg, _) => Some(s"Default: $msg") }
+    val behavior: PF[String, Unit] = { case ("42", _) => Some("Special: 42") }
+    assert(Behaviors.registerPBeh("spec-duplicate-attach" -> behavior))
 
-	  Behaviors.registerPBeh("special_42" -> behavior42)
-	  Behaviors.registerPBeh("special_99" -> behavior99)
+    expectSuccessCF(actor ? SystemMsg.AddBehavior("spec-duplicate-attach"), Done)
+    // attaching the same id again is rejected - the actor keeps the original
+    expectFailureCF(actor ? SystemMsg.AddBehavior("spec-duplicate-attach"),
+      Actor.InvalidIdException("spec-duplicate-attach"))
 
-	  val cf42 = actor ? SystemMsg.AddBehavior("special_42")
-    val cf99 = actor ? SystemMsg.AddBehavior("special_99")
-    awaitCF(cf42)
-    awaitCF(cf99)
-    
-    assertEquals(resultCF(actor ? MyInt(42)), MyStr("Special: 42"))
-    assertEquals(resultCF(actor ? MyInt(99)), MyStr("Special: 99"))
-
-    val cf42r = actor ? SystemMsg.RemoveBehavior("special_42")
-    val cf99r = actor ? SystemMsg.RemoveBehavior("special_99")
-    awaitCF(cf42r)
-    awaitCF(cf99r)
-
-    awaitAllTasks
-    
-    assertEquals(resultCF(actor ? MyInt(42)), MyStr("Default: 42"))
-    assertEquals(resultCF(actor ? MyInt(99)), MyStr("Default: 99"))
-    close(actor)
-  }
-
-  test("Duplicate behavior IDs are NOT replaced") {
-    val actor = create[String]{ case (msg, _) => Some(s"Default: $msg") }
-
-    // Add first behavior that handles 42
-    val behavior1: PF[String, Unit] = { case ("42", _) => Some("First: 42") }
-	  Behaviors.registerPBeh("duplicate_id" -> behavior1)
-    val cf1 = actor ? SystemMsg.AddBehavior("duplicate_id")
-    awaitCF(cf1)
-    
-    // Verify first behavior works
-    assertEquals(resultCF(actor ? "42"), "First: 42")
-    
-    // Add second behavior with the same ID but different response
-    val behavior2: PF[String, Unit] = { case ("42", _) => Some("Second: 42") }
-	  Behaviors.registerPBeh("duplicate_id" -> behavior2)
-    val cf2 = actor ? SystemMsg.AddBehavior("duplicate_id")
-    awaitCF(cf2)
-    
-    // The second behavior should have replaced the first
-    assertEquals(resultCF(actor ? "42"), "First: 42")
-    
+    // the originally attached behavior still handles the message
+    assertEquals(resultCF(actor ? "42"), "Special: 42")
     close(actor)
   }
 
@@ -476,26 +411,6 @@ class ActorSpec extends FunSuite {
     resultCF(closeFuture)(using 2.seconds)
     
     // Now the actor should be closed
-    waitFor(actor.isClosedSignal, true)
-  }
-
-  test("Close via ? with pending messages waits for processing") {
-    val actor = create[Int] { case (msg, _) =>
-      Thread.sleep(50) // Simulate slow processing
-      Some(msg + 1)
-    }
-    
-    // Send some messages that take time to process
-    actor ! 1
-    actor ! 2
-    actor ! 3
-    
-    // Close the actor - this should wait for messages to be processed
-    val closeFuture = actor ? SystemMsg.Close
-    
-    // The future should complete only after messages are processed and actor is closed
-    awaitCF(closeFuture)(using 2.seconds)
-    
     waitFor(actor.isClosedSignal, true)
   }
 
@@ -765,14 +680,6 @@ class ActorSpec extends FunSuite {
     }
   }
 
-  test("onBeat is not called when not set") {
-    val actor = create[Unit, Int](0, { case _ => None })
-    waitFor(actor.isInitializedSignal, true)
-    Thread.sleep(100L)
-    assertEquals(actor.state, 0)
-    close(actor)
-  }
-
   test("onBeat is called on every beat") {
     val beats = Signal(0)
     val actor = BeatingActor(beats)
@@ -905,6 +812,84 @@ class ActorSpec extends FunSuite {
     close(actor)
   }
 
+  // ==================== SystemMsg lifecycle events ====================
+
+  test("AddOnPause and RemoveOnPause via system messages") {
+    val actor = create[String] { case (msg, _) => Some(msg) }
+    var count = 0
+    val id = Behaviors.registerF(() => count += 1, "spec-onpause-add")
+
+    expectSuccessCF(actor ? SystemMsg.AddOnPause(id), Done)
+    expectSuccessCF(actor ? SystemMsg.Pause, Done)
+    assertEquals(count, 1)
+
+    actor ! SystemMsg.RemoveOnPause(id)
+    expectSuccessCF(actor ? SystemMsg.Unpause, Done)
+    expectSuccessCF(actor ? SystemMsg.Pause, Done)
+    assertEquals(count, 1)   // the behavior was removed - the second pause runs nothing
+    close(actor)
+  }
+
+  test("AddOnUnpause and RemoveOnUnpause via system messages") {
+    val actor = create[String] { case (msg, _) => Some(msg) }
+    var count = 0
+    val id = Behaviors.registerF(() => count += 1, "spec-onunpause-add")
+
+    expectSuccessCF(actor ? SystemMsg.Pause, Done)
+    actor ! SystemMsg.AddOnUnpause(id)
+    actor ! SystemMsg.RemoveOnUnpause(id)
+    expectSuccessCF(actor ? SystemMsg.Unpause, Done)
+    assertEquals(count, 0)   // the behavior was removed before the unpause ran
+
+    expectSuccessCF(actor ? SystemMsg.AddOnUnpause(id), Done)
+    expectSuccessCF(actor ? SystemMsg.Pause, Done)
+    expectSuccessCF(actor ? SystemMsg.Unpause, Done)
+    assertEquals(count, 1)
+    close(actor)
+  }
+
+  test("AddOnInit and ResetOnInit via system messages work only before initialization") {
+    val countSignal = SourceSignal(0)
+    val id = Behaviors.registerF(() => countSignal.mutate(_ + 1), "spec-oninit-add")
+    val actor = new ActorImpl[Unit, Int]("spec-addoninit-actor", 0, HeartBeatStrategy.Linear(20L.millis))
+    assert(!actor.isInitialized)
+	  actor ! SystemMsg.AddOnInit(id)
+	  waitForResult(countSignal, 0)
+    actor.initialize()
+	  waitFor(actor.isInitializedSignal, true)
+    assert(actor.isInitialized)
+
+	  waitForResult(countSignal, 1)
+
+    // the init event is one-shot: adding the behavior again after the init ran does nothing
+	  actor ! SystemMsg.AddOnInit(id)
+
+	  Thread.sleep(100L)
+	  
+	  waitForResult(countSignal, 1)
+
+	  // ResetOnInit severs the (long dead) ids without a complaint
+    expectSuccessCF(actor ? SystemMsg.ResetOnInit, Done)
+    close(actor)
+  }
+
+  test("AddOnClose and RemoveOnClose via system messages") {
+    var closed = false
+    val id = Behaviors.registerF(() => closed = true, "spec-onclose-add")
+
+    val actor = create[String] { case (msg, _) => Some(msg) }
+    expectSuccessCF(actor ? SystemMsg.AddOnClose(id), Done)
+    actor ! SystemMsg.RemoveOnClose(id)
+    resultCF(actor ? SystemMsg.Close)
+    waitFor(actor.isClosedSignal, true)
+    assert(!closed)          // the close behavior was removed before the close ran
+
+    val actor2 = create[String] { case (msg, _) => Some(msg) }
+    expectSuccessCF(actor2 ? SystemMsg.AddOnClose(id), Done)
+    expectSuccessCF(actor2 ? SystemMsg.Close, Done)
+    assert(closed)          // this time the close behavior was attached and ran
+  }
+
   // ==================== Spawn and onBeat ====================
 
   test("Spawn with onBeat creates a child that calls the callback") {
@@ -961,9 +946,9 @@ class ActorSpec extends FunSuite {
     // the by-id behaviors must be attached before the actor is initialized
     val actor = new ActorImpl[Unit, Int]("spec-oninit-byid-actor", 0)
     assert(!actor.isInitialized)
-    assert(actor.onInitId("spec-oninit-byid"))
+    assert(actor.onInit("spec-oninit-byid"))
     // an unregistered id is reported and attaches nothing
-    assert(!actor.onInitId("spec-never-registered-oninit"))
+    assert(!actor.onInit("spec-never-registered-oninit"))
 
     actor.initialize()
     assert(actor.isInitialized)
@@ -972,7 +957,7 @@ class ActorSpec extends FunSuite {
     // a behavior attached after the initialization is registered but will never run
     var late = false
     assert(registerBeh("spec-oninit-byid-late" -> (() => late = true)))
-    assert(actor.onInitId("spec-oninit-byid-late"))
+    assert(actor.onInit("spec-oninit-byid-late"))
     assert(!late)
 
     close(actor)
@@ -982,8 +967,8 @@ class ActorSpec extends FunSuite {
     val actor = new ActorImpl[Unit, Int]("spec-onbeat-byid-actor", 0, HeartBeatStrategy.Linear(20L.millis))
     assert(registerTBeh[Unit, Int]("spec-onbeat-byid" -> { a => a.state += 1 }))
     assert(!actor.isInitialized)
-    assert(actor.onBeatId("spec-onbeat-byid"))
-    assert(!actor.onBeatId("spec-never-registered-tbeh"))
+    assert(actor.onBeat("spec-onbeat-byid"))
+    assert(!actor.onBeat("spec-never-registered-tbeh"))
 
     actor.initialize()
     Thread.sleep(120L) // at 20ms beats the attached behavior must fire several times

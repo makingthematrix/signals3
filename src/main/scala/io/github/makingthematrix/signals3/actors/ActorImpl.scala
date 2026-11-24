@@ -10,7 +10,6 @@ import io.github.makingthematrix.signals3.actors.SystemMsg.Done
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.Conversion.into
 import scala.annotation.static
-import scala.collection.mutable
 import scala.collection.mutable.Queue as MQueue
 import scala.concurrent.duration.{DurationLong, FiniteDuration}
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
@@ -51,8 +50,6 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	// incoming message; the functions live in `Behaviors` and are retrieved by the id at the moment
 	// a message is processed; see the processMessages method.
 	protected var behaviors: List[String] = Nil
-	// the set of the same ids, for quick containment checks
-	private val behSet = mutable.HashSet[String]()
 	// the "beating heart" of the actor; depending on the strategy, accumulated messages are processed at each beat or when the message appears (reactive).
 	private lazy val beat = GeneratorStream.heartbeat(() => interval())
 	
@@ -103,10 +100,9 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		* @param id The id of a behavior registered in [[Behaviors]].
 		*/
 	private[actors] def addBehavior(id: String, p: Option[Promise[SystemMsg]] = None): Unit =
-		if (behSet.contains(id)) respond(p, invalidId(id))
+		if (behaviors.contains(id)) respond(p, invalidId(id))
 		else Behaviors.getPBeh[Msg, State](id) match {
 			case Some(_) =>
-				behSet += id
 				behaviors ::= id
 				respond(p, Done)
 			case _ => respond(p, invalidId(id))
@@ -119,16 +115,12 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		*
 		* @param id The unique identifier of the behavior to be removed.
 		*/
-	private def removeBehavior(id: String): Unit = {
+	private def removeBehavior(id: String): Unit =
 		behaviors = behaviors.filterNot(_ == id)
-		behSet -= id
-	}
 
 	// adds all the given behavior ids in front of the list of behaviors, maintaining their own internal order
-	private[actors] def addBehaviors(ids: Iterable[String]): Unit = {
+	private[actors] def addBehaviors(ids: Iterable[String]): Unit =
 		behaviors = ids.toList ::: behaviors
-		behSet ++= ids
-	}
 
 	override def ask(msg: SystemMsg): CloseableFuture[SystemMsg] =
 		if (!isClosed) {
@@ -212,20 +204,53 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		case (SpawnT(data), p)       => spawn(data, p)
 		case (ActorClosed(id), p)    => removeChild(id, p)
 		case (AddOnBeat(tbehId), p)  => addOnBeat(tbehId, p)
+		case (AddOnInit(behId), p)       => addOnInit(behId, p)
+		case (AddOnPause(behId), p)     => addOnPause(behId, p)
+		case (AddOnUnpause(behId), p)   => addOnUnpause(behId, p)
+		case (AddOnClose(behId), p)     => addOnClose(behId, p)
+		case (RemoveOnBeat(tbehId), p) => removeOnBeat(tbehId); respond(p, Done)
+		case (RemoveOnInit(behId), p)   => removeOnInit(behId); respond(p, Done)
+		case (RemoveOnPause(behId), p)  => removeOnPause(behId); respond(p, Done)
+		case (RemoveOnUnpause(behId), p) => removeOnUnpause(behId); respond(p, Done)
+		case (RemoveOnClose(behId), p)  => removeOnClose(behId); respond(p, Done)
 		case (ResetOnBeat, p)        => resetOnBeat(); respond(p, Done)
+		case (ResetOnInit, p)           => resetOnInit(); respond(p, Done)
+		case (ResetOnPause, p)          => resetOnPause(); respond(p, Done)
+		case (ResetOnUnpause, p)        => resetOnUnpause(); respond(p, Done)
+		case (ResetOnClose, p)          => resetOnClose(); respond(p, Done)
 		case (other, p)              => respond(p, unhandledMsg(other.toString))
 	}
+	
+	private def addOnBeat(tbehId: String, p: Option[Promise[SystemMsg]]): Unit = {
+		if (isClosed) ActorIsClosed
+		else if (onBeat(tbehId)) respond(p, Done) 
+		else respond(p, invalidId(tbehId))
+	}
 
-	// The beat registry of the actor keeps only plain () => Any functions; a total behavior
-	// registered in Behaviors is attached by adapting it with this actor as the argument,
-	// at the moment of the attachment. The type arguments are restored by the unchecked cast
-	// of `getTBeh` - the usual, single auditable place where the trust-based cast happens.
-	private def addOnBeat(tbehId: String, p: Option[Promise[SystemMsg]]): Unit =
-		Behaviors.getTBeh[Msg, State](tbehId) match {
-			case Some(tbeh) => onBeat(tbeh.tf); respond(p, Done)
-			case None       => respond(p, invalidId(tbehId))
-		}
+	private def addOnInit(behId: String, p: Option[Promise[SystemMsg]]): Unit = {
+		if (isInitialized) ActorIsInit
+		else if (onInit(behId)) respond(p, Done)
+		else respond(p, invalidId(behId))
+	}
 
+	private def addOnPause(behId: String, p: Option[Promise[SystemMsg]]): Unit = {
+		if (isClosed) ActorIsClosed
+		else if (onPause(behId)) respond(p, Done)
+		else respond(p, invalidId(behId))
+	}
+
+	private def addOnUnpause(behId: String, p: Option[Promise[SystemMsg]]): Unit = {
+		if (isClosed) ActorIsClosed
+		else if (onUnpause(behId)) respond(p, Done)
+		else respond(p, invalidId(behId))
+	}
+
+	private def addOnClose(behId: String, p: Option[Promise[SystemMsg]]): Unit = {
+		if (isClosed) ActorIsClosed
+		else if (onClose(behId)) respond(p, Done)
+		else respond(p, invalidId(behId))
+	}
+	
 	private def processMsgEntry(entry: MsgEntry): Unit = {
 		val (msg, pOpt, bId) = entry
 		val res = if (bId.nonEmpty) onMessage(msg, bId) else Try(onMessage(msg)).flatten
@@ -248,7 +273,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		val pfOpt: Option[PF[Msg, State]] =
 			if (bId.isEmpty)
 				behaviors.iterator.flatMap(Behaviors.getPBeh[Msg, State]).find(_.pf.isDefinedAt(msg, this)).map(_.pf)
-			else if (behSet.contains(bId))
+			else if (behaviors.contains(bId))
 				Behaviors.getPBeh[Msg, State](bId).map(_.pf)
 			else None
 		pfOpt match {

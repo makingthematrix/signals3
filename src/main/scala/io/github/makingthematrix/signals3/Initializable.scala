@@ -41,7 +41,7 @@ trait CanBeInitialized {
 		* @param id The id of a [[Behaviors]] behavior.
 		* @return `true` if the id was added; `false` if there is no behavior registered under it.
 		*/
-	inline final def onInitId(id: String): Boolean = registry.addId(id)
+	inline final def onInit(id: String): Boolean = registry.addId(id)
 
 	protected def runOnInit(): Boolean = registry.run()
 
@@ -75,6 +75,8 @@ trait CanBeInitialized {
 			onInitFailed(_ => signal.clear())
 		}
 	}
+
+	inline final def removeOnInit(id: String): Unit = registry.remove(id)
 }
 
 trait Initializable extends CanBeInitialized {

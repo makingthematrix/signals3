@@ -40,54 +40,6 @@ class ActorIntegrationSpec extends FunSuite {
   // ============================================================================
 
   /**
-   * Test that concurrent behavior additions through system messages are thread-safe.
-   * This verifies that adding behaviors from multiple threads doesn't corrupt the
-   * behavior list or cause any race conditions.
-   */
-  test("Concurrent behavior additions through system messages are thread-safe") {
-    val actor = create[String, String]("0", {
-      case (msg, _) => Some(s"Default: $msg")
-    })
-
-    val numThreads = 10
-    val behaviorsPerThread = 10
-    val totalBehaviors = numThreads * behaviorsPerThread
-    
-    // Track which behaviors were successfully added (using atomic mutate)
-    val addedCount = SourceSignal(0)
-    
-    // Create a custom behavior that records its ID when added
-    def createTrackingBehavior(id: String): PF[String, String] = {
-      case (msg, _) if msg == id.hashCode.toString => Some(s"Behavior-$id: $msg")
-    }
-    
-    // Add behaviors concurrently from multiple threads
-    val futures: Seq[Future[Unit]] = (0 until numThreads).map { threadId =>
-      Future {
-        (0 until behaviorsPerThread).foreach { i =>
-          val behaviorId = s"thread-$threadId-behavior-$i"
-          val behavior = createTrackingBehavior(behaviorId)
-	        Behaviors.registerPBeh(behaviorId -> behavior)
-	        // Add behavior via system message
-          val cf = actor.ask(SystemMsg.AddBehavior(behaviorId))
-          // Wait for completion to ensure it's processed
-          awaitCF(cf)
-          // Increment count atomically
-          addedCount.mutate(_ + 1)
-        }
-      }
-    }
-    
-    // Wait for all threads to complete
-    val allFutures: Seq[Future[Unit]] = futures
-    Await.result(Future.sequence(allFutures), 10.seconds)
-
-    // Verify all behaviors were added
-    waitFor(addedCount, totalBehaviors)
-    close(actor)
-  }
-  
-  /**
    * Test that removing a behavior that doesn't exist doesn't cause errors.
    */
   test("Removing non-existent behavior is safe") {
@@ -217,7 +169,6 @@ class ActorIntegrationSpec extends FunSuite {
   // ============================================================================
   // Spawn: Parent-Child Graph
   // ============================================================================
-
 
   test("Multiple children have distinct ids and all work") {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }

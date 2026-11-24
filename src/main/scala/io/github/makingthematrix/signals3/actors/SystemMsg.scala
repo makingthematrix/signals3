@@ -17,7 +17,17 @@ import scala.reflect.{ClassTag, TypeTest}
 	* - `AddBehavior(pbehId)` - adds the partial behavior registered under this id to the actor
 	* - `RemoveBehavior(pbehId)` - removes the partial behavior from the actor
 	* - `AddOnBeat(tbehId)` - adds the total behavior registered under this id to the actor's heartbeat
+	* - `RemoveOnBeat(tbehId)` - removes the heartbeat behavior with this id from the actor, if attached
 	* - `ResetOnBeat` - removes all the actor's heartbeat behaviors
+	* - `AddOnInit(behId)` - adds the behavior registered under this id to the actor's init event -
+	*   as init runs once, it only fires if the actor has not been initialized yet;
+	*   `AddOnPause(behId)`, `AddOnUnpause(behId)`, `AddOnClose(behId)` do the same for the other
+	*   lifecycle events
+	* - `RemoveOnInit(behId)`, `RemoveOnPause(behId)`, `RemoveOnUnpause(behId)`, `RemoveOnClose(behId)` -
+	*   remove the id from the given event's registry, if attached; an id which was never attached
+	*   is silently ignored
+	* - `ResetOnInit`, `ResetOnPause`, `ResetOnUnpause`, `ResetOnClose` - detach all the ids of the
+	*   given lifecycle event; the functions stay registered in the `Behaviors` library
 	* - `Spawn(...)` - the actor should spawn a new sub-actor with the specified parameters: id, initial
 	*   state, behavior ids, heartbeat, and the ids of the behaviors for all five lifecycle events
 	*   (`onInit`, `onBeat`, `onPause`, `onUnpause`, `onClose`).
@@ -32,8 +42,23 @@ import scala.reflect.{ClassTag, TypeTest}
 	*/
 enum SystemMsg {
 	case Pause, Unpause, Close, Done, InvalidId
-	case AddBehavior(behId: String)
+	case AddBehavior(pbehId: String)
+	case AddOnBeat(tbehId: String)
+	case AddOnInit(behId: String)
+	case AddOnPause(behId: String)
+	case AddOnUnpause(behId: String)
+	case AddOnClose(behId: String)
 	case RemoveBehavior(pbehId: String)
+	case RemoveOnBeat(tbehId: String)
+	case RemoveOnInit(behId: String)
+	case RemoveOnPause(behId: String)
+	case RemoveOnUnpause(behId: String)
+	case RemoveOnClose(behId: String)
+	case ResetOnBeat
+	case ResetOnInit
+	case ResetOnPause
+	case ResetOnUnpause
+	case ResetOnClose
 	case Spawn[State](actorId: String = "",
 	                       state: Option[State] = None,
 	                       behaviors: List[String] = Nil,
@@ -61,8 +86,6 @@ enum SystemMsg {
 	case AskForSystem(systemId: String = "", tags: Set[ActorTag] = Set.empty)
 	case AskForSystemAsync[Msg](sender: Actor[Msg, ?], systemId: String = "", tags: Set[ActorTag] = Set.empty)
 	case RemoteRef[Msg](ref: RemoteSystem[Msg])
-	case AddOnBeat(tbehId: String)
-	case ResetOnBeat
 }
 
 object SystemMsg {

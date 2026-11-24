@@ -180,4 +180,10 @@ private[signals3] final class BehaviorRegistry(name: String) {
 		fails.clear()
 		oneshots.clear()
 	}
+	
+	def remove(id: String): Unit = {
+		behs -= id
+		fails -= id
+		oneshots -= id
+	}
 }

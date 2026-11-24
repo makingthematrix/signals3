@@ -675,11 +675,11 @@ class PausableSpec extends munit.FunSuite {
     assert(Behaviors.registerBeh("spec-onpause-byid" -> (() => callbackCount += 1)))
     assert(Behaviors.registerBeh("spec-onunpause-byid" -> (() => callbackCount += 1)))
 
-    assert(pausable.onPauseId("spec-onpause-byid"))
-    assert(pausable.onUnpauseId("spec-onunpause-byid"))
+    assert(pausable.onPause("spec-onpause-byid"))
+    assert(pausable.onUnpause("spec-onunpause-byid"))
     // unregistered ids are reported and attach nothing
-    assert(!pausable.onPauseId("spec-never-registered-pause"))
-    assert(!pausable.onUnpauseId("spec-never-registered-unpause"))
+    assert(!pausable.onPause("spec-never-registered-pause"))
+    assert(!pausable.onUnpause("spec-never-registered-unpause"))
 
     pausable.pause()
     assertEquals(callbackCount, 1)

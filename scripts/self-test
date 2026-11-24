@@ -149,6 +149,14 @@ tc_git_guard_refuse() {
   # it would run the real dangerous command.
 }
 
+tc_spec_seq() {
+  run scripts/spec --seq io.github.makingthematrix.signals3.InitializableSpec io.github.makingthematrix.signals3.actors.ActorBehaviorsSpec
+  rc_is 0
+  out_has "InitializableSpec finished: 0 failed"
+  out_has "BehaviorsSpec finished: 0 failed"
+  out_has "Passed: Total"
+}
+
 tc_tree_clean() {
   run bash -c "git status --porcelain -- src"
   rc_is 0
@@ -157,7 +165,7 @@ tc_tree_clean() {
 
 # ------------------------------------------------------------------ dispatch
 ALL_CASES="check-ok check-broken probe-neg probe-pos smoke-roundtrip smoke-fail-keep \
-mk-smoke-duplicate git-guard-safe git-guard-refuse tree-clean"
+mk-smoke-duplicate git-guard-safe git-guard-refuse spec-seq tree-clean"
 
 cleanup() {
   rm -f "$BROKEN_FILE" "$MAIN_SRC/StdSelfTestSmoke.scala" "$MAIN_SRC/StdSelfTestFail.scala" \

@@ -527,7 +527,7 @@ final class ActorBuilder[Msg, State] (val id: String,
 	  if (invalidInits.nonEmpty) {
 		  println(s"Invalid onInit ids found when building Actor ${id}: $invalidInits")
 	  }
-    validInits.foreach(actor.onInitId)
+    validInits.foreach(actor.onInit)
 
     val (validPBehs, invalidPbehs) = pbehIds.partition(Behaviors.isRegistered)
     if (invalidPbehs.nonEmpty) {
@@ -539,7 +539,7 @@ final class ActorBuilder[Msg, State] (val id: String,
 	  if (invalidBeats.nonEmpty) {
 		  println(s"Invalid onBeat ids found when building Actor ${id}: $invalidBeats")
 	  }
-	  validBeats.foreach(actor.onBeatId)
+	  validBeats.foreach(actor.onBeat)
 	  // the beat TFs are adapted with the built actor now - the functions close over it
 	  beatFuncs.foreach(actor.onBeat)
 
@@ -547,19 +547,19 @@ final class ActorBuilder[Msg, State] (val id: String,
 	  if (invalidPauses.nonEmpty) {
 		  println(s"Invalid onPause ids found when building Actor ${id}: $invalidPauses")
 	  }
-	  validPauses.foreach(actor.onPauseId)
+	  validPauses.foreach(actor.onPause)
 
 	  val (validUnpauses, invalidUnpauses) = onUnpauseIds.partition(Behaviors.isRegistered)
 	  if (invalidUnpauses.nonEmpty) {
 		  println(s"Invalid onUnpause ids found when building Actor ${id}: $invalidUnpauses")
 	  }
-	  validUnpauses.foreach(actor.onUnpauseId)
+	  validUnpauses.foreach(actor.onUnpause)
 
 	  val (validCloses, invalidCloses) = onCloseIds.partition(Behaviors.isRegistered)
 	  if (invalidCloses.nonEmpty) {
 		  println(s"Invalid onClose ids found when building Actor ${id}: $invalidCloses")
 	  }
-	  validCloses.foreach(actor.onCloseId)
+	  validCloses.foreach(actor.onClose)
 
 	  actor.initialize()
     actor

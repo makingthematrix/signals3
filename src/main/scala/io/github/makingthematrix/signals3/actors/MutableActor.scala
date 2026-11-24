@@ -82,7 +82,7 @@ trait MutableActor[Msg, State] extends Actor[Msg, State]{
 		* @param id The id of a [[Behaviors]] total behavior.
 		* @return `true` if the id was added; `false` if there is no total behavior registered under it.
 		*/
-	inline final def onBeatId(id: String): Boolean = registry.addId(id)
+	inline final def onBeat(id: String): Boolean = registry.addId(id)
 
 	/**
 		* Registers a failure behavior which runs if a beat behavior throws an exception.
@@ -109,4 +109,6 @@ trait MutableActor[Msg, State] extends Actor[Msg, State]{
 		* several of them), so this method never unregisters anything.
 		*/
 	inline final def resetOnBeat(): Unit = registry.reset()
+	
+	inline final def removeOnBeat(id: String): Unit = registry.remove(id)
 }

@@ -3,7 +3,7 @@
 ## Open
 
 ### To do
-- [ ] Behaviors: A storage for behaviors (total/partial functions + ids) - this actually might be much complicated than it seems
+- [x] Behaviors: A storage for behaviors (total/partial functions + ids) - this actually might be much complicated than it seems
   - [x] Create Behaviors object (a singleton)
   - [x] Move Beh to Behaviors and rename it PBeh (Partial Behavior)
   - [x] Create TBeh (Total Behavior)
@@ -11,7 +11,7 @@
   - [x] Hardcode some behaviors
   - [x] In all 5 events: onInit, onBeat, onPause, onUnpause, onClose; switch to behaviors
   - [x] Enable a way to add a behaviors only by id
-  - [ ] Add, remove and reset behaviors with system messages
+  - [x] Add, remove and reset behaviors with system messages
     // loop: implement -> test -> refactor
 - [ ] Refactor partial behaviors to only one behavior at once allowed + behaviors folding in Behaviors
 - [ ] Go through usages of onInit and onClose and think if some of them can be turned to one-shots. Or: any inline lambda can be one-shot?

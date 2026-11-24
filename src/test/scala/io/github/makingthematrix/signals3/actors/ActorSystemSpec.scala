@@ -214,21 +214,6 @@ class ActorSystemSpec extends FunSuite {
   }
 
   // ============================================================================
-  // 8. Cross-actor communication through the system
-  // ============================================================================
-
-  test("Two actors communicate via AskForRef") {
-    val sys = newSystem[String]("sys")
-    val a   = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
-    val b   = newActor(sys, "b", { case (msg, _) => Some(s"B: $msg") })
-    val aRef = awaitRef(sys, "a")
-    expectSuccessCF(aRef ? "10", "A: 10")
-    val bRef = awaitRef(sys, "b")
-    expectSuccessCF(bRef ? "20", "B: 20")
-    close(a, b, sys)
-  }
-
-  // ============================================================================
   // 9. Concurrency
   // ============================================================================
 

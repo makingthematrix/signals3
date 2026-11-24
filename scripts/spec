@@ -4,7 +4,15 @@
 # failing tests with their assertion locations (a couple of context lines
 # each), and the final verdict. Exits non-zero if any test failed.
 #
-# Usage: scripts/spec <SuiteName>...     (fully qualified names or .package.* patterns)
+# Usage: scripts/spec [--seq] <SuiteName>...   (fully qualified names or .package.* patterns)
+#
+# --seq runs the suites sequentially in the JVM. By default sbt runs test classes
+# in parallel threads of one JVM, and since the tests share one global `Behaviors`
+# registry, a registration or a registry-wide reset in one suite can interfere with
+# a suite that is mid-run at the same time (the symptom is a mid-test
+# `InvalidIdException` for an id the test just registered). Use --seq to take that
+# variable off the table when comparing runs or debugging such a failure - at the
+# cost of wall-clock time.
 #
 # NOTE: do not pass munit output-mode flags (like `-o fail`) here - they
 # silently make every suite report 0 tests. Plain testOnly only.
@@ -12,12 +20,18 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
+SEQ=0
+if [ "${1:-}" = "--seq" ]; then SEQ=1; shift; fi
+
 if [ $# -eq 0 ]; then
-  echo "Usage: scripts/spec <SuiteName>..." >&2
+  echo "Usage: scripts/spec [--seq] <SuiteName>..." >&2
   exit 1
 fi
 
-OUT="$(sbt_out "testOnly $*")"
+TASK="testOnly $*"
+if [ "$SEQ" = "1" ]; then TASK="set Test / parallelExecution := false; $TASK"; fi
+
+OUT="$(sbt_out "$TASK")"
 
 printf '%s\n' "$OUT" | grep -aE "Test run .*finished:|Test run .*aborted" || true
 echo

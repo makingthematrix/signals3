@@ -622,9 +622,9 @@ class CloseableSpec extends munit.FunSuite {
     assert(Behaviors.registerBeh("spec-onclose-byid" -> (() => { s ! 2 })))
 
     val cf = CloseableFuture { Thread.sleep(200); s ! 1 }
-    assert(cf.onCloseId("spec-onclose-byid"))
+    assert(cf.onClose("spec-onclose-byid"))
     // an unregistered id is reported and attaches nothing
-    assert(!cf.onCloseId("spec-never-registered-onclose"))
+    assert(!cf.onClose("spec-never-registered-onclose"))
 
     CloseableFuture.delayed(50.millis) { assert(cf.closeAndCheck()) }
     await(cf)

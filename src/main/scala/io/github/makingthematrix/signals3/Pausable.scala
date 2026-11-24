@@ -42,7 +42,7 @@ trait CanBePaused {
 		* @param id The id of a [[Behaviors]] behavior.
 		* @return `true` if the id was added; `false` if there is no behavior registered under it.
 		*/
-	inline final def onPauseId(id: String): Boolean = pauseRegistry.addId(id)
+	inline final def onPause(id: String): Boolean = pauseRegistry.addId(id)
 	
 	/**
 		* Registers a failure behavior with a function taking the exception; the function is registered
@@ -85,7 +85,7 @@ trait CanBePaused {
 		* @param id The id of a [[Behaviors]] behavior.
 		* @return `true` if the id was added; `false` if there is no behavior registered under it.
 		*/
-	inline final def onUnpauseId(id: String): Boolean = unpauseRegistry.addId(id)
+	inline final def onUnpause(id: String): Boolean = unpauseRegistry.addId(id)
 	
 	/**
 		* Registers a failure behavior with a function taking the exception; the function is registered
@@ -111,6 +111,10 @@ trait CanBePaused {
 		onUnpause(() => signal.clear())
 		onUnpauseFailed(_ => signal.set())
 	}
+	
+	inline final def removeOnPause(id: String): Unit = pauseRegistry.remove(id)
+	inline final def removeOnUnpause(id: String): Unit = unpauseRegistry.remove(id)
+	inline final def remove(id: String): Unit = { pauseRegistry.remove(id); unpauseRegistry.remove(id) }
 }
 
 trait Pausable extends CanBePaused {

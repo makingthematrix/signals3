@@ -62,7 +62,7 @@ trait CanBeClosed {
    * @param id The id of a [[Behaviors]] behavior.
    * @return `true` if the id was added; `false` if there is no behavior registered under it.
    */
-  inline final def onCloseId(id: String): Boolean = registry.addId(id)
+  inline final def onClose(id: String): Boolean = registry.addId(id)
 
   /**
    * Registers a failure behavior with a function taking the exception; the function is registered
@@ -89,4 +89,6 @@ trait CanBeClosed {
       onCloseFailed(_ => signal.clear())
     }
   }
+
+	inline final def removeOnClose(id: String): Unit = registry.remove(id)
 }

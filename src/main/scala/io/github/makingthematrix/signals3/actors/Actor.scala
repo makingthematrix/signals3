@@ -141,6 +141,7 @@ object Actor {
 	@static private val noResponse: Failure[Nothing] = Failure[Nothing](new IllegalStateException("No response"))
 	@static private val ignored: Success[Option[Nothing]] = Success[Option[Nothing]](None)
 	@static private[actors] val actorIsClosed = IllegalStateException("Actor is closed")
+	@static private[actors] val actorIsInit = IllegalStateException("Actor is already initialized")
 	@static val DoNothing: MutableActor[?, ?] => Unit = _ => ()
 	
 	/**
@@ -161,6 +162,11 @@ object Actor {
 		* A special type of failure indicating that the actor is closed and cannot process any more messages.
 		*/
 	inline def ActorIsClosed[Msg](using ExecutionContext): CloseableFuture[Msg] = CloseableFuture.failed[Msg](actorIsClosed)
+
+	/**
+		* A special type of failure indicating that the actor is already initialized and cannot process certain messages.
+		*/
+	inline def ActorIsInit[Msg](using ExecutionContext): CloseableFuture[Msg] = CloseableFuture.failed[Msg](actorIsInit)
 
 	/**
 		* A special type of failure indicating that the actor could not be closed because one of its
