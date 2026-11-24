@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+# The regression harness for the scripts in this folder.
+#
+# It exists because each script here encodes lessons which are invisible until
+# they break: sbt prefixes output with "[info]" (so ^-anchored greps match
+# nothing), sbt prints "one error found" instead of "1 errors found", grep
+# without -E treats [0-9]+ as a one-character class (matching nothing on E007),
+# temporary files must be cleaned up even when a case fails, and a git-guard
+# refusal must never accidentally run the real dangerous command. Whenever a
+# script in this folder changes, run this to re-check the whole toolbox: the
+# exit codes, the output markers, and the leftover state in the working tree.
+#
+# It costs several sbt invocations (a minute or a few). A subset can be run:
+#   scripts/self-test check-ok probe-neg
+#
+# Its cases create and delete files under src/ - if that tree has uncommitted
+# changes, the harness refuses to start (give --force to override), so that it
+# never entangles its artifacts with real work.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+cd "$REPO_ROOT"
+
+# ---------------------------------------------------------------- case runner
+OUT=""
+RC=0
+CASE_FAIL=""
+
+run() {   # run <cmd...>: captures stdout+stderr into $OUT, exit code into $RC
+  if OUT="$("$@" 2>&1)"; then RC=0; else RC=$?; fi
+}
+run_bash() {  # for pipelines: run "cmd string" through bash -c
+  if OUT="$(bash -c "$1" 2>&1)"; then RC=0; else RC=$?; fi
+}
+rc_is() {
+  [ "$RC" = "$1" ] || CASE_FAIL+="exit code: want $1, got $RC"$'\n'
+}
+out_has() {  # plain fixed-string match - deliberately no regex here
+  printf '%s' "$OUT" | grep -aqF -- "$1" || CASE_FAIL+="missing in output: $1"$'\n'
+}
+file_exists() {
+  [ -e "$1" ] || CASE_FAIL+="file missing: $1"$'\n'
+}
+file_absent() {
+  [ ! -e "$1" ] || CASE_FAIL+="file still present: $1"$'\n'
+}
+
+ACTORS_SRC="src/main/scala/io/github/makingthematrix/signals3/actors"
+MAIN_SRC="src/main/scala/io/github/makingthematrix/signals3"
+BROKEN_FILE="$MAIN_SRC/actors/StdSelfTestBroken.scala"
+
+# ------------------------------------------------------------------- the cases
+
+tc_check_ok() {
+  run scripts/check
+  rc_is 0
+  out_has "compile (main + test): OK"
+  out_has "0 errors"
+  out_has "0 warnings"
+}
+
+tc_check_broken() {
+  cat > "$BROKEN_FILE" <<'EOF'
+package io.github.makingthematrix.signals3.actors
+
+class StdSelfTestBroken {
+	def t(a: io.github.makingthematrix.signals3.actors.ActorImpl[String, Int]): Unit = {
+		a.onBeatNoSuchMethod1(42)
+		a.onBeatNoSuchMethod2(43)
+	}
+}
+EOF
+  run scripts/check --dump /tmp/StdSelfTest.dump
+  rc_is 1
+  out_has "FAILED"
+  out_has "two errors found"
+  out_has "StdSelfTestBroken.scala"
+  [ -s /tmp/StdSelfTest.dump ] || CASE_FAIL+="--dump file empty"$'\n'
+  rm -f "$BROKEN_FILE"
+  file_absent "$BROKEN_FILE"
+}
+
+tc_probe_neg() {
+  local SNIP='class StdSelfTestProbe {
+  def t(a: io.github.makingthematrix.signals3.actors.ActorImpl[String, Int]): Unit =
+    a.onBeatNoSuchMethod(42)
+}'
+  run_bash "printf '%s\n' '$SNIP' | scripts/probe -p io.github.makingthematrix.signals3.actors"
+  rc_is 1
+  out_has "one error found"
+  out_has "onBeatNoSuchMethod"
+  [ -z "$(find src/main/scala -name 'ProbeTmp*')" ] || CASE_FAIL+="probe input file left behind"$'\n'
+}
+
+tc_probe_pos() {
+  printf '%s\n' 'class StdSelfTestOk { }' > /tmp/StdSelfTest.snip
+  run scripts/probe -f /tmp/StdSelfTest.snip -p io.github.makingthematrix.signals3
+  rc_is 0
+  out_has "compiled cleanly"
+  [ -z "$(find src/main/scala -name 'ProbeTmp*')" ] || CASE_FAIL+="probe input file left behind"$'\n'
+}
+
+tc_smoke_roundtrip() {
+  local F="$ACTORS_SRC/StdSelfTestSmoke.scala"
+  run scripts/mk-smoke StdSelfTestSmoke actors
+  rc_is 0
+  file_exists "$F"
+  sed -i 's|\t\t// TODO: the checks of the smoke|\t\tcheck("injected")(true)|' "$F"
+  run scripts/smoke StdSelfTestSmoke
+  rc_is 0
+  out_has "PASS "
+  out_has "SMOKE OK"
+  file_absent "$F"
+}
+
+tc_smoke_fail_keep() {
+  local F="$MAIN_SRC/StdSelfTestFail.scala"
+  run scripts/mk-smoke StdSelfTestFail main
+  rc_is 0
+  sed -i 's|\t\t// TODO: the checks of the smoke|\t\tcheck("injected")(false)|' "$F"
+  run scripts/smoke -k StdSelfTestFail
+  rc_is 1
+  out_has "SMOKE FAILED"
+  file_exists "$F"     # -k means keep - even a failed smoke stays for debugging
+  rm -f "$F"
+  file_absent "$F"
+}
+
+tc_mk_smoke_duplicate() {
+  local F="$MAIN_SRC/StdSelfTestDup.scala"
+  run scripts/mk-smoke StdSelfTestDup main
+  rc_is 0
+  run scripts/mk-smoke StdSelfTestDup main
+  rc_is 1     # refuses to overwrite an existing smoke file
+  rm -f "$F"
+}
+
+tc_git_guard_safe() {
+  run scripts/git-guard status --short
+  rc_is 0     # plain git commands pass straight through
+}
+
+tc_git_guard_refuse() {
+  run scripts/git-guard stash pop
+  rc_is 2
+  out_has "REFUSED"
+  out_has "STASHES"     # the stash state is always shown - populated or empty
+  # NOTE: the --i-know bypass is deliberately NEVER exercised here -
+  # it would run the real dangerous command.
+}
+
+tc_tree_clean() {
+  run bash -c "git status --porcelain -- src"
+  rc_is 0
+  [ -z "$OUT" ] || CASE_FAIL+="src/ is not clean after the cases ran: $OUT"$'\n'
+}
+
+# ------------------------------------------------------------------ dispatch
+ALL_CASES="check-ok check-broken probe-neg probe-pos smoke-roundtrip smoke-fail-keep \
+mk-smoke-duplicate git-guard-safe git-guard-refuse tree-clean"
+
+cleanup() {
+  rm -f "$BROKEN_FILE" "$MAIN_SRC/StdSelfTestSmoke.scala" "$MAIN_SRC/StdSelfTestFail.scala" \
+        "$MAIN_SRC/StdSelfTestDup.scala"
+}
+trap cleanup EXIT
+
+FORCE=0
+if [ "${1:-}" = "--force" ]; then FORCE=1; shift; fi
+
+if [ $# -gt 0 ]; then CASES="$*"; else CASES="$ALL_CASES"; fi
+
+if [ "$FORCE" = "0" ] && [ -n "$(git status --porcelain -- src)" ]; then
+  echo "REFUSED: src/ has uncommitted changes - the self-test creates and deletes files there."
+  echo "Either commit/stash them or run: scripts/self-test --force $*"
+  exit 2
+fi
+
+TOTAL=0
+FAILED=0
+for name in $CASES; do
+  fn="tc_${name//-/_}"
+  declare -f "$fn" > /dev/null || { echo "UNKNOWN CASE: $name"; FAILED=$((FAILED+1)); continue; }
+  TOTAL=$((TOTAL+1))
+  CASE_FAIL=""
+  T0=$SECONDS
+  if "$fn"; then
+    :
+  else
+    CASE_FAIL+="case function exited with $? (a set -e trip somewhere inside)"$'\n'
+  fi
+  DUR=$((SECONDS - T0))
+  if [ -n "$CASE_FAIL" ]; then
+    FAILED=$((FAILED+1))
+    echo "FAIL $name (${DUR}s)"
+    printf '%s' "$CASE_FAIL" | sed 's/^/        /'
+    printf '%s\n' "$OUT" | sed 's/^/        | /' | head -12
+  else
+    echo "ok   $name (${DUR}s)"
+  fi
+done
+echo
+if [ "$FAILED" = "0" ]; then
+  echo "self-test: $TOTAL passed"
+  exit 0
+else
+  echo "self-test: $FAILED of $TOTAL FAILED"
+  exit 1
+fi

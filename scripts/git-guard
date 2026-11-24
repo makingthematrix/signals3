@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# A safety gate around the git commands which can destroy work that is not
+# ours. For the dangerous ones - stash pop/apply/clear/drop, reset --hard,
+# clean -f, restore/checkout with -- (all of them can discard uncommitted
+# changes, and stash operations can act on stashes left by someone else) -
+# it first prints the state which is about to be affected (the stash list
+# and the dirty files) and refuses to run unless you pass --i-know.
+#
+# Usage: scripts/git-guard [--i-know] <git args...>
+set -euo pipefail
+
+I_KNOW=0
+if [ "${1:-}" = "--i-know" ]; then I_KNOW=1; shift; fi
+if [ $# -eq 0 ]; then
+  echo "Usage: scripts/git-guard [--i-know] <git args...>" >&2
+  exit 1
+fi
+
+CMD="$1"
+shift
+
+DANGEROUS=0
+case "$CMD" in
+  stash)
+    case "${1:-}" in
+      pop|apply|clear|drop) DANGEROUS=1 ;;
+      *) ;;   # push, list, show and a bare `stash` are their own question, not this gate's
+    esac ;;
+  clean)     echo "$@" | grep -q -- "-f" && DANGEROUS=1 ;;
+  reset)     echo "$@" | grep -q -- "-hard" && DANGEROUS=1 ;;
+  checkout|restore)
+    echo "$@" | grep -q -- "^--$" && DANGEROUS=1 ;;
+esac
+
+if [ "$DANGEROUS" = "1" ] && [ "$I_KNOW" = "0" ]; then
+  echo "REFUSED: 'git $CMD $*' can discard uncommitted work or act on someone else's stash."
+  echo
+  STASHES="$(git stash list || true)"
+  if [ -n "$STASHES" ]; then
+    echo "STASHES IN THIS REPOSITORY (not necessarily yours to touch):"
+    printf '%s\n' "$STASHES"
+  else
+    echo "stash list: (empty)"
+  fi
+  echo
+  DIRTY="$(git status --short | wc -l | tr -d ' ')"
+  echo "dirty files in the working tree: $DIRTY"
+  echo
+  echo "Check the state above. To run the command anyway: scripts/git-guard --i-know $CMD $*"
+  exit 2
+fi
+
+exec git "$CMD" "$@"

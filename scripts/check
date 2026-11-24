@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Compiles the main and the test source trees and prints a compact summary:
+# pass/fail of each task, the number of errors and warnings (ALWAYS both -
+# an incremental sbt run can re-report nothing, so also see the --clean flag),
+# and the per-file error table.
+#
+# Usage:
+#   scripts/check               - compile main + tests, summarize
+#   scripts/check --clean       - clean first (the truthful warning count)
+#   scripts/check --dump FILE   - also save the full raw output to FILE
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+CLEAN=0
+DUMP=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --clean) CLEAN=1 ;;
+    --dump)  DUMP="$2"; shift ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+  shift
+done
+
+TASK="compile; Test / compile"
+if [ "$CLEAN" = "1" ]; then TASK="clean; $TASK"; fi
+
+OUT="$(sbt_out "$TASK")"
+[ -n "$DUMP" ] && printf '%s\n' "$OUT" > "$DUMP"
+
+if printf '%s\n' "$OUT" | grep -aq "^\[error\]"; then STATUS="FAILED"; else STATUS="OK"; fi
+
+ERRORS=$(printf '%s\n' "$OUT" | grep -aoE "(one|two|[0-9]+) errors? found" | tail -1 || true)
+[ -z "$ERRORS" ] && ERRORS="0 errors"
+WARNINGS=$(printf '%s\n' "$OUT" | grep -aoE "(one|two|[0-9]+) warnings? found" | tail -1 || true)
+[ -z "$WARNINGS" ] && WARNINGS="0 warnings"
+
+echo "compile (main + test): $STATUS   |   $ERRORS, $WARNINGS"
+
+# Error and warning diagnostics are kept apart: warnings in a broken build
+# distract from the errors, and in a green build the errors are gone anyway.
+ERR_TABLE="$(printf '%s\n' "$OUT" | diagnostics_table Error)" || true
+if [ -n "$ERR_TABLE" ]; then
+  echo "errors per file:"
+  printf '%s\n' "$ERR_TABLE"
+fi
+if printf '%s\n' "$OUT" | grep -aq "^\[warn\]"; then
+  WARN_TABLE="$(printf '%s\n' "$OUT" | diagnostics_table Warning)" || true
+  if [ -n "$WARN_TABLE" ]; then
+    echo "warnings per file:"
+    printf '%s\n' "$WARN_TABLE"
+  fi
+fi
+[ "$STATUS" = "OK" ] || exit 1
+exit 0

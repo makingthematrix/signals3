@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# A one-shot compile probe: takes a code snippet (from stdin or a file),
+# drops it into the main compile scope under the chosen package, builds,
+# reports the diagnostics, and cleans up - whatever the result.
+# Use it to verify how a snippet compiles without touching the sources,
+# e.g. proving that an overload combination is a compile error.
+#
+# Usage:
+#   scripts/probe                          - snippet on stdin, root package
+#   scripts/probe -p <package>            - snippet on stdin, chosen package
+#   scripts/probe -f <file> [-p <package>] - snippet from a file
+#
+# The snippet must be a top-level definition block (braces syntax -
+# tabs break Scala 3 colon-syntax). Exit code: sbt's - 0 if it compiled.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+PKG="io.github.makingthematrix.signals3"
+SRC=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -p) PKG="$2"; shift ;;
+    -f) SRC="$2"; shift ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+  shift
+done
+
+PKG_DIR="$(echo "$PKG" | tr '.' '/')"
+DIR="$REPO_ROOT/src/main/scala/$PKG_DIR"
+mkdir -p "$DIR"
+PROBE_NAME="ProbeTmp$$"
+FILE="$DIR/$PROBE_NAME.scala"
+
+{
+  echo "package $PKG"
+  echo
+  if [ -n "$SRC" ] && [ -f "$SRC" ]; then cat "$SRC"; else cat; fi
+} > "$FILE"
+
+cleanup() { rm -f "$FILE"; }
+trap cleanup EXIT
+
+OUT="$(sbt_out "compile")"
+printf '%s\n' "$OUT" | grep -aA4 -E "\-\- \[E[0-9]+\].*$PROBE_NAME" || true
+printf '%s\n' "$OUT" | grep -aoE "(one|two|[0-9]+) (errors?|warnings?) found" | tail -1 || true
+if printf '%s\n' "$OUT" | grep -aq "^\[error\]"; then exit 1; fi
+echo "[probe] compiled cleanly"
+exit 0

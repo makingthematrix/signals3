@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Runs the given test suites with `sbt testOnly` (the workflow required by
+# AGENTS.md) and prints a compact report: the per-suite result lines, the
+# failing tests with their assertion locations (a couple of context lines
+# each), and the final verdict. Exits non-zero if any test failed.
+#
+# Usage: scripts/spec <SuiteName>...     (fully qualified names or .package.* patterns)
+#
+# NOTE: do not pass munit output-mode flags (like `-o fail`) here - they
+# silently make every suite report 0 tests. Plain testOnly only.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+if [ $# -eq 0 ]; then
+  echo "Usage: scripts/spec <SuiteName>..." >&2
+  exit 1
+fi
+
+OUT="$(sbt_out "testOnly $*")"
+
+printf '%s\n' "$OUT" | grep -aE "Test run .*finished:|Test run .*aborted" || true
+echo
+FAILS=$(printf '%s\n' "$OUT" | grep -aA2 "^==> X" || true)
+if [ -n "$FAILS" ]; then
+  echo "failing tests:"
+  printf '%s\n' "$FAILS"
+  echo
+fi
+printf '%s\n' "$OUT" | grep -aE "Passed: Total|Failed: Total|\[error\] Failed tests" || true
+
+if printf '%s\n' "$OUT" | grep -aq "Tests unsuccessful"; then exit 1; fi
+exit 0

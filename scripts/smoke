@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Runs a smoke-test object created with scripts/mk-smoke (or any temporary
+# main object written into the main tree): compiles and runs it via runMain,
+# prints the harness lines (PASS/FAIL/SMOKE) or the compile errors, and then
+# DELETES the smoke file - even if the run failed. The working tree stays
+# exactly as it was, which for temporary verification code is the point.
+#
+# Usage: scripts/smoke [-k] <Name>
+#   -k keeps the smoke file instead of deleting it (for debugging).
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+KEEP=0
+if [ "${1:-}" = "-k" ]; then KEEP=1; shift; fi
+NAME="${1:-}"
+if [ -z "$NAME" ]; then
+  echo "Usage: scripts/smoke [-k] <Name>" >&2
+  exit 1
+fi
+
+FILE="$(find "$REPO_ROOT/src/main/scala" -name "$NAME.scala" | head -1)"
+if [ -z "$FILE" ]; then
+  echo "No $NAME.scala found under src/main/scala" >&2
+  exit 1
+fi
+# Derive the fully qualified object name from the file's location.
+PKG_PATH="$(dirname "$FILE" | sed "s|$REPO_ROOT/src/main/scala/||; s|/|.|g")"
+MAIN_CLASS="$PKG_PATH.$NAME"
+
+cleanup() {
+  if [ "$KEEP" = "0" ] && [ -f "$FILE" ]; then rm "$FILE"; fi
+}
+trap cleanup EXIT
+
+OUT="$(sbt_out "runMain $MAIN_CLASS")"
+printf '%s\n' "$OUT" | grep -aE "PASS |FAIL |SMOKE|\[error\]" || true
+
+if printf '%s\n' "$OUT" | grep -aq "SMOKE OK"; then
+  exit 0
+else
+  exit 1
+fi

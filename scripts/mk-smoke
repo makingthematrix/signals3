@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+# Scaffolds a temporary smoke-test main object - a quick executable check used
+# when the test suite can't run (e.g. mid-refactoring) or when a change is
+# easier to verify through a tiny main than through a spec.
+# The scaffold bakes in the lesson of this project:
+# - braces syntax only (tabs break Scala 3 colon-syntax),
+# - the PASS/FAIL/SMOKE harness with a waitFor deadline loop,
+# - the right imports for the chosen package,
+# - for actors: query actors BEFORE closing them (ask on a closed actor
+#   just fails), and mind the erased SystemMsg type parameters.
+#
+# Usage: scripts/mk-smoke <Name> [main|actors|priv]
+#   main   - package io.github.makingthematrix.signals3        (default)
+#   actors - package io.github.makingthematrix.signals3.actors (actor model smoke)
+#   priv   - package io.github.makingthematrix.signals3.priv   (access to priv classes)
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+NAME="$1"
+FLAVOR="${2:-main}"
+PKG=""
+DIR=""
+case "$FLAVOR" in
+  main)   PKG="io.github.makingthematrix.signals3";         DIR="src/main/scala/io/github/makingthematrix/signals3" ;;
+  actors) PKG="io.github.makingthematrix.signals3.actors";  DIR="src/main/scala/io/github/makingthematrix/signals3/actors" ;;
+  priv)   PKG="io.github.makingthematrix.signals3.priv";    DIR="src/main/scala/io/github/makingthematrix/signals3/priv" ;;
+  *) echo "Unknown flavor: $FLAVOR (use main, actors, or priv)" >&2; exit 1 ;;
+esac
+
+FILE="$REPO_ROOT/$DIR/$NAME.scala"
+if [ -f "$FILE" ]; then
+  echo "$FILE already exists - pick another name" >&2
+  exit 1
+fi
+
+case "$FLAVOR" in
+main) cat > "$FILE" <<EOF
+package $PKG
+
+import io.github.makingthematrix.signals3.Behaviors
+
+import scala.concurrent.ExecutionContext
+
+/** TEMPORARY smoke test - run with scripts/smoke, which deletes this file afterwards. */
+object $NAME {
+	implicit val ec: ExecutionContext = ExecutionContext.global
+
+	var failures = List.empty[String]
+	def check(name: String)(cond: Boolean): Unit =
+		if (cond) println("PASS " + name) else { failures ::= name; println("FAIL " + name) }
+
+	def waitFor(cond: => Boolean, ms: Long = 5000): Boolean = {
+		val start = System.currentTimeMillis()
+		while (!cond) {
+			if (System.currentTimeMillis() - start > ms) return false
+			Thread.sleep(10)
+		}
+		true
+	}
+
+	def main(args: Array[String]): Unit = {
+		// TODO: the checks of the smoke
+
+		if (failures.nonEmpty) println("SMOKE FAILED: " + failures.reverse.mkString(", "))
+		else println("SMOKE OK")
+	}
+}
+EOF
+;;
+actors) cat > "$FILE" <<EOF
+package $PKG
+
+import io.github.makingthematrix.signals3.Behaviors
+import io.github.makingthematrix.signals3.actors.SystemMsg.*
+
+import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.*
+
+/** TEMPORARY smoke test - run with scripts/smoke, which deletes this file afterwards. */
+object $NAME {
+	implicit val ec: ExecutionContext = ExecutionContext.global
+
+	var failures = List.empty[String]
+	def check(name: String)(cond: Boolean): Unit =
+		if (cond) println("PASS " + name) else { failures ::= name; println("FAIL " + name) }
+
+	def waitFor(cond: => Boolean, ms: Long = 5000): Boolean = {
+		val start = System.currentTimeMillis()
+		while (!cond) {
+			if (System.currentTimeMillis() - start > ms) return false
+			Thread.sleep(10)
+		}
+		true
+	}
+
+	def main(args: Array[String]): Unit = {
+		// NOTE: query actors BEFORE closing them - ask on a closed actor fails
+		// with ActorIsClosed. The type parameters of SystemMsg cases (e.g. NewChild)
+		// are erased at runtime - cast the payloads where needed.
+
+		// TODO: the checks of the smoke
+
+		if (failures.nonEmpty) println("SMOKE FAILED: " + failures.reverse.mkString(", "))
+		else println("SMOKE OK")
+	}
+}
+EOF
+;;
+priv) cat > "$FILE" <<EOF
+package $PKG
+
+import io.github.makingthematrix.signals3.Behaviors
+
+import scala.concurrent.ExecutionContext
+
+/** TEMPORARY smoke test in the priv package - run with scripts/smoke, which
+  * deletes this file afterwards. This is the way to test priv classes like
+  * BehaviorRegistry directly.
+  */
+object $NAME {
+	implicit val ec: ExecutionContext = ExecutionContext.global
+
+	var failures = List.empty[String]
+	def check(name: String)(cond: Boolean): Unit =
+		if (cond) println("PASS " + name) else { failures ::= name; println("FAIL " + name) }
+
+	def main(args: Array[String]): Unit = {
+		// TODO: the checks of the smoke
+
+		if (failures.nonEmpty) println("SMOKE FAILED: " + failures.reverse.mkString(", "))
+		else println("SMOKE OK")
+	}
+}
+EOF
+;;
+esac
+
+echo "created: $FILE"
+echo "edit it, then run: scripts/smoke $NAME   (add -k to keep the file)"
