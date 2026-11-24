@@ -3,6 +3,7 @@ package io.github.makingthematrix.signals3
 import io.github.makingthematrix.signals3.actors.MutableActor
 
 import scala.collection.mutable
+import scala.util.Try
 import scala.util.chaining.scalaUtilChainingOps
 
 /**
@@ -72,6 +73,13 @@ object Behaviors {
 	inline def getBeh(id: String): Option[Beh] = behs.get(id).map(f => id -> f)
 	inline def getFail(id: String): Option[Fail] = fails.get(id).map(f => id -> f)
 
+	object Beh {
+		def unapply(id: String): Option[Beh] = getBeh(id)
+	}
+
+	object Fail {
+		def unapply(id: String): Option[Fail] = getFail(id)
+	}
 	/**
 		* The type of a custom behavior: a partial function that takes a message and an actor and returns an optional response.
 		*/
@@ -98,7 +106,7 @@ object Behaviors {
 	/**
 		* A ''total'' behavior: a total function (`TF`) paired with a unique id.
 		*/
-	type TBeh[Msg, State] = (id: String, f: TF[Msg, State])
+	type TBeh[Msg, State] = (id: String, tf: TF[Msg, State])
 
 	// Behaviors of all message and state types share one registry, so the stored functions are untyped
 	// and the type parameters are restored with unchecked casts at retrieval.
@@ -142,7 +150,7 @@ object Behaviors {
 	def registerTBeh[Msg, State](beh: TBeh[Msg, State]): Boolean =
 		if (isRegistered(beh.id)) false
 		else {
-			tbehs += beh.id -> beh.f.asInstanceOf[AnyTF]
+			tbehs += beh.id -> beh.tf.asInstanceOf[AnyTF]
 			true
 		}
 
@@ -171,8 +179,12 @@ object Behaviors {
 		* @return The partial behavior function, or `None` if there is no partial behavior with this id.
 		*/
 	def getPBeh[Msg, State](id: String): Option[PBeh[Msg, State]] =
-		pbehs.get(id).map(pf => id -> pf.asInstanceOf[PF[Msg, State]])
+		pbehs.get(id).flatMap(pf => Try(pf.asInstanceOf[PF[Msg, State]]).toOption.map(id -> _))
 
+	object PBeh {
+		def unapply[Msg, State](id: String): Option[PBeh[Msg, State]] = getPBeh(id)
+	}
+	
 	/**
 		* Returns the total behavior function registered under the given id, if any.
 		*
@@ -184,5 +196,16 @@ object Behaviors {
 		* @return The total behavior function, or `None` if there is no total behavior with this id.
 		*/
 	def getTBeh[Msg, State](id: String): Option[TBeh[Msg, State]] =
-		tbehs.get(id).map(tf => id -> tf.asInstanceOf[TF[Msg, State]])
+		tbehs.get(id).flatMap(tf => Try(tf.asInstanceOf[TF[Msg, State]]).toOption.map(id -> _))
+		
+	object TBeh {
+		def unapply[Msg, State](id: String): Option[TBeh[Msg, State]] = getTBeh(id)
+	}
+	
+	def reset(): Unit = {
+		behs.clear()
+		fails.clear()
+		tbehs.clear()
+		pbehs.clear()
+	}
 }

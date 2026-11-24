@@ -21,19 +21,21 @@ import scala.util.{Failure, Success}
  * RegisterSystem, which is the same code path a real network transport would use.
  */
 class ActorSystemRemoteSpec extends FunSuite {
-  
-  
   private val eventContext = EventContext()
   import Threading.defaultContext
 
   given Timeout: FiniteDuration = 5.seconds
+	
+	override def beforeEach(context: BeforeEach): Unit = {
+		eventContext.start()
+		Behaviors.reset()
+	}
 
-  override def beforeEach(context: BeforeEach): Unit =
-    eventContext.start()
-
-  override def afterEach(context: AfterEach): Unit =
-    eventContext.stop()
-  
+	override def afterEach(context: AfterEach): Unit = {
+		eventContext.stop()
+		Behaviors.reset()
+	}
+	
   // ============================================================================
   // 1. Routing to invalid ids must not recurse
   // ============================================================================
@@ -54,7 +56,8 @@ class ActorSystemRemoteSpec extends FunSuite {
     val received = SourceSignal(0)
     val behavior: PF[String, Int] = { case (msg, _) => received.mutate(_ + 1); Some(s"C: $msg") }
 
-    val child = spawn(sys)(Spawn(actorId = "c", behaviors = List("default" -> behavior)))
+    Behaviors.registerPBeh("default" -> behavior)
+    val child = spawn(sys)(Spawn(actorId = "c", behaviors = List("default")))
     resultCF(sys ? AskForRef("c")) match {
       case Ref(ref) =>
         ref.asInstanceOf[ActorRef[String]] ! "42"
@@ -127,7 +130,8 @@ class ActorSystemRemoteSpec extends FunSuite {
   test("a child spawned on the peer is immediately discoverable via cross-system AskForRef") {
     val (a, b) = crossRegistered()
     val behavior: PF[String, Int] = { case (msg, _) => Some(s"B: $msg") }
-    val child = spawn(b)(Spawn(actorId = "spawned", behaviors = List("default" -> behavior)))
+    Behaviors.registerPBeh("default" -> behavior)
+    val child = spawn(b)(Spawn(actorId = "spawned", behaviors = List("default")))
     resultCF(a ? AskForRef("spawned", "B")) match {
       case Ref(ref) => expectSuccessCF(ref.asInstanceOf[ActorRef[String]] ? "1", "B: 1")
       case other    => fail(s"Unexpected AskForRef response: $other")
@@ -230,9 +234,11 @@ class ActorSystemRemoteSpec extends FunSuite {
     val receivedUpper = SourceSignal(0)
     val upper: PF[String, Int] = { case (msg, _) => receivedUpper.mutate(_ + 1); Some(s"U:$msg") }
     val lower: PF[String, Int] = { case (msg, _) => Some(s"l:$msg") }
+    Behaviors.registerPBeh("upper" -> upper)
+    Behaviors.registerPBeh("lower" -> lower)
     val multi = ActorBuilder[String, Int](0)
       .withId("multiB")
-      .addBehavior("upper", upper).addBehavior("lower", lower)
+      .addBehavior("upper").addBehavior("lower")
       .withSystem(b).build()
 
     awaitRef(b, "multiB")
@@ -322,7 +328,8 @@ class ActorSystemRemoteSpec extends FunSuite {
     val (a, b) = crossRegistered()
     val behavior: PF[String, Int] = { case (msg, _) => Some(s"G:$msg") }
     val child = spawn(b)(Spawn(actorId = "kid"))
-    val grandchild = spawn(child)(Spawn(actorId = "grandkid", behaviors = List("default" -> behavior)))
+    Behaviors.registerPBeh("default" -> behavior)
+    val grandchild = spawn(child)(Spawn(actorId = "grandkid", behaviors = List("default")))
     // no awaitRef here: the lookup must queue behind the pending Register
     resultCF(a ? AskForRef("grandkid", "B")) match {
       case Ref(ref) => expectSuccessCF(ref.asInstanceOf[ActorRef[String]] ? "1", "G:1")

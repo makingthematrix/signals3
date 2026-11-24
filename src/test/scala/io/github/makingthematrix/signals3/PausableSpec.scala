@@ -28,7 +28,7 @@ class PausableSpec extends munit.FunSuite {
   test("Pausable trait - onPause callback is triggered when paused") {
     val pausable = new Pausable {}
     var callbackCalled = false
-    pausable.onPause { callbackCalled = true }
+    pausable.onPause { () =>  callbackCalled = true  }
     
     assert(!callbackCalled)
     pausable.pause()
@@ -38,7 +38,7 @@ class PausableSpec extends munit.FunSuite {
   test("Pausable trait - onPause callback is not triggered by unpause") {
     val pausable = new Pausable {}
     var callbackCalled = false
-    pausable.onPause { callbackCalled = true }
+    pausable.onPause { () =>  callbackCalled = true  }
     
     pausable.pause()
     assert(callbackCalled)
@@ -50,7 +50,7 @@ class PausableSpec extends munit.FunSuite {
   test("Pausable trait - onPause callback is triggered on each separate pause") {
     val pausable = new Pausable {}
     var callbackCount = 0
-    pausable.onPause { callbackCount += 1 }
+    pausable.onPause { () =>  callbackCount += 1  }
     
     pausable.pause()
     assertEquals(callbackCount, 1)
@@ -121,7 +121,7 @@ class PausableSpec extends munit.FunSuite {
     val src = CloseableSourceStream[Int]()
     val pausedSignal = Signal(false)
     
-    src.onPause { pausedSignal ! true }
+    src.onPause { () =>  pausedSignal ! true  }
     
     assert(!pausedSignal.currentValue.contains(true))
     src.pause()
@@ -243,7 +243,7 @@ class PausableSpec extends munit.FunSuite {
     val sig = CloseableSourceSignal(0)
     val pausedSignal = Signal(false)
     
-    sig.onPause { pausedSignal ! true }
+    sig.onPause { () =>  pausedSignal ! true  }
     
     assert(!pausedSignal.currentValue.contains(true))
     sig.pause()
@@ -486,8 +486,8 @@ class PausableSpec extends munit.FunSuite {
     var firstCalled = false
     var secondCalled = false
     
-    src.onPause { firstCalled = true }
-    src.onPause { secondCalled = true }
+    src.onPause { () =>  firstCalled = true  }
+    src.onPause { () =>  secondCalled = true  }
     
     src.pause()
 
@@ -500,8 +500,8 @@ class PausableSpec extends munit.FunSuite {
     var firstCalled = false
     var secondCalled = false
     
-    sig.onPause { firstCalled = true }
-    sig.onPause { secondCalled = true }
+    sig.onPause { () =>  firstCalled = true  }
+    sig.onPause { () =>  secondCalled = true  }
     
     sig.pause()
 
@@ -528,7 +528,7 @@ class PausableSpec extends munit.FunSuite {
   test("Pausable trait - onUnpause callback is triggered when unpaused") {
     val pausable = new Pausable {}
     var callbackCalled = false
-    pausable.onUnpause { callbackCalled = true }
+    pausable.onUnpause { () =>  callbackCalled = true  }
 
     assert(!callbackCalled)
     pausable.pause()
@@ -540,7 +540,7 @@ class PausableSpec extends munit.FunSuite {
   test("Pausable trait - onUnpause callback is not triggered by pause") {
     val pausable = new Pausable {}
     var callbackCalled = false
-    pausable.onUnpause { callbackCalled = true }
+    pausable.onUnpause { () =>  callbackCalled = true  }
 
     pausable.pause()
     assert(!callbackCalled)
@@ -549,7 +549,7 @@ class PausableSpec extends munit.FunSuite {
   test("Pausable trait - onUnpause callback is not triggered when unpause is a no-op") {
     val pausable = new Pausable {}
     var callbackCalled = false
-    pausable.onUnpause { callbackCalled = true }
+    pausable.onUnpause { () =>  callbackCalled = true  }
 
     // unpause() without a preceding pause() should do nothing
     pausable.unpause()
@@ -559,7 +559,7 @@ class PausableSpec extends munit.FunSuite {
   test("Pausable trait - onUnpause callback is triggered on each separate unpause") {
     val pausable = new Pausable {}
     var callbackCount = 0
-    pausable.onUnpause { callbackCount += 1 }
+    pausable.onUnpause { () =>  callbackCount += 1  }
 
     pausable.pause()
     pausable.unpause()
@@ -572,19 +572,19 @@ class PausableSpec extends munit.FunSuite {
     assertEquals(callbackCount, 3)
   }
 
-  test("Pausable trait - multiple onUnpause callbacks run in the original registration order") {
+  test("Pausable trait - all registered onUnpause callbacks run - in no particular order") {
     val pausable = new Pausable {}
     val callOrder = scala.collection.mutable.ListBuffer[String]()
 
-    pausable.onUnpause { callOrder += "first" }
-    pausable.onUnpause { callOrder += "second" }
-    pausable.onUnpause { callOrder += "third" }
+    pausable.onUnpause { () =>  callOrder += "first"  }
+    pausable.onUnpause { () =>  callOrder += "second"  }
+    pausable.onUnpause { () =>  callOrder += "third"  }
 
     pausable.pause()
     pausable.unpause()
 
-    // Callbacks are prepended to the list, so the last registered runs first
-    assertEquals(callOrder.toList, List("first", "second", "third"))
+    // The registry is a set of ids - there is no guaranteed run order
+    assertEquals(callOrder.toSet, Set("first", "second", "third"))
   }
 
   test("Pausable trait - unpause with no onUnpause callback set does not throw") {
@@ -597,7 +597,7 @@ class PausableSpec extends munit.FunSuite {
   test("Pausable trait - tryUnpause throwing calls onUnpauseFailed with the exception") {
     var caught: Option[Throwable] = None
     val pausable = new Pausable { }
-	  pausable.onUnpause {throw new RuntimeException("unpause failed")}
+	  pausable.onUnpause { () => throw new RuntimeException("unpause failed") }
 	  pausable.onUnpauseFailed { t => caught = Some(t) }
 
     pausable.pause()
@@ -609,7 +609,7 @@ class PausableSpec extends munit.FunSuite {
   test("Pausable trait - a failed pause rolls back and stays unpaused") {
     val pausable = new Pausable {}
     var caught: Option[Throwable] = None
-    pausable.onPause { throw new RuntimeException("pause failed") }
+    pausable.onPause { () =>  throw new RuntimeException("pause failed")  }
     pausable.onPauseFailed { t => caught = Some(t) }
 
     pausable.pause()
@@ -624,8 +624,8 @@ class PausableSpec extends munit.FunSuite {
   test("Pausable trait - failed unpause rolls back and stays paused") {
     val pausable = new Pausable { }
     var pauseCount = 0
-    pausable.onPause { pauseCount += 1 }
-    pausable.onUnpause { throw new RuntimeException("unpause failed") }
+    pausable.onPause { () =>  pauseCount += 1  }
+    pausable.onUnpause { () =>  throw new RuntimeException("unpause failed")  }
 
     pausable.pause()
     pausable.unpause()
@@ -645,7 +645,7 @@ class PausableSpec extends munit.FunSuite {
     val src = CloseableSourceStream[Int]()
     val unpausedSignal = Signal(false)
 
-    src.onUnpause { unpausedSignal ! true }
+    src.onUnpause { () =>  unpausedSignal ! true  }
 
     assert(!unpausedSignal.currentValue.contains(true))
     src.pause()
@@ -658,7 +658,7 @@ class PausableSpec extends munit.FunSuite {
     val sig = CloseableSourceSignal(0)
     val unpausedSignal = Signal(false)
 
-    sig.onUnpause { unpausedSignal ! true }
+    sig.onUnpause { () =>  unpausedSignal ! true  }
 
     assert(!unpausedSignal.currentValue.contains(true))
     sig.pause()
@@ -695,7 +695,7 @@ class PausableSpec extends munit.FunSuite {
     assert(Behaviors.registerFail("spec-onunpausefailed-byid" -> ((t: Throwable) => caught = Some(t))))
     val pausable = new Pausable {}
     assert(pausable.onUnpauseFailedId("spec-onunpausefailed-byid"))
-    pausable.onUnpause { throw new RuntimeException("unpause failed") }
+    pausable.onUnpause { () =>  throw new RuntimeException("unpause failed")  }
 
     pausable.pause()
     pausable.unpause()

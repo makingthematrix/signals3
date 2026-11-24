@@ -21,7 +21,10 @@ import scala.concurrent.duration.*
   * beforehand in the [[Behaviors]] library. The sugar methods register their functions in `Behaviors`
   * under generated ids and then work on those ids - the generated ids are readable afterwards through
   * the id fields (`pbehIds`, `onInitIds`, `onBeatIds`, `onPauseIds`, ...), so the user can unregister
-  * them manually when the actor is no longer needed.
+  * them manually when the actor is no longer needed. One exception: the functions registered
+  * through `addOnBeatTF`/`TFs` are only adapted (with the built actor as the argument) and registered
+  * at build time, so their ids are not visible on the builder - register them in `Behaviors`
+  * yourself and use `addOnBeats` if you need them.
   *
   * The sugar naming encodes the type of the registered function. The `F`/`Fs` variants
   * (`addOnInitF`/`Fs`, `addOnPauseF`/`Fs`, `addOnUnpauseF`/`Fs`, `addOnCloseF`/`Fs`) register
@@ -50,7 +53,8 @@ final class ActorBuilder[Msg, State] (val id: String,
                                       val system: Option[ActorSystem[Msg, ?]] = None,
                                       val onPauseIds: Set[String] = Set.empty,
                                       val onUnpauseIds: Set[String] = Set.empty,
-                                      val onCloseIds: Set[String] = Set.empty
+                                      val onCloseIds: Set[String] = Set.empty,
+                                      val beatFuncs: List[TF[Msg, State]] = Nil
                                      ) {
 
   // The single point of copying all the fields - every `with*` method goes through it,
@@ -68,10 +72,11 @@ final class ActorBuilder[Msg, State] (val id: String,
                    system: Option[ActorSystem[Msg, ?]] = system,
                    onPauseIds: Set[String] = onPauseIds,
                    onUnpauseIds: Set[String] = onUnpauseIds,
-                   onCloseIds: Set[String] = onCloseIds
+                   onCloseIds: Set[String] = onCloseIds,
+                   beatFuncs: List[TF[Msg, State]] = beatFuncs
                   ): ActorBuilder[Msg, State] =
     new ActorBuilder(id, state, pbehIds, heartbeat, onInitIds, useSerialDispatch, executionContext,
-      tags, onBeatIds, parent, system, onPauseIds, onUnpauseIds, onCloseIds)
+      tags, onBeatIds, parent, system, onPauseIds, onUnpauseIds, onCloseIds, beatFuncs)
 
   /**
     * Sets the id of the actor.
@@ -124,7 +129,7 @@ final class ActorBuilder[Msg, State] (val id: String,
    * @param pf The partial function which tries to process an incoming message.
    * @return A new builder with the added behavior
    */
-  inline def withBehaviorPF(pf: PF[Msg, State]): ActorBuilder[Msg, State] =
+  inline def addBehaviorPF(pf: PF[Msg, State]): ActorBuilder[Msg, State] =
     copy(pbehIds = pbehIds + Behaviors.registerPF(pf))
 
   /**
@@ -134,7 +139,7 @@ final class ActorBuilder[Msg, State] (val id: String,
    * @param pfs The partial functions to register and add.
    * @return A new builder with the added behaviors
    */
-  inline def withBehaviorPFs(pfs: Iterable[PF[Msg, State]]): ActorBuilder[Msg, State] =
+  inline def addBehaviorPFs(pfs: Iterable[PF[Msg, State]]): ActorBuilder[Msg, State] =
     copy(pbehIds = pbehIds ++ pfs.map(Behaviors.registerPF(_)))
 
   /**
@@ -143,14 +148,14 @@ final class ActorBuilder[Msg, State] (val id: String,
    * @param newBehaviors The ids of the behaviors to add
    * @return A new builder with the added behavior ids
    */
-  inline def withBehaviors(newBehaviors: Iterable[String]): ActorBuilder[Msg, State] =
+  inline def addBehaviors(newBehaviors: Iterable[String]): ActorBuilder[Msg, State] =
     copy(pbehIds = pbehIds ++ newBehaviors)
 
-  inline def withBehaviorsIf(p: => Boolean, newBehaviors: => Iterable[String]): ActorBuilder[Msg, State] =
-    if (p) withBehaviors(newBehaviors) else this
+  inline def addBehaviorsIf(p: => Boolean, newBehaviors: => Iterable[String]): ActorBuilder[Msg, State] =
+    if (p) addBehaviors(newBehaviors) else this
 
-  inline def withBehaviorsIf(p: => Boolean, newBehaviors: => Iterable[String], orElse: => Iterable[String]): ActorBuilder[Msg, State] =
-    withBehaviors(if (p) newBehaviors else orElse)
+  inline def addBehaviorsIf(p: => Boolean, newBehaviors: => Iterable[String], orElse: => Iterable[String]): ActorBuilder[Msg, State] =
+    addBehaviors(if (p) newBehaviors else orElse)
 
   /**
    * Sets the heartbeat strategy.
@@ -438,8 +443,11 @@ final class ActorBuilder[Msg, State] (val id: String,
     copy(onBeatIds = onBeatIds ++ newBeatIds)
 
   /**
-   * Registers a beat behavior: the total function is registered in [[Behaviors]] under a generated
-   * id and that id is added to the builder. The generated id is readable afterwards through `onBeatIds`.
+   * Registers a beat behavior: the actor-taking function is kept and adapted (with the built actor
+   * as the argument) at build time, when the actor exists - only then it is registered in
+   * [[Behaviors]] under a generated id and added to the actor's beat registry. The id is therefore
+   * generated too late to be readable on the builder; register the function yourself in `Behaviors`
+   * and use [[addOnBeats]] if you need it.
    *
    * @param tf The function to run at every heartbeat - it takes the actor.
    * @return A new builder with the beat behavior
@@ -447,15 +455,18 @@ final class ActorBuilder[Msg, State] (val id: String,
   inline def addOnBeatTF(tf: TF[Msg, State]): ActorBuilder[Msg, State] = addOnBeatTFs(List(tf))
 
   /**
-   * Registers a collection of beat behaviors: each total function is registered in [[Behaviors]]
-   * under a generated id and the ids are added to the beat ids, with no guaranteed relative order
-   * among them. The ids are readable through `onBeatIds`.
+   * Registers a collection of beat behaviors: the actor-taking functions are kept (preserving the
+   * order of the collection) and adapted (with the built actor as the argument) at build time,
+   * when the actor exists - only then they are registered in [[Behaviors]] under generated ids and
+   * added to the actor's beat registry, with no guaranteed relative order among them. The ids are
+   * therefore generated too late to be readable on the builder; register the functions yourself
+   * in `Behaviors` and use [[addOnBeats]] if you need them.
    *
    * @param tfs The functions to run at every heartbeat - each takes the actor.
    * @return A new builder with the beat behaviors
    */
   inline def addOnBeatTFs(tfs: Iterable[TF[Msg, State]]): ActorBuilder[Msg, State] =
-	  copy(onBeatIds = onBeatIds ++ tfs.map(Behaviors.registerTF(_, "onBeat")))
+	  copy(beatFuncs = beatFuncs ++ tfs)
 
 	inline def addOnBeatsIf(p: => Boolean, newBeatIds: Iterable[String]): ActorBuilder[Msg, State] =
     if (p) addOnBeats(newBeatIds) else this
@@ -468,7 +479,7 @@ final class ActorBuilder[Msg, State] (val id: String,
   inline def addOnBeatIf(p: => Boolean, beatId: String, orElse: => String): ActorBuilder[Msg, State] =
     addOnBeatsIf(p, List(beatId), List(orElse))
 
-  inline def withNoBeat(): ActorBuilder[Msg, State] = copy(onBeatIds = Set.empty)
+  inline def withNoBeat(): ActorBuilder[Msg, State] = copy(onBeatIds = Set.empty, beatFuncs = Nil)
 
   inline def withNoBeatIf(p: => Boolean): ActorBuilder[Msg, State] = if (p) withNoBeat() else this
 
@@ -529,6 +540,8 @@ final class ActorBuilder[Msg, State] (val id: String,
 		  println(s"Invalid onBeat ids found when building Actor ${id}: $invalidBeats")
 	  }
 	  validBeats.foreach(actor.onBeatId)
+	  // the beat TFs are adapted with the built actor now - the functions close over it
+	  beatFuncs.foreach(actor.onBeat)
 
     val (validPauses, invalidPauses) = onPauseIds.partition(Behaviors.isRegistered)
 	  if (invalidPauses.nonEmpty) {

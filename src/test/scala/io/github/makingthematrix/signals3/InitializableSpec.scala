@@ -17,7 +17,7 @@ class InitializableSpec extends FunSuite {
   test("initialize runs the onInit behaviors exactly once") {
     val initializable = new Initializable { }
     var count = 0
-    initializable.onInit { count += 1 }
+    initializable.onInit { () => count += 1 }
 
     assert(!initializable.isInitialized)
     initializable.initialize()
@@ -33,7 +33,7 @@ class InitializableSpec extends FunSuite {
     val initializable = new Initializable { }
     var attempts = 0
     var failed: Option[Throwable] = None
-    initializable.onInit { attempts += 1; if (attempts == 1) throw new RuntimeException("init failed") }
+    initializable.onInit { () => attempts += 1; if (attempts == 1) throw new RuntimeException("init failed") }
     initializable.onInitFailed { t => failed = Some(t) }
 
     initializable.initialize()
@@ -47,17 +47,17 @@ class InitializableSpec extends FunSuite {
     assertEquals(attempts, 2)
   }
 
-  test("onInit behaviors run in the origianl registration order") {
+  test("all registered onInit behaviors run - in no particular order") {
     val initializable = new Initializable { }
     val order = scala.collection.mutable.ListBuffer[String]()
-    initializable.onInit { order += "first" }
-    initializable.onInit { order += "second" }
-    initializable.onInit { order += "third" }
+    initializable.onInit { () => order += "first" }
+    initializable.onInit { () => order += "second" }
+    initializable.onInit { () => order += "third" }
 
     initializable.initialize()
 
-    // Callbacks are prepended to the list, so the last registered runs first
-    assertEquals(order.toList, List("first", "second", "third"))
+    // The registry is a set of ids - there is no guaranteed run order
+    assertEquals(order.toSet, Set("first", "second", "third"))
   }
 
   test("isInitializedSignal flips to true when the object is initialized") {

@@ -157,7 +157,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
     val buffer = mutable.ArrayBuffer[(Int, Long)]()
     val isSuccess = Signal.done()
     val generator: FiniteGeneratorStream[Int] = GeneratorStream.from(numbers, (HeartBeatMs.toMillis / 4).millis)
-    generator.onClose(isSuccess.done())
+    generator.onClose(() => isSuccess.done())
     generator.map(n => (n, System.currentTimeMillis() - t)).foreach((n,l) => buffer.addOne((n, l)))
 
     waitFor(isSuccess, true)(using duration = 1.seconds)
@@ -206,7 +206,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
       if (n <= 5) Some(n) else None
     }, (HeartBeatMs.toMillis / 4).millis)
 
-    gen.onClose(finished ! true)
+    gen.onClose(() => finished ! true)
     gen.foreach(buffer.addOne)
 
     waitFor(finished, true)(using duration = 1.seconds)
@@ -223,7 +223,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
       if (n <= 3) Some(n) else None
     }, (HeartBeatMs.toMillis / 4).millis)
 
-    gen.onClose(finished ! true)
+    gen.onClose(() => finished ! true)
     gen.foreach(buffer.addOne)
 
     waitFor(finished, true)(using duration = 1.seconds)
@@ -260,7 +260,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
     waitFor(done, true)(using duration = 1.seconds)
     // wait for the underlying finite generator to complete as well
     val allDone = Signal(false)
-    gen.onClose(allDone ! true)
+    gen.onClose(() => allDone ! true)
     waitFor(allDone, true)(using duration = 1.seconds)
 
     assertEquals(bufInit.toSeq, numbers.init)
@@ -457,7 +457,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
       n += 1
       if (n <= 5) Some(n) else None
     }, HeartBeatMs)
-    gen.onClose(finished ! true)
+    gen.onClose(() => finished ! true)
     gen.foreach { e =>
       buffer.addOne((e, System.currentTimeMillis))
       if (e <= 2) twoBeats.countDown()
@@ -520,7 +520,7 @@ class GeneratorStreamSpec extends munit.FunSuite {
   test("CloseableGeneratorStream.onClose is invoked on close") {
     val closed = DoneSignal()
     val stream = GeneratorStream(() => 1, HeartBeatMs)
-    stream.onClose {
+    stream.onClose { () =>
 	    closed.done()
     }
     // consume a few events then close

@@ -172,7 +172,7 @@ final class ActorSystem[Msg, State] private (
 		if (children.contains(data.actorId)) respond(p, invalidId(data.actorId)) else {
 			val b1 = ActorBuilder[Msg, State](data.state.getOrElse(this.state))
 				.withIdIf(data.actorId.nonEmpty, data.actorId)
-				.withBehaviorsIf(data.behaviors.nonEmpty, data.behaviors, this.behaviors)
+				.addBehaviorsIf(data.behaviors.nonEmpty, data.behaviors, this.behaviors)
 				.withHeartbeat(data.heartbeat.getOrElse(this.heartbeat))
 				.withTags(tags + ActorTag.Child)
 				.withParent(this)
@@ -245,10 +245,9 @@ final class ActorSystem[Msg, State] private (
 		}
 	} else ActorIsClosed[Msg]
 	
-	onInit {
+	onInit { () =>
 		systems += (id -> (toRemote, tags))
 		actorRefs += (id -> (LocalActorRef(this), tags)) // register yourself as a valid actor
-		()
 	}
 
 	override protected def shutdown(): Future[SystemMsg] = {

@@ -11,13 +11,13 @@ final private[signals3] class ChainedFiniteStream[E, W <: E](first: FiniteStream
     second.subscribe(this)
     first.unsubscribe(this)
     lastPromise.foreach(_.completeWith(second.last))
-    second.onClose {close()}
+    second.onClose { () => close() }
   }
 
   override protected[signals3] def onWire(): Unit =
     if (!first.isClosed) {
       first.subscribe(this)
-      first.onClose {switchToSecond()}
+      first.onClose { () => switchToSecond() } 
     }
     else if (!second.isClosed) {
       switchToSecond()

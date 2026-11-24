@@ -209,7 +209,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
       if (n <= 5) Some(n) else None
     }, 40.millis)
 
-    sig.onClose(finished ! true)
+    sig.onClose(() => finished ! true)
     sig.foreach(buf.addOne)
 
     waitFor(finished, true)(using duration = 1.seconds)
@@ -226,7 +226,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
       if (n <= 3) Some(n) else None
     }, 40.millis)
 
-    sig.onClose(finished ! true)
+    sig.onClose(() => finished ! true)
     sig.foreach(buf.addOne)
 
     waitFor(finished, true)(using duration = 1.seconds)
@@ -263,7 +263,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
     waitFor(finishedInit, true)(using duration = 1.seconds)
     // Also ensure the underlying generator completes
     val allDone = Signal(false)
-    sig.onClose(allDone ! true)
+    sig.onClose(() => allDone ! true)
     waitFor(allDone, true)(using duration = 1.seconds)
 
     assertEquals(bufInit.toSeq, values.init)
@@ -273,7 +273,7 @@ class GeneratorSignalSpec extends munit.FunSuite {
   test("CloseableGeneratorSignal.onClose is invoked on close") {
     var closed = false
     val sig = GeneratorSignal(0, (n: Int) => n + 1, 40.millis)
-    sig.onClose { closed = true }
+    sig.onClose { () => closed = true }
     val done = FlagSignal()
     var cnt = 0
     sig.foreach { _ =>

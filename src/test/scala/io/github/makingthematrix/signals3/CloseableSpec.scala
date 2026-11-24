@@ -69,7 +69,7 @@ class CloseableSpec extends munit.FunSuite {
     val f = p.future
     f.foreach { res ! _ }
 
-    val cf = CloseableFuture.from(p).tap { _.onClose { res ! -1 } }
+    val cf = CloseableFuture.from(p).tap { _.onClose { () => res ! -1 } }
     awaitAllTasks
 
     p.success(1)
@@ -88,7 +88,7 @@ class CloseableSpec extends munit.FunSuite {
     val f = p.future
     f.foreach { res ! _ }
 
-    val cf = CloseableFuture.from(p).tap { _.onClose { res ! -1 } }
+    val cf = CloseableFuture.from(p).tap { _.onClose { () => res ! -1 } }
 
     assert(cf.closeAndCheck())
     await(cf)
@@ -103,7 +103,7 @@ class CloseableSpec extends munit.FunSuite {
     val f = p.future
     f.foreach { res ! _ }
 
-    val cf = CloseableFuture.from(p).tap { _.onClose { res ! -1 } }
+    val cf = CloseableFuture.from(p).tap { _.onClose { () => res ! -1 } }
 
     assert(cf.closeAndCheck())
     await(cf)
@@ -227,7 +227,7 @@ class CloseableSpec extends munit.FunSuite {
     val cf3 = CloseableFuture.delayed(500.millis) { timestamps :+= (System.currentTimeMillis - offset) }
     val cf4 = CloseableFuture.delayed(600.millis) { timestamps :+= (System.currentTimeMillis - offset) }
 
-    val cfSeq = CloseableFuture.sequence(Seq(cf1, cf2, cf3, cf4)).tap { _.onClose { onClose ! true } }
+    val cfSeq = CloseableFuture.sequence(Seq(cf1, cf2, cf3, cf4)).tap { _.onClose { () => onClose ! true } }
     Thread.sleep(50)
     cfSeq.close()
     waitForResult(onClose, true)
@@ -348,7 +348,7 @@ class CloseableSpec extends munit.FunSuite {
   test("Closing a future triggers its onClose task") {
     val s = Signal(0)
 
-    val cf = CloseableFuture { Thread.sleep(200); s ! 1 }.tap { _.onClose { s ! 2 } }
+    val cf = CloseableFuture { Thread.sleep(200); s ! 1 }.tap { _.onClose { () => s ! 2 } }
     assert(cf.isCloseable)
 
     CloseableFuture.delayed(50.millis) { assert(cf.closeAndCheck()) }
@@ -361,7 +361,7 @@ class CloseableSpec extends munit.FunSuite {
   test("A failed but not closed future does not trigger onClose") {
     var res = 0
 
-    val cf: CloseableFuture[Unit] = CloseableFuture { Thread.sleep(500); res = 1 }.tap { _.onClose { res = 2 } }
+    val cf: CloseableFuture[Unit] = CloseableFuture { Thread.sleep(500); res = 1 }.tap { _.onClose { () => res = 2 } }
 
     assertEquals(res, 0)
     case object FailureException extends Throwable
@@ -378,7 +378,7 @@ class CloseableSpec extends munit.FunSuite {
     val cf: CloseableFuture[Unit] = CloseableFuture { res = 1 }
     await(cf)
     assertEquals(res, 1)
-    cf.onClose { res = 2 }
+    cf.onClose { () => res = 2 }
     cf.close()
     await(cf)
 
@@ -392,7 +392,7 @@ class CloseableSpec extends munit.FunSuite {
     val cf: CloseableFuture[Unit] = CloseableFuture { Thread.sleep(500); res = 1 }
     cf.close()
     await(cf)
-    cf.onClose { res = 2 }
+    cf.onClose { () => res = 2 }
     await(cf)
 
     assertEquals(res, 0)
@@ -416,7 +416,7 @@ class CloseableSpec extends munit.FunSuite {
   test("Closing a mapped future also closes the original one") {
     val s = Signal("")
 
-    val cf1 = CloseableFuture { Thread.sleep(500); s ! "foo"; "foo" }.tap { _.onClose { s ! "bar" } }
+    val cf1 = CloseableFuture { Thread.sleep(500); s ! "foo"; "foo" }.tap { _.onClose { () => s ! "bar" } }
     val cf2 = cf1.map(_.toUpperCase)
 
     assert(cf2.closeAndCheck())
@@ -437,7 +437,7 @@ class CloseableSpec extends munit.FunSuite {
   test("Closing a flat-mapped future also closes the original one") {
     val s = Signal("")
 
-    val cf1 = CloseableFuture { Thread.sleep(500); s ! "foo"; "foo" }.tap { _.onClose { s ! "bar" } }
+    val cf1 = CloseableFuture { Thread.sleep(500); s ! "foo"; "foo" }.tap { _.onClose { () => s ! "bar" } }
     val cf2 = cf1.flatMap {
       case ""    => CloseableFuture.successful("boo")
       case other => CloseableFuture { Thread.sleep(500); other.toUpperCase }
@@ -484,7 +484,7 @@ class CloseableSpec extends munit.FunSuite {
     val closed = Signal(false)
 
     val p = Promise[Int]()
-    val cf = p.toCloseable.tap(_.onClose { closed ! true })
+    val cf = p.toCloseable.tap(_.onClose { () => closed ! true })
 
     assert(cf.isCloseable)
     assert(cf.closeAndCheck())
@@ -503,7 +503,7 @@ class CloseableSpec extends munit.FunSuite {
     val cs: CloseableStream[Int] = src.closeable
     val counter = Signal(0)
 
-    cs.onClose { counter.mutate(_ + 1) }
+    cs.onClose { () => counter.mutate(_ + 1) }
 
     // Not closed initially
     assert(!cs.isClosed)
@@ -565,7 +565,7 @@ class CloseableSpec extends munit.FunSuite {
     val cs: CloseableSignal[Int] = src.closeable
     val counter = Signal(0)
 
-    cs.onClose { counter.mutate(_ + 1) }
+    cs.onClose { () => counter.mutate(_ + 1) }
     assert(!cs.isClosed)
 
     cs.close()
@@ -637,7 +637,7 @@ class CloseableSpec extends munit.FunSuite {
 
     val closeable = new Closeable { }
     assert(closeable.onCloseFailedId("spec-onclosefailed-byid"))
-    closeable.onClose { throw new RuntimeException("close failed") }
+    closeable.onClose { () => throw new RuntimeException("close failed") }
 
     // the close fails and the attached failure behavior receives the exception
     assert(!closeable.closeAndCheck())
@@ -649,35 +649,37 @@ class CloseableSpec extends munit.FunSuite {
     assert(!closeable.closeAndCheck())
   }
 
-  test("onClose behaviors run in the original registration order") {
+  test("all registered onClose behaviors run - in no particular order") {
     val closeable = new Closeable { }
     val order = scala.collection.mutable.ListBuffer[String]()
-    closeable.onClose { order += "first" }
-    closeable.onClose { order += "second" }
-    closeable.onClose { order += "third" }
+    closeable.onClose { () => order += "first" }
+    closeable.onClose { () => order += "second" }
+    closeable.onClose { () => order += "third" }
 
     assert(closeable.closeAndCheck())
 
-    // Callbacks are prepended to the list, so the last registered runs first
-    assertEquals(order.toList, List("first", "second", "third"))
+    // The registry is a set of ids - there is no guaranteed run order
+    assertEquals(order.toSet, Set("first", "second", "third"))
   }
 
   test("a throwing onClose behavior prevents the remaining ones from running") {
-    // the close behaviors run in a single try-catch: the first one that throws (the last registered,
-    // as they run in reverse order) aborts the remaining ones and fails the whole close
+    // the close behaviors run in a single try-catch with no guaranteed order: whenever the throwing
+    // one happens to run, it aborts whatever did not run yet and fails the whole close
     val order = scala.collection.mutable.ListBuffer[String]()
     var failed: Option[Throwable] = None
     val closeable = new Closeable { }
-    closeable.onClose { order += "first" }
-    closeable.onClose { order += "throwing"; throw new RuntimeException("close failed") }
-    closeable.onClose { order += "second" }
+    closeable.onClose { () => order += "first" }
+    closeable.onClose { () => order += "throwing"; throw new RuntimeException("close failed") }
+    closeable.onClose { () => order += "second" }
     closeable.onCloseFailed { t =>
 	    failed = Some(t)
     }
 
 	  closeable.close()
 
-    assertEquals(order.toList, List("first", "throwing"), "the older close behaviors should not run after the throwing one")
+    // The behaviors run in no particular order, so any subset of the non-throwing ones may have run
+    // before the throwing one aborted the rest - but the throwing one itself always ran.
+    assert(order.contains("throwing"), s"the throwing behavior must run (ran: ${order.toList})")
     println(failed)
 	  assert(failed.exists(_.getMessage.contains("close failed")))
     assert(!closeable.isClosed)

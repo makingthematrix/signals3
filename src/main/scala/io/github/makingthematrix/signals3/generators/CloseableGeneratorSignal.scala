@@ -38,9 +38,9 @@ class CloseableGeneratorSignal[V] protected[signals3] (init: V,
     if (!isPaused && !isClosed) currentValue.foreach(v => publish(update(v), ec))
   }
 
-	onClose { beat.close() }
-	onPause { beat.pause() }
-	onUnpause { beat.unpause() }
+	onClose { () => beat.close() }
+	onPause { () => beat.pause() }
+	onUnpause { () => beat.unpause() }
 
   override def force(): Unit = if (!isClosed && !isPaused) super.force()
 

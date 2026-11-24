@@ -37,7 +37,7 @@ abstract class GeneratorStream[E] protected[signals3] (interval: FiniteDuration 
 	
   protected def onBeat(): Unit = if (!isInitialized) initialize()
 	
-	onInit { beat }
+	onInit { () => beat }
 	onInitFailed { t => println(s"GenetorStream initialization failed: ${t.getMessage}") }
 
   /**

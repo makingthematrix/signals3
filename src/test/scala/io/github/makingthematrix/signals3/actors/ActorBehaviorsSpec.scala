@@ -1,6 +1,6 @@
 package io.github.makingthematrix.signals3.actors
 
-import io.github.makingthematrix.signals3.Threading
+import io.github.makingthematrix.signals3.{Behaviors, Threading}
 import io.github.makingthematrix.signals3.actors.{ActorBuilder, MutableActor}
 import io.github.makingthematrix.signals3.Behaviors.*
 import munit.FunSuite
@@ -15,7 +15,15 @@ import munit.FunSuite
 	*/
 class ActorBehaviorsSpec extends FunSuite {
 	import Threading.defaultContext
+	
+	override def beforeEach(context: BeforeEach): Unit = {
+		Behaviors.reset()
+	}
 
+	override def afterEach(context: AfterEach): Unit = {
+		Behaviors.reset()
+	}
+	
 	private def newActor(id: String): MutableActor[String, Int] = ActorBuilder(id, 0).build().asInstanceOf[MutableActor[String,Int]]
 
 	test("register and retrieve a partial behavior") {
@@ -46,7 +54,7 @@ class ActorBehaviorsSpec extends FunSuite {
 		assert(registerTBeh(tbeh))
 		assertEquals(getTBeh[String, Int]("spec-tbeh"), Some(tbeh))
 		// the retrieved function runs and can mutate the actor
-		getTBeh[String, Int]("spec-tbeh").foreach(_.f(actor))
+		getTBeh[String, Int]("spec-tbeh").foreach(_.tf(actor))
 		assertEquals(actor.state, 1)
 	}
 
@@ -56,7 +64,7 @@ class ActorBehaviorsSpec extends FunSuite {
 
 		assert(registerTBeh("spec-tbeh-dup" -> tf1))
 		assert(!registerTBeh("spec-tbeh-dup" -> tf2))
-		assertEquals(getTBeh[Int, Unit]("spec-tbeh-dup").map(_.f), Some(tf1))
+		assertEquals(getTBeh[Int, Unit]("spec-tbeh-dup").map(_.tf), Some(tf1))
 	}
 
 	test("a partial and a total behavior can't share the same id") {
@@ -147,27 +155,27 @@ class ActorBehaviorsSpec extends FunSuite {
 		assert(registerBeh(beh))
 		assert(registerFail(fail))
 
-		assert(unregisterBeh("spec-unreg-beh"))
-		assert(unregisterFail("spec-unreg-fail"))
+		assert(unregister("spec-unreg-beh"))
+		assert(unregister("spec-unreg-fail"))
 
 		assert(getBeh("spec-unreg-beh").isEmpty)
 		assert(getFail("spec-unreg-fail").isEmpty)
 
 		// both registries report that there was nothing to remove
-		assert(!unregisterBeh("spec-unreg-beh"))
-		assert(!unregisterFail("spec-unreg-fail"))
-		assert(!unregisterBeh("spec-never-registered"))
-		assert(!unregisterFail("spec-never-registered"))
+		assert(!unregister("spec-unreg-beh"))
+		assert(!unregister("spec-unreg-fail"))
+		assert(!unregister("spec-never-registered"))
+		assert(!unregister("spec-never-registered"))
 	}
 
-	test("a Beh and a Fail can share the same id") {
+	test("a Beh and a Fail cannot share the same id (globally unique ids)") {
 		val beh: Beh = "spec-shared-kind" -> (() => ())
 		val fail: Fail = "spec-shared-kind" -> (_ => ())
 
 		assert(registerBeh(beh))
-		assert(registerFail(fail))
-		// each registry returns its own kind of behavior
+		assert(!registerFail(fail))
+		// the first registration wins; the Fail is not registered anywhere
 		assertEquals(getBeh("spec-shared-kind"), Some(beh))
-		assertEquals(getFail("spec-shared-kind"), Some(fail))
+		assert(getFail("spec-shared-kind").isEmpty)
 	}
 }

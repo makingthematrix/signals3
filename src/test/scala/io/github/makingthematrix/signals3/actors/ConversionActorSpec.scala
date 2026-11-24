@@ -62,15 +62,24 @@ class ConversionActorSpec extends FunSuite {
 
   given Timeout: FiniteDuration = 5.seconds
 
-  override def beforeEach(context: BeforeEach): Unit =
-    eventContext.start()
+	override def beforeEach(context: BeforeEach): Unit = {
+		eventContext.start()
+		Behaviors.reset()
+	}
 
-  override def afterEach(context: AfterEach): Unit =
-    eventContext.stop()
-  
-  private def newActor[Msg](sys: ActorSystem[Msg, Int], id: String, behaviors: (String, PF[Msg, Int])*): Actor[Msg, Int] & Closeable =
-    behaviors.foldRight(ActorBuilder[Msg, Int](0).withId(id))((beh, b) => b.addBehavior(beh._1, beh._2))
-      .withSystem(sys).build()
+	override def afterEach(context: AfterEach): Unit = {
+		eventContext.stop()
+		Behaviors.reset()
+	}
+
+  private def newActor[Msg](sys: ActorSystem[Msg, Int], id: String, behaviors: (String, PF[Msg, Int])*): Actor[Msg, Int] & Closeable = {
+    behaviors.foreach(beh => assert(Behaviors.registerPBeh(beh)))
+	  ActorBuilder[Msg, Int](0).withId(id).withSystem(sys).addBehaviors(behaviors.map(_._1)).build()
+  }
+
+	private def newActorWithBehaviors[Msg](sys: ActorSystem[Msg, Int], id: String, behaviorIds: String*): Actor[Msg, Int] & Closeable = {
+		ActorBuilder[Msg, Int](0).withId(id).withSystem(sys).addBehaviors(behaviorIds).build()
+	}
 
   /** Two actor systems with different message types: B is registered on A through a conversion bridge. */
   private def convertedBridge(): (ActorSystem[MsgA, Int], ActorSystem[MsgB, Int]) = {
@@ -79,8 +88,6 @@ class ConversionActorSpec extends FunSuite {
     awaitCF(a ? RegisterSystem(ConversionRemoteSystem[MsgA, MsgB](b.toRemote)))
     (a, b)
   }
-
-
 
   // ============================================================================================
   // A. Conversions through every entry point of a single actor
@@ -242,8 +249,8 @@ class ConversionActorSpec extends FunSuite {
     close(direct)
 
     val sys = newSystem[Proto]("tagLocal")
-    val echoInt: PF[Proto, Int] = { case (Text(s), _) => Some(Text(s)) }
-    val target = newActor(sys, "t", "default" -> echoInt)
+    val pbehId = Behaviors.registerPF { case (Text(s), _) => Some(Text(s)) }
+    val target = newActorWithBehaviors(sys, "t", pbehId)
     val ref = awaitRef(sys, "t")
     expectSuccessCF(ref ? Tag("local"), Text("local#"))
     close(target, sys)
@@ -251,7 +258,7 @@ class ConversionActorSpec extends FunSuite {
     val a = newSystem[Proto]("tagRemoteA")
     val b = newSystem[Proto]("tagRemoteB")
     awaitCF(a ? RegisterSystem(b.toRemote))
-    val onB = newActor(b, "onB", "default" -> echoInt)
+    val onB = newActorWithBehaviors(b, "onB", pbehId)
     awaitRef(b, "onB")
     resultCF(a ? AskForRef("onB", "tagRemoteB")) match {
       case Ref(ref0) =>
@@ -291,9 +298,9 @@ class ConversionActorSpec extends FunSuite {
   test("a behavior can send a converted message to another actor through a Local path") {
     val sys = newSystem[Proto]("sysC1")
     val got = Signal(Seq.empty[Proto])
-    val target = newActor(sys, "target", "default" -> { case (p, _) => got.mutate(_ :+ p); None })
+    val target = newActor(sys, "target", "default1" -> { case (p, _) => got.mutate(_ :+ p); None })
     awaitRef(sys, "target")
-    val sender = newActor(sys, "sender", "default" -> { case (_, a) => a.tell(42, ActorPath.Local("target"), ""); None })
+    val sender = newActor(sys, "sender", "default2" -> { case (_, a) => a.tell(42, ActorPath.Local("target"), ""); None })
     sender ! Num(0)
     waitFor(got, Seq(Num(42)))
     close(sender, target, sys)
@@ -301,10 +308,10 @@ class ConversionActorSpec extends FunSuite {
 
   test("a behavior can ask another actor through a Local path with a converted message") {
     val sys = newSystem[Proto]("sysC2")
-    val target = newActor(sys, "target", "default" -> { case (p, _) => Some(Text(s"ack:$p")) })
+    val target = newActor(sys, "target", "default1" -> { case (p, _) => Some(Text(s"ack:$p")) })
     awaitRef(sys, "target")
     val rsp = Signal[Proto](Text(""))
-    val sender = newActor(sys, "sender", "default" -> { case (_, a) =>
+    val sender = newActor(sys, "sender", "default2" -> { case (_, a) =>
       a.ask("ping", ActorPath.Local("target"), "").pipeTo(rsp); None
     })
     sender ! Num(0)

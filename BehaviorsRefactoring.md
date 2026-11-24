@@ -225,14 +225,14 @@ New setters for the missing events (mirroring the onInit family, incl. `If`/`add
 `actor.onPauseId`/`onUnpauseId`/`onCloseId`. Bulk attaches process the builder lists in REVERSE
 (each attach prepends), so the builder's newest-first list order is preserved at runtime - the
 most recently added behavior runs first, per the ordering convention. D5 sugar restored as
-register-then-id wrappers: `withBehaviorPF`, `withBehaviorPFs` (in-group order preserved),
+register-then-id wrappers: `addBehaviorPF`, `addBehaviorPFs` (in-group order preserved),
 `withOnBeat(f: TF)`, `withOnInit(f: TF)` (registered at build time - the function closes over the
 built actor; the generated id is therefore not visible on the builder - documented in the scaladoc),
 `addOnBeat`. Id fields (`pbehIds`, `onInitIds`, `onBeatIds`, `onPauseIds`, `onUnpauseIds`,
 `onCloseIds`, `initFuncs`) are public vals, so generated ids are recoverable (D3 rule 1).
 `sbt compile` now passes with ZERO warnings. Test-tree errors dropped from 63 to 41 (the sugar
 resolved most of them; the rest is P8). Verified by a 9-check smoke (deleted after): sugar
-registration + id readability, in-group order of `withBehaviorPFs`, the init sugar closing over
+registration + id readability, in-group order of `addBehaviorPFs`, the init sugar closing over
 the built actor, the beat sugar firing, builder-wired pause/unpause/close behaviors firing, and a
 regression chain proving the late fields survive a long `with*` chain.
 
@@ -268,7 +268,7 @@ regression chain proving the late fields survive a long `with*` chain.
 ### P8. Tests (the 63 errors)
 
 - `Utils.scala`: fix the `create*` helpers (they use the restored sugar).
-- `ActorSpec`: `withBehaviorPF { ... }`, `withBehaviorPFs`, `withOnBeat { _ => ... }`, `withOnInit { _ => ... }`,
+- `ActorSpec`: `withBehaviorPF { ... }`, `addBehaviorPFs`, `withOnBeat { _ => ... }`, `withOnInit { _ => ... }`,
   `Spawn(onBeat = ...)` (register first, pass id), `addOnBeat[Unit, Int] { ... }`.
 - `ActorBehaviorsSpec`: replace `unregisterBeh`/`unregisterFail` calls with the unified `unregister`
   (per D1); the test "a Beh and a Fail can share the same id" asserts the *old* semantics and must be
@@ -365,7 +365,7 @@ Consequences for later phases:
   behaviors and their dispatch precedence entirely). Until then, they stay as-is - both in the actor
   and in `Spawn`.
 
-- **Sugar naming (settled by the maintainer, after P6):** `withBehaviorPF`/`withBehaviorPFs` for
+- **Sugar naming (settled by the maintainer, after P6):** `addBehaviorPF`/`addBehaviorPFs` for
   message behaviors, and for every lifecycle event a function variant `withOnEVENTF(f)` plus a
   collection variant `withOnEVENTFs(fs)` - init takes `TF` functions (registered at build time,
   closing over the built actor), pause/unpause/close take `() => Any` (registered immediately through
@@ -390,6 +390,22 @@ Consequences for later phases:
   unregister (the user may re-use identifiers elsewhere). Revisit trigger: if a profile of a long-running
   app still shows `Behaviors` growth, the drivers are beat/pause/unpause and closed actors' behavior ids -
   by design; the escape hatch is the user calling `Behaviors.unregister` with the saved ids.
+- **TF adaptation (final semantics, after the maintainer's MutableActor refactor + fixes):** every
+  lifecycle event is `Beh`-based (`() => Any`) at the actor - including `onBeat`, which now routes
+  through a plain `BehaviorRegistry("Beat")` in `MutableActor` instead of a TBeh registry. Actor-taking
+  functions (`TF`) are supported through dedicated adapter methods on the actor -
+  `onInitTF`/`onPauseTF`/`onUnpauseTF`/`onCloseTF`/`onBeatTF` (+ the `OneShotTF` variants of init and
+  close) - which adapt `tf(this)` at event time, passing the actor itself. Consequences:
+  - `MutableActor.onBeat` takes an explicit `() => Any` (not by-name), so an actor-taking lambda
+    passed to it is a compile error, not a silent no-op.
+  - In the BUILDER, `addOnBeatTF`/`TFs` keep the functions in a `beatFuncs` backlog and adapt them
+    with the built actor at build time - so their ids are NOT visible on the builder
+    (documented; register in `Behaviors` and use `addOnBeats` if the id is needed).
+  - `SystemMsg.AddOnBeat(tbehId)`: `ActorImpl.addOnBeat` resolves the tbeh via `getTBeh[Msg, State]`
+    (the single auditable trust-based cast) and adapts it with `this` - attaching a generated
+    `Beh`, NOT the tbeh id itself, to the beat registry. Raw tbeh ids cannot be attached by id
+    (`onBeatId` validates only Beh ids).
+  - (Asymmetry noted for a later decision: the builder has no `addOnInitTF`.)
 - **D6 (deferred):** ClassTag hardening of the PBeh/TBeh registries - come back to this once the
   refactoring is done. Concretely: store the `ClassTag`s of `Msg`/`State` alongside each registered
   function and have `getPBeh[Msg, State]`/`getTBeh[Msg, State]` verify them at retrieval, turning the

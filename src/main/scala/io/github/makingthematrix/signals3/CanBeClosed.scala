@@ -1,5 +1,7 @@
 package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.Behaviors.TF
+import io.github.makingthematrix.signals3.actors.MutableActor
 import io.github.makingthematrix.signals3.priv.BehaviorRegistry
 
 import java.util.concurrent.atomic.AtomicBoolean
@@ -12,7 +14,7 @@ import scala.util.chaining.scalaUtilChainingOps
  * Implements automatic cleanup and resource management through the closeable lifecycle.
  */
 trait CanBeClosed {
-  private val closed: AtomicBoolean = new AtomicBoolean(false)
+  protected val closed: AtomicBoolean = new AtomicBoolean(false)
   private val registry = BehaviorRegistry("Close")
 
   /**
@@ -33,6 +35,8 @@ trait CanBeClosed {
 
   protected def runOnClose(): Boolean = registry.run()
 
+	protected def runOnClose[Msg, State](actor: MutableActor[Msg, State]): Boolean = registry.run(actor)
+
 	protected def resetOnClose(): Unit = registry.reset()
 
   /**
@@ -40,15 +44,19 @@ trait CanBeClosed {
    * The function is registered in [[Behaviors]] under a generated id and unregistered there after
    * a successful close.
    *
-   * @param body The code to run when the closeable is closed.
+   * @param f The code to run when the closeable is closed.
    * @return The generated id of the registered function - save it to `Behaviors.unregister` the
    *         function manually, if you ever need to.
    */
-  inline final def onClose(body: => Any): String = registry.add(body)
+  inline final def onClose(f: () => Any): String = registry.add(f)
 
-	inline final def onCloseOneShot(body: => Any): Unit = registry.addOneShot(body)
+	inline final def onCloseOneShot(f:() => Any): Unit = registry.addOneShot(f)
 
-  /**
+	inline final def onClose[Msg, State](tf: TF[Msg, State]): String = registry.add(tf)
+
+	inline final def onCloseOneShot[Msg, State](tf: TF[Msg, State]): Unit = registry.addOneShot(tf)
+
+	/**
    * Registers an already registered close behavior by its id.
    *
    * @param id The id of a [[Behaviors]] behavior.
@@ -77,7 +85,7 @@ trait CanBeClosed {
 
   final def isClosedSignal(using ExecutionContext): Signal[Boolean] = FlagSignal().tap { signal =>
     if (isClosed) signal.set() else {
-      onClose(signal.set())
+      onClose(() => signal.set())
       onCloseFailed(_ => signal.clear())
     }
   }

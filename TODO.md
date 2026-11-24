@@ -13,6 +13,9 @@
   - [x] Enable a way to add a behaviors only by id
   - [ ] Add, remove and reset behaviors with system messages
     // loop: implement -> test -> refactor
+- [ ] Refactor partial behaviors to only one behavior at once allowed + behaviors folding in Behaviors
+- [ ] Go through usages of onInit and onClose and think if some of them can be turned to one-shots. Or: any inline lambda can be one-shot?
+- [ ] Try out opaque types for lifecycle events identifiers
 - [ ] LogActor as a special subclass of ActorImpl
 - [ ] When an actor receives a reference of LogActor, it starts to gather logging and debugging data (not before)
 - [ ] PersistenceActor as a special subclass of ActorImpl

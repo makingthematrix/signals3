@@ -22,12 +22,16 @@ class ActorSystemSpec extends FunSuite {
   import Threading.defaultContext
 
   given Timeout: FiniteDuration = 5.seconds
+	
+	override def beforeEach(context: BeforeEach): Unit = {
+		eventContext.start()
+		Behaviors.reset()
+	}
 
-  override def beforeEach(context: BeforeEach): Unit =
-    eventContext.start()
-
-  override def afterEach(context: AfterEach): Unit =
-    eventContext.stop()
+	override def afterEach(context: AfterEach): Unit = {
+		eventContext.stop()
+		Behaviors.reset()
+	}
   
   // ============================================================================
   // 1. Construction and initialization
@@ -191,7 +195,7 @@ class ActorSystemSpec extends FunSuite {
     val received = SourceSignal(0)
     val a = ActorBuilder[String, Int](0)
       .withId("a")
-      .addBehavior("default", { case (msg, _) => received.mutate(_ + 1); Some(s"A: $msg") })
+      .addBehaviorPF { case (msg, _) => received.mutate(_ + 1); Some(s"A: $msg") }
       .withSystem(sys).build()
     val ref = awaitRef(sys, "a")
     ref ! "42"
@@ -217,8 +221,6 @@ class ActorSystemSpec extends FunSuite {
     val sys = newSystem[String]("sys")
     val a   = newActor(sys, "a", { case (msg, _) => Some(s"A: $msg") })
     val b   = newActor(sys, "b", { case (msg, _) => Some(s"B: $msg") })
-    awaitRef(sys, "a")
-    awaitRef(sys, "b")
     val aRef = awaitRef(sys, "a")
     expectSuccessCF(aRef ? "10", "A: 10")
     val bRef = awaitRef(sys, "b")
@@ -962,7 +964,7 @@ class ActorSystemSpec extends FunSuite {
     val sys = newSystem[String]("sys")
     val a = ActorBuilder[String, Int](0)
       .withId("built")
-      .addBehavior("default", { case (msg, _) => Some(s"built: $msg") })
+      .addBehaviorPF { case (msg, _) => Some(s"built: $msg") }
       .withTags(Set(ActorTag.Log))
       .withSystem(sys)
       .build()
@@ -999,7 +1001,7 @@ class ActorSystemSpec extends FunSuite {
     val sys    = newSystem[String]("sys")
     val parent = ActorBuilder[String, Int](0)
       .withId("parent")
-      .addBehavior("default", { case (msg, _) => Some(s"parent: $msg") })
+      .addBehaviorPF { case (msg, _) => Some(s"parent: $msg") }
       .withTags(Set(ActorTag.Log))
       .withSystem(sys)
       .build()

@@ -1,5 +1,7 @@
 package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.Behaviors.TF
+import io.github.makingthematrix.signals3.actors.MutableActor
 import io.github.makingthematrix.signals3.priv.BehaviorRegistry
 
 import java.util.concurrent.atomic.AtomicBoolean
@@ -18,17 +20,21 @@ trait CanBePaused {
 
 	protected def runOnPause(): Boolean = pauseRegistry.run()
 
+	protected def runOnPause[Msg, State](actor: MutableActor[Msg, State]): Boolean = pauseRegistry.run(actor)
+	
 	protected def resetOnPause(): Unit = pauseRegistry.reset()
 
 	/**
 		* Registers a pause behavior: the block of code will run every time this object is paused.
 		* The function is registered in [[Behaviors]] under a generated id.
 		*
-		* @param body The code to run on pause.
+		* @param f The code to run on pause.
 		* @return The generated id of the registered function - save it to `Behaviors.unregister` the
 		*         function manually, if you ever need to.
 		*/
-	inline final def onPause(body: => Any): String = pauseRegistry.add(body)
+	inline final def onPause(f: () => Any): String = pauseRegistry.add(f)
+
+	inline final def onPause[Msg, State](tf: TF[Msg, State]): String = pauseRegistry.add(tf)
 
 	/**
 		* Registers an already registered pause behavior by its id.
@@ -57,18 +63,22 @@ trait CanBePaused {
 
 	protected def runOnUnpause(): Boolean = unpauseRegistry.run()
 
+	protected def runOnUnpause[Msg, State](actor: MutableActor[Msg, State]): Boolean = unpauseRegistry.run(actor)
+	
 	protected def resetOnUnpause(): Unit = unpauseRegistry.reset()
 	
 	/**
 		* Registers an unpause behavior: the block of code will run every time this object is unpaused.
 		* The function is registered in [[Behaviors]] under a generated id.
 		*
-		* @param body The code to run on unpause.
+		* @param f The code to run on unpause.
 		* @return The generated id of the registered function - save it to `Behaviors.unregister` the
 		*         function manually, if you ever need to.
 		*/
-	inline final def onUnpause(body: => Any): String = unpauseRegistry.add(body)
-	
+	inline final def onUnpause(f: () => Any): String = unpauseRegistry.add(f)
+
+	inline final def onUnpause[Msg, State](tf: TF[Msg, State]): String = unpauseRegistry.add(tf)
+
 	/**
 		* Registers an already registered unpause behavior by its id.
 		*
@@ -96,9 +106,9 @@ trait CanBePaused {
 
 	final def isPausedSignal(using ExecutionContext): Signal[Boolean] = FlagSignal().tap { signal =>
 		if (isPaused) signal.set() else signal.clear()
-		onPause(signal.set())
+		onPause(() => signal.set())
 		onPauseFailed(_ => signal.clear())
-		onUnpause(signal.clear())
+		onUnpause(() => signal.clear())
 		onUnpauseFailed(_ => signal.set())
 	}
 }

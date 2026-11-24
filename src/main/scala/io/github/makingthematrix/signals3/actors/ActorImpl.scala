@@ -216,8 +216,15 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		case (other, p)              => respond(p, unhandledMsg(other.toString))
 	}
 
+	// The beat registry of the actor keeps only plain () => Any functions; a total behavior
+	// registered in Behaviors is attached by adapting it with this actor as the argument,
+	// at the moment of the attachment. The type arguments are restored by the unchecked cast
+	// of `getTBeh` - the usual, single auditable place where the trust-based cast happens.
 	private def addOnBeat(tbehId: String, p: Option[Promise[SystemMsg]]): Unit =
-		if (onBeatId(tbehId)) respond(p, Done) else respond(p, invalidId(tbehId))
+		Behaviors.getTBeh[Msg, State](tbehId) match {
+			case Some(tbeh) => onBeat(tbeh.tf); respond(p, Done)
+			case None       => respond(p, invalidId(tbehId))
+		}
 
 	private def processMsgEntry(entry: MsgEntry): Unit = {
 		val (msg, pOpt, bId) = entry
@@ -263,7 +270,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		if (children.contains(data.actorId)) respond(p, invalidId(data.actorId)) else {
 			val b1 = ActorBuilder[Msg, State](data.state.getOrElse(this.state))
 				.withIdIf(data.actorId.nonEmpty, data.actorId)
-				.withBehaviorsIf(data.behaviors.nonEmpty, data.behaviors, this.behaviors)
+				.addBehaviorsIf(data.behaviors.nonEmpty, data.behaviors, this.behaviors)
 				.withHeartbeat(data.heartbeat.getOrElse(this.heartbeat))
 				.withTags(tags + ActorTag.Child)
 				.withParent(this)
@@ -291,7 +298,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		while (!isPaused && !isClosed && entries.nonEmpty) processMsgEntry(entries.dequeue())
 	}
 
-	onInit {
+	onInit { () => 
 		beat.foreach { _ =>
 			processMessages()
 			if (!isPaused) runOnBeat()
@@ -304,11 +311,36 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		close()
 	}
 
-	override def pause(): Boolean = if (!isClosed) super.pause() else false
-	override def unpause(): Boolean = if (!isClosed) super.unpause() else false
-
 	onPauseFailed { t => println(s"Failed to pause actor $id: ${t.getMessage}") }
 	onCloseFailed { t =>  println(s"Failed to close actor $id: ${t.getMessage}") }
+
+	override def initialize(): Boolean = if (!initialized.getAndSet(true)) {
+		if (runOnInit(this)) true else {
+			initialized.set(false)
+			false
+		}
+	} else false
+
+	override def pause(): Boolean =
+		if (!isClosed && !paused.getAndSet(true)) {
+			if (runOnPause(this)) true
+			else {
+				paused.set(false)
+				false
+			}
+		}
+		else false
+
+	override def unpause(): Boolean =
+		if (!isClosed && paused.getAndSet(false)) {
+			if (runOnUnpause(this)) true
+			else {
+				paused.set(true)
+				false
+			}
+		}
+		else false
+
 
 	/**
 		* Closes the actor and performs necessary checks to ensure all messages are completed before finalizing the closure.
@@ -325,9 +357,13 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		*/
 	override def closeAndCheck(): Boolean = Try(Await.ready(shutdown(), heartbeat.timeout + 5.seconds)).isSuccess
 
-	protected def shutdown(): Future[SystemMsg] =
-		if (!super.closeAndCheck()) Future.failed(CloseFailedException(id))
-		else {
+	protected def shutdown(): Future[SystemMsg] = {
+		if (closed.getAndSet(true)) Future.failed(CloseFailedException(id))
+		else if (!runOnClose(this)) {
+			closed.set(false)
+			Future.failed(CloseFailedException(id))
+		} else {
+			runOnClose(this)
 			children.values.foreach(child => child ! SystemMsg.Close)
 			in.close()
 			out.close()
@@ -338,6 +374,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 			system.foreach(_ ! ActorClosed(id))
 			beat.isClosedSignal.onTrue.map(_ => ActorClosed(id))
 		}
+	}
 
 	override def state: State = _state
 

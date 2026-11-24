@@ -25,11 +25,15 @@ class ActorIntegrationSpec extends FunSuite {
 
   given Timeout: FiniteDuration = 5.seconds
 
-  override def beforeEach(context: BeforeEach): Unit =
-    eventContext.start()
+	override def beforeEach(context: BeforeEach): Unit = {
+		eventContext.start()
+		Behaviors.reset()
+	}
 
-  override def afterEach(context: AfterEach): Unit =
-    eventContext.stop()
+	override def afterEach(context: AfterEach): Unit = {
+		eventContext.stop()
+		Behaviors.reset()
+	}
   
   // ============================================================================
   // Thread Safety Tests for Behavior Modifications
@@ -200,10 +204,10 @@ class ActorIntegrationSpec extends FunSuite {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
     val flag = Signal(false)
     var receivedChild: Option[MutableActor[String, Unit]] = None
-    val child = spawn[String, Unit](parent)(Spawn(onInit = { c =>
+    val child = spawn[String, Unit](parent)(Spawn(onInit = Set(Behaviors.registerTF[String, Unit] { c =>
       receivedChild = Some(c)
       flag ! true
-    }))
+    })))
     waitFor(flag, true)
     assert(receivedChild.exists(rc => rc.id == child.id), "onInit should receive the child actor")
     close(child)
@@ -287,9 +291,9 @@ class ActorIntegrationSpec extends FunSuite {
     val inited = Signal(0)
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
     var c1: Actor[String, Unit] & CanBeClosed = null
-    spawn[String, Unit](parent)(Spawn(onInit = { c => c1 = c; inited.mutate(n => n + 1) }))
+    spawn[String, Unit](parent)(Spawn(onInit = Set(Behaviors.registerTF[String, Unit] { c => c1 = c; inited.mutate(n => n + 1) })))
     var c2: Actor[String, Unit] & CanBeClosed = null
-    spawn[String, Unit](parent)(Spawn(onInit = { c => c2 = c; inited.mutate(n => n + 1) }))
+    spawn[String, Unit](parent)(Spawn(onInit = Set(Behaviors.registerTF[String, Unit] { c => c2 = c; inited.mutate(n => n + 1) })))
 
     waitFor(inited, 2)
 
@@ -302,9 +306,9 @@ class ActorIntegrationSpec extends FunSuite {
     val inited = Signal(0)
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
     var child: Actor[String, Unit] & CanBeClosed = null
-    spawn[String, Unit](parent)(Spawn(onInit = { c => child = c; inited.mutate(n => n + 1) }))
+    spawn[String, Unit](parent)(Spawn(onInit = Set(Behaviors.registerTF[String, Unit] { c => child = c; inited.mutate(n => n + 1) })))
     var grandchild: Actor[String, Unit] & CanBeClosed = null
-    spawn[String, Unit](child)(Spawn(onInit = { c => grandchild = c; inited.mutate(n => n + 1) }))
+    spawn[String, Unit](child)(Spawn(onInit = Set(Behaviors.registerTF[String, Unit] { c => grandchild = c; inited.mutate(n => n + 1) })))
 
     waitFor(inited, 2)
 
@@ -318,9 +322,9 @@ class ActorIntegrationSpec extends FunSuite {
 
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
     var c1: Actor[String, Unit] & CanBeClosed = null
-    spawn[String, Unit](parent)(Spawn(onInit = { c => c1 = c; inited.mutate(n => n + 1) }))
+    spawn[String, Unit](parent)(Spawn(onInit = Set(Behaviors.registerTF[String, Unit] { c => c1 = c; inited.mutate(n => n + 1) })))
     var c2: Actor[String, Unit] & CanBeClosed = null
-    spawn[String, Unit](parent)(Spawn(onInit = { c => c2 = c; inited.mutate(n => n + 1) }))
+    spawn[String, Unit](parent)(Spawn(onInit = Set(Behaviors.registerTF[String, Unit] { c => c2 = c; inited.mutate(n => n + 1) })))
 
     waitFor(inited, 2)
 
@@ -351,7 +355,7 @@ class ActorIntegrationSpec extends FunSuite {
     val futures: Seq[Future[Unit]] = (0 until numThreads).map { _ =>
       Future {
         (0 until spawnsPerThread).foreach { _ =>
-          resultCF(parent ? Spawn[String, Unit]()) match {
+          resultCF(parent ? Spawn[Unit]()) match {
             case SystemMsg.NewChild(c) => children.put(c.id, c.asInstanceOf[ActorRef[String]])
             case other                 => throw new AssertionError(s"Unexpected response: $other")
           }
@@ -431,7 +435,7 @@ class ActorIntegrationSpec extends FunSuite {
 
     val futures: Seq[Future[Unit]] = (0 until numThreads).map { _ =>
       Future {
-        tryResultCF(parent ? Spawn[String, Unit](actorId = "race")) match {
+        tryResultCF(parent ? Spawn[Unit](actorId = "race")) match {
           case Success(SystemMsg.NewChild(c)) =>
             childRef.compareAndSet(None, Some(c.asInstanceOf[ActorRef[String]]))
             newChildCount.mutate(_ + 1)
@@ -461,10 +465,10 @@ class ActorIntegrationSpec extends FunSuite {
     val parent = create[String] { case (msg, _) => Some(s"P: $msg") }
     val flag = Signal(false)
     var ref: Option[MutableActor[String, Unit]] = None
-    parent ! Spawn[String, Unit](onInit = { c =>
+    parent ! Spawn[Unit](onInit = Set(Behaviors.registerTF[String, Unit] { c =>
       ref = Some(c)
       flag ! true
-    })
+    }))
     waitFor(flag, true)
     val child = ref.getOrElse(fail("onInit did not capture the child reference"))
     expectSuccessCF(child ? "42", "P: 42")

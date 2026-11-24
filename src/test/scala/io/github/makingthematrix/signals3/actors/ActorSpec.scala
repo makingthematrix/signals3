@@ -4,7 +4,7 @@ import io.github.makingthematrix.signals3.Utils.*
 import io.github.makingthematrix.signals3.{Behaviors, Closeable, CloseableFuture, EventContext, Signal, SourceSignal, SourceStream, Stream, Threading}
 import munit.FunSuite
 import io.github.makingthematrix.signals3.Behaviors.*
-import io.github.makingthematrix.signals3.actors.SystemMsg.{Done, ResetOnBeat, addOnBeat}
+import io.github.makingthematrix.signals3.actors.SystemMsg.*
 
 import scala.concurrent.TimeoutException
 import scala.concurrent.duration.*
@@ -19,11 +19,15 @@ class ActorSpec extends FunSuite {
 
   given Timeout: FiniteDuration = 1.seconds
 
-  override def beforeEach(context: BeforeEach): Unit =
-    eventContext.start()
+  override def beforeEach(context: BeforeEach): Unit = {
+	  eventContext.start()
+	  Behaviors.reset()
+  }
 
-  override def afterEach(context: AfterEach): Unit =
-    eventContext.stop()
+  override def afterEach(context: AfterEach): Unit = {
+	  eventContext.stop()
+	  Behaviors.reset()
+  }
 
   test("Request-response message sending") {
     val actor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Default: $msg")) })
@@ -93,7 +97,7 @@ class ActorSpec extends FunSuite {
   test("Reactive heartbeat idles at longMs and reacts at shortMs") {
     val beats = Signal(0)
     val actor = ActorBuilder[Unit, Int](0)
-      .withBehaviorPF { case _ => None }
+      .addBehaviorPF { case _ => None }
       .withHeartbeat(HeartBeatStrategy.Reactive(20.millis, 200.millis))
       .addOnBeatTF { _ => beats.mutate(_ + 1) }
       .build()
@@ -113,7 +117,7 @@ class ActorSpec extends FunSuite {
     val calls = Signal(0)
     val beats = Signal(0)
     val actor = ActorBuilder[Unit, Int](0)
-      .withBehaviorPF { case _ => None }
+      .addBehaviorPF { case _ => None }
       .withHeartbeat(HeartBeatStrategy.CustomLinear { () => calls.mutate(_ + 1); 20.millis })
       .addOnBeatTF { _ => beats.mutate(_ + 1) }
       .build()
@@ -127,7 +131,7 @@ class ActorSpec extends FunSuite {
     val beats = Signal(0)
     @volatile var fast = true
     val actor = ActorBuilder[Unit, Int](0)
-      .withBehaviorPF { case _ => None }
+      .addBehaviorPF { case _ => None }
       .withHeartbeat(HeartBeatStrategy.CustomLinear { () => if fast then 20.millis else 300.millis })
       .addOnBeatTF { _ => beats.mutate(_ + 1) }
       .build()
@@ -147,14 +151,14 @@ class ActorSpec extends FunSuite {
   test("a short heartbeat timeout fails a long-running behavior") {
     val slowBehavior: PF[Int, Unit] = { case (msg, _) => Thread.sleep(500L); Some(msg + 1) }
     val shortTimeout = ActorBuilder[Int]()
-      .withBehaviorPF(slowBehavior)
+      .addBehaviorPF(slowBehavior)
       .withHeartbeat(HeartBeatStrategy.CustomLinear(() => 20.millis, 100.millis))
       .build()
     intercept[TimeoutException](resultCF(shortTimeout ? 1))
     close(shortTimeout)
 
     val longTimeout = ActorBuilder[Int]()
-      .withBehaviorPF(slowBehavior)
+      .addBehaviorPF(slowBehavior)
       .withHeartbeat(HeartBeatStrategy.CustomLinear(() => 20.millis, 1500.millis))
       .build()
     val response = resultCF(longTimeout ? 1)(using 2.seconds)
@@ -165,7 +169,7 @@ class ActorSpec extends FunSuite {
   test("CustomReactive interval receives the current hasMsg state") {
     val flags = Signal(Seq.empty[Boolean])
     val actor = ActorBuilder[Int, Int](0)
-      .withBehaviorPF { case (msg, _) => Some(msg + 1) }
+      .addBehaviorPF { case (msg, _) => Some(msg + 1) }
       .withHeartbeat(HeartBeatStrategy.CustomReactive { hasMsg =>
         flags.mutate(_ :+ hasMsg)
         20.millis
@@ -181,7 +185,7 @@ class ActorSpec extends FunSuite {
   test("CustomReactive adapts its cadence to hasMsg") {
     val beats = Signal(0)
     val actor = ActorBuilder[Int, Int](0)
-      .withBehaviorPF { case (msg, _) => Some(msg + 1) }
+      .addBehaviorPF { case (msg, _) => Some(msg + 1) }
       .withHeartbeat(HeartBeatStrategy.CustomReactive { hasMsg => if hasMsg then 20.millis else 250.millis })
       .addOnBeatTF { _ => beats.mutate(_ + 1) }
       .build()
@@ -199,7 +203,7 @@ class ActorSpec extends FunSuite {
 
   test("CustomReactive with zero interval forces an immediate beat") {
     val actor = ActorBuilder[Int, Int](0)
-      .withBehaviorPF { case (msg, _) => Some(msg + 1) }
+      .addBehaviorPF { case (msg, _) => Some(msg + 1) }
       .withHeartbeat(HeartBeatStrategy.CustomReactive { hasMsg => if hasMsg then 0.millis else 200.millis })
       .build()
     waitFor(actor.isInitializedSignal, true)
@@ -219,7 +223,7 @@ class ActorSpec extends FunSuite {
     val child = spawn[Unit, Int](parent) {
       SystemMsg.Spawn(actorId = "custom-beat-child", state = Some(0),
         heartbeat = Some(HeartBeatStrategy.CustomLinear(() => 20.millis)),
-        onBeat = { _ => beats.mutate(_ + 1) })
+        onBeat = Set(Behaviors.registerTF[Unit, Int] { _ => beats.mutate(_ + 1) }))
     }
     assert(waitFor(beats.map(_ >= 3), true))
     close(child)
@@ -405,7 +409,7 @@ class ActorSpec extends FunSuite {
     val behavior2: PF[String, Unit] = { case (msg, _) => Some(s"Default: $msg") }
     val actor =
       ActorBuilder[String]()
-        .withBehaviorPFs(List(behavior1, behavior2))
+        .addBehaviorPFs(List(behavior1, behavior2))
         .withSerialDispatch()
         .build()
         .asInstanceOf[Actor[String, Unit] & Closeable]
@@ -531,7 +535,7 @@ class ActorSpec extends FunSuite {
     val actor = create[Unit] { case _ => None }
     var firstAttempt = true
     var failed: Option[Throwable] = None
-    actor.onClose { if (firstAttempt) { firstAttempt = false; throw new RuntimeException("close failed") } }
+    actor.onClose { () => if (firstAttempt) { firstAttempt = false; throw new RuntimeException("close failed") } }
     actor.onCloseFailed { t => failed = Some(t) }
 
     // the close request fails with CloseFailedException
@@ -679,8 +683,8 @@ class ActorSpec extends FunSuite {
 
     val actor =
       ActorBuilder[String]()
-        .withBehaviorPF { case (msg, _) => Some(s"Processed: $msg") }
-        .addOnInits { _ => initCalled ! true }
+        .addBehaviorPF { case (msg, _) => Some(s"Processed: $msg") }
+        .addOnInitF { () => initCalled ! true }
         .withSerialDispatch()
         .build()
         .asInstanceOf[Actor[String, String] & Closeable]
@@ -796,7 +800,7 @@ class ActorSpec extends FunSuite {
   test("onBeat works with a serial dispatch queue") {
     val beats = Signal(0)
     val actor = ActorBuilder[Unit, Int](0)
-      .withBehaviorPF { case _ => None }
+      .addBehaviorPF { case _ => None }
       .addOnBeatTF { _ => beats.mutate(_ + 1) }
       .withSerialDispatch()
       .build()
@@ -807,7 +811,7 @@ class ActorSpec extends FunSuite {
 
   test("onBeat can send messages via out stream") {
     val actor = ActorBuilder[String]()
-      .withBehaviorPF { case (msg, _) => Some(s"Processed: $msg") }
+      .addBehaviorPF { case (msg, _) => Some(s"Processed: $msg") }
       .withLinearHeartbeat(20L)
       .addOnBeatTF { a => a.out ! "beat" }
       .build()
@@ -823,7 +827,7 @@ class ActorSpec extends FunSuite {
   test("AddOnBeat via ? responds with Done") {
     val beats = Signal(0)
     val actor = create[Unit, Int](0, { case _ => None })
-    val cf = actor ? addOnBeat[Unit, Int] { _ => beats.mutate(_ + 1) }
+    val cf = actor ? AddOnBeat(Behaviors.registerTF[Unit, Int] { _ => beats.mutate(_ + 1) })
     assertEquals(resultCF(cf), Done)
     assert(waitFor(beats.map(_ >= 2), true))
     close(actor)
@@ -832,7 +836,7 @@ class ActorSpec extends FunSuite {
   test("AddOnBeat via ! applies the callback") {
     val beats = Signal(0)
     val actor = create[Unit, Int](0, { case _ => None })
-    actor ! addOnBeat[Unit, Int] { _ => beats.mutate(_ + 1) }
+    actor ! AddOnBeat(Behaviors.registerTF[Unit, Int] { _ => beats.mutate(_ + 1) })
     assert(waitFor(beats.map(_ >= 2), true))
     close(actor)
   }
@@ -841,13 +845,13 @@ class ActorSpec extends FunSuite {
     val beats1 = Signal(0)
     val beats2 = Signal(0)
     val actor = ActorBuilder[Unit, Int](0)
-      .withBehaviorPF { case _ => None }
+      .addBehaviorPF { case _ => None }
       .withLinearHeartbeat(20L)
       .addOnBeatTF { _ => beats1.mutate(_ + 1) }
       .build()
     assert(waitFor(beats1.map(_ >= 2), true))
 	  expectSuccessCF(actor ? ResetOnBeat, Done)
-    val cf = actor ? addOnBeat[Unit, Int] { _ => beats2.mutate(_ + 1) }
+    val cf = actor ? AddOnBeat(Behaviors.registerTF[Unit, Int] { _ => beats2.mutate(_ + 1) })
 	  expectSuccessCF(cf, Done)
     val count1 = beats1.currentValue.getOrElse(0)
     assert(waitFor(beats2.map(_ >= 2), true)) // at least two beats since the swap
@@ -860,7 +864,7 @@ class ActorSpec extends FunSuite {
     val beats1 = Signal(0)
     val beats2 = Signal(0)
     val actor = ActorBuilder[Unit, Int](0)
-      .withBehaviorPF { case _ => None }
+      .addBehaviorPF { case _ => None }
       .withLinearHeartbeat(20L)
       .addOnBeatTF { _ => beats1.mutate(_ + 1) }
       .build()
@@ -871,7 +875,7 @@ class ActorSpec extends FunSuite {
 	  expectSuccessCF(actor ? ResetOnBeat, Done)
     val countWhenPaused = beats1.currentValue.getOrElse(0)
     // system messages are processed even while the actor is paused
-    val cf = actor ? addOnBeat[Unit, Int] { _ => beats2.mutate(_ + 1) }
+    val cf = actor ? AddOnBeat(Behaviors.registerTF[Unit, Int] { _ => beats2.mutate(_ + 1) })
     assertEquals(resultCF(cf), Done)
     // neither the old nor the new callback runs while paused
     Thread.sleep(100L)
@@ -887,13 +891,13 @@ class ActorSpec extends FunSuite {
   test("ResetOnBeat + Actor.DoNothing actually does nothing") {
     val beats = Signal(0)
     val actor = ActorBuilder[Unit, Int](0)
-      .withBehaviorPF { case _ => None }
+      .addBehaviorPF { case _ => None }
       .withLinearHeartbeat(20L)
       .addOnBeatTF { _ => beats.mutate(_ + 1) }
       .build()
     assert(waitFor(beats.map(_ >= 2), true))
 	  expectSuccessCF(actor ? ResetOnBeat, Done)
-    val cf = actor ? addOnBeat[Unit, Int](Actor.DoNothing)
+    val cf = actor ? AddOnBeat(Behaviors.registerTF[Unit, Int]((_: MutableActor[Unit, Int]) => ()))
     assertEquals(resultCF(cf), Done)
     val count = beats.currentValue.getOrElse(0)
     Thread.sleep(100L) // several beats - the callback must stay disabled
@@ -909,7 +913,7 @@ class ActorSpec extends FunSuite {
     val child = spawn[Unit, Int](parent) {
       SystemMsg.Spawn(actorId = "beating-child", state = Some(0),
         heartbeat = Some(HeartBeatStrategy.Linear(20L.millis)),
-        onBeat = { _ => beats.mutate(_ + 1) })
+        onBeat = Set(Behaviors.registerTF[Unit, Int] { _ => beats.mutate(_ + 1) }))
     }
     assert(waitFor(beats.map(_ >= 3), true))
     close(child)
@@ -922,7 +926,7 @@ class ActorSpec extends FunSuite {
     val child = spawn[Unit, Int](parent) {
       SystemMsg.Spawn(actorId = "boring-child", state = Some(0))
     }
-    val cf = child ? addOnBeat[Unit, Int] { _ => beats.mutate(_ + 1) }
+    val cf = child ? AddOnBeat(Behaviors.registerTF[Unit, Int] { _ => beats.mutate(_ + 1) })
     assertEquals(resultCF(cf), Done)
     assert(waitFor(beats.map(_ >= 2), true))
     close(child)
@@ -932,7 +936,7 @@ class ActorSpec extends FunSuite {
   test("a spawned child does not inherit the parent's onBeat") {
     val beatenIds = Signal(Set.empty[String])
     val parent = ActorBuilder[Unit, Int](0)
-      .withBehaviorPF { case _ => None }
+      .addBehaviorPF { case _ => None }
       .withLinearHeartbeat(20L)
       .addOnBeatTF { a => beatenIds.mutate(_ + a.id) }
       .build()
@@ -974,12 +978,12 @@ class ActorSpec extends FunSuite {
     close(actor)
   }
 
-  test("onBeatById attaches a heartbeat behavior from the behavior library") {
+  test("onBeatId attaches a heartbeat behavior from the behavior library") {
     val actor = new ActorImpl[Unit, Int]("spec-onbeat-byid-actor", 0, HeartBeatStrategy.Linear(20L.millis))
     assert(registerTBeh[Unit, Int]("spec-onbeat-byid" -> { a => a.state += 1 }))
     assert(!actor.isInitialized)
-    assert(actor.onBeatById("spec-onbeat-byid"))
-    assert(!actor.onBeatById("spec-never-registered-tbeh"))
+    assert(actor.onBeatId("spec-onbeat-byid"))
+    assert(!actor.onBeatId("spec-never-registered-tbeh"))
 
     actor.initialize()
     Thread.sleep(120L) // at 20ms beats the attached behavior must fire several times

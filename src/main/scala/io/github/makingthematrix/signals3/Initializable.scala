@@ -1,5 +1,7 @@
 package io.github.makingthematrix.signals3
 
+import io.github.makingthematrix.signals3.Behaviors.TF
+import io.github.makingthematrix.signals3.actors.MutableActor
 import io.github.makingthematrix.signals3.priv.BehaviorRegistry
 
 import java.util.concurrent.atomic.AtomicBoolean
@@ -21,13 +23,17 @@ trait CanBeInitialized {
 		* exactly once. The function is registered in [[Behaviors]] under a generated id and unregistered
 		* there after a successful initialization.
 		*
-		* @param body The code to run on initialization.
+		* @param f The code to run on initialization.
 		* @return The generated id of the registered function - save it to `Behaviors.unregister` the
 		*         function manually, if you ever need to.
 		*/
-	inline final def onInit(body: => Any): String = registry.add(body)
+	inline final def onInit(f: () => Any): String = registry.add(f)
 
-	inline final def onInitOneShot(body: => Any): Unit = registry.addOneShot(body)
+	inline final def onInitOneShot(f: () => Any): Unit = registry.addOneShot(f)
+
+	inline final def onInit[Msg, State](tf: TF[Msg, State]): String = registry.add(tf)
+
+	inline final def onInitOneShot[Msg, State](tf: TF[Msg, State]): Unit = registry.addOneShot(tf)
 	
 	/**
 		* Registers an already registered initialization behavior by its id.
@@ -38,7 +44,9 @@ trait CanBeInitialized {
 	inline final def onInitId(id: String): Boolean = registry.addId(id)
 
 	protected def runOnInit(): Boolean = registry.run()
-	
+
+	protected def runOnInit[Msg, State](actor: MutableActor[Msg, State]): Boolean = registry.run(actor)
+
 	protected def resetOnInit(): Unit = registry.reset()
 	
 	/**
@@ -63,7 +71,7 @@ trait CanBeInitialized {
 	final def isInitializedSignal(using ExecutionContext): Signal[Boolean] = FlagSignal().tap { signal =>
 		if (isInitialized) signal.set()
 		else {
-			onInit(signal.set())
+			onInit(() => signal.set())
 			onInitFailed(_ => signal.clear())
 		}
 	}

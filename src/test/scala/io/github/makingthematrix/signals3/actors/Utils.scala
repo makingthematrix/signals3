@@ -3,7 +3,7 @@ package io.github.makingthematrix.signals3.actors
 import Actor.InvalidIdException
 import io.github.makingthematrix.signals3.Behaviors.PF
 import SystemMsg.*
-import io.github.makingthematrix.signals3.{Closeable, Pausable}
+import io.github.makingthematrix.signals3.{Behaviors, Closeable, Pausable}
 import io.github.makingthematrix.signals3.Utils.*
 
 import scala.concurrent.{ExecutionContext, TimeoutException}
@@ -49,56 +49,68 @@ object Utils {
 
 	def create[Msg](pf: PF[Msg, Unit])(using ExecutionContext): Actor[Msg, Unit] & Closeable & Pausable =
 		ActorBuilder[Msg]()
-			.withBehaviorPF(pf)
+			.addBehaviorPF(pf)
 			.build()
 
 	def create[Msg](id: String)(pf: PF[Msg, Unit])(using ExecutionContext): Actor[Msg, Unit] & Closeable & Pausable =
 		ActorBuilder[Msg]()
 			.withId(id)
-			.withBehaviorPF(pf)
+			.addBehaviorPF(pf)
 			.build()
 
 	def create[Msg, State](state: State, pf: PF[Msg, State])
 	                      (using ExecutionContext): Actor[Msg, State] & Closeable & Pausable =
 		ActorBuilder[Msg, State](state)
-			.withBehaviorPF(pf)
+			.addBehaviorPF(pf)
 			.build()
 
 	def create[Msg, State](id: String, state: State, pf: PF[Msg, State])
 	                      (using ExecutionContext): Actor[Msg, State] & Closeable & Pausable =
 		ActorBuilder[Msg, State](state)
 			.withId(id)
-			.withBehaviorPF(pf)
+			.addBehaviorPF(pf)
 			.build()
 
 
 	def create[Msg](pf: PF[Msg, Unit], hbs: HeartBeatStrategy)
 	               (using ExecutionContext): Actor[Msg, Unit] & Closeable & Pausable =
 		ActorBuilder[Msg, Unit](())
-			.withBehaviorPF(pf)
+			.addBehaviorPF(pf)
 			.withHeartbeat(hbs)
 			.build()
 
 	def create[Msg, State](state: State, pf: PF[Msg, State], onInit: MutableActor[Msg, State] => Unit)
-	                      (using ExecutionContext): Actor[Msg, State] & Closeable & Pausable =
+	                      (using ExecutionContext): Actor[Msg, State] & Closeable & Pausable = {
+		val id = Behaviors.registerTF(onInit)
 		ActorBuilder[Msg, State](state)
-			.withBehaviorPF(pf)
-			.addOnInits(onInit)
+			.addBehaviorPF(pf)
+			.addOnInit(id)
 			.build()
+	}
 
 	def create[Msg](pf: PF[Msg, Unit], onInit: MutableActor[Msg, Unit] => Unit)
-	               (using ExecutionContext): Actor[Msg, Unit] & Closeable & Pausable =
+	               (using ExecutionContext): Actor[Msg, Unit] & Closeable & Pausable = {
+		val id = Behaviors.registerTF(onInit)
 		ActorBuilder[Msg, Unit](())
-			.withBehaviorPF(pf)
-			.addOnInits(onInit)
+			.addBehaviorPF(pf)
+			.addOnInit(id)
 			.build()
+	}
 
 	/** Builds an actor with named behaviors; the first behavior in the list is the first one tried. */
 	def createWithBehaviors[Msg](behaviors: (String, PF[Msg, Unit])*)
-	                            (using ExecutionContext): Actor[Msg, Unit] & Closeable & Pausable =
-		behaviors.foldRight(ActorBuilder[Msg]())((beh, b) => b.addBehavior(beh._1, beh._2)).build()
+	                            (using ExecutionContext): Actor[Msg, Unit] & Closeable & Pausable = {
+		behaviors.foreach(beh => assert(Behaviors.registerPBeh(beh)))
+		ActorBuilder[Msg]().addBehaviors(behaviors.map(_._1)).build()
+	}
 
-	def newSystem[Msg](id: String)(using ExecutionContext): ActorSystem[Msg, Int] & Closeable & Pausable =
+	def createWithBehaviors[Msg](sys: ActorSystem[Msg, Int], id: String, behaviors: (String, PF[Msg, Int])*)
+	                            (using ExecutionContext): Actor[Msg, Int] & Closeable = {
+		behaviors.foreach(beh => assert(Behaviors.registerPBeh(beh)))
+		ActorBuilder[Msg, Int](0).withId(id).withSystem(sys).addBehaviors(behaviors.map(_._1)).build()
+	}
+
+def newSystem[Msg](id: String)(using ExecutionContext): ActorSystem[Msg, Int] & Closeable & Pausable =
 		ActorSystem[Msg, Int](id, 0, Actor.defBeat)
 	
 	def close(actorRef: ActorRef[?]): Unit =
@@ -109,13 +121,16 @@ object Utils {
 		}
 
 	def newActor[Msg, State](sys: ActorSystem[Msg, ?], id: String, defState: State, pf: PF[Msg, State])
-	            (using ExecutionContext): Actor[Msg, State] & Closeable & Pausable =
-		ActorBuilder[Msg, State](defState).withId(id).addBehavior("default", pf).withSystem(sys).build()
-
+	            (using ExecutionContext): Actor[Msg, State] & Closeable & Pausable = {
+		val pbehId = Behaviors.registerPF(pf)
+		ActorBuilder[Msg, State](defState).withId(id).addBehavior(pbehId).withSystem(sys).build()
+	}
 	def newActor(sys: ActorSystem[String, ?], id: String, pf: PF[String, Int])
-	            (using ExecutionContext): Actor[String, Int] & Closeable & Pausable =
-		ActorBuilder[String, Int](0).withId(id).addBehavior("default", pf).withSystem(sys).build()
-		
+	            (using ExecutionContext): Actor[String, Int] & Closeable & Pausable = {
+		val pbehId = Behaviors.registerPF(pf)
+		ActorBuilder[String, Int](0).withId(id).addBehavior(pbehId).withSystem(sys).build()
+	}
+	
 	def awaitRef[Msg](sys: ActorSystem[Msg, ?], id: String): ActorRef[Msg] = {
 		val start = System.currentTimeMillis()
 		while (System.currentTimeMillis() - start < 5000) {
@@ -164,14 +179,14 @@ object Utils {
 			case other             => fail(s"Unexpected AskForRef response: $other")
 		}
 	
-	def spawn[Msg, State](parent: Actor[Msg, ?])(data: SystemMsg.Spawn[Msg, State]): ActorRef[Msg] =
+	def spawn[Msg, State](parent: Actor[Msg, ?])(data: SystemMsg.Spawn[State]): ActorRef[Msg] =
 		tryResultCF(parent ? data) match {
 			case Success(NewChild(child))                              => child.asInstanceOf[ActorRef[Msg]]
 			case Failure(InvalidIdException(id)) if id == data.actorId => fail(s"Spawn with id $id was rejected as invalid")
 			case other                                                 => fail(s"Unexpected spawn response: $other")
 		}
 
-	def spawn[Msg, State](parent: ActorRef[Msg])(data: SystemMsg.Spawn[Msg, State]): ActorRef[Msg] =
+	def spawn[Msg, State](parent: ActorRef[Msg])(data: SystemMsg.Spawn[State]): ActorRef[Msg] =
 		tryResultCF(parent ? data) match {
 			case Success(NewChild(child))                              => child.asInstanceOf[ActorRef[Msg]]
 			case Failure(InvalidIdException(id)) if id == data.actorId => fail(s"Spawn with id $id was rejected as invalid")
@@ -181,9 +196,10 @@ object Utils {
 	/** An actor built without a system and registered manually with the given tags. */
 	def newTaggedActor(sys: ActorSystem[String, Int], id: String, tags: ActorTag*)
 	                  (using ExecutionContext): Actor[String, Int] & Closeable & Pausable = {
+		val pbehId = Behaviors.registerPF { case (msg, _) => Some(s"$id: $msg") }
 		val a = ActorBuilder[String, Int](0)
 			.withId(id)
-			.addBehavior("default", { case (msg, _) => Some(s"$id: $msg") })
+			.addBehavior(pbehId)
 			.build()
 		resultCF(sys ? Register(a, tags.toSet)) match {
 			case Ref(_) => a

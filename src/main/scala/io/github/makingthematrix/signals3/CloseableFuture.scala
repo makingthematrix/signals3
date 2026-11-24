@@ -467,7 +467,7 @@ object CloseableFuture {
     else {
       val p = Promise[Unit]()
       val task = schedule(() => p.trySuccess(()), duration.toMillis)
-      new ActuallyCloseable(p).tap { _.onClose { task.cancel(); () } }
+      new ActuallyCloseable(p).tap { _.onClose { _ => task.cancel() } }
     }
 
   /** Creates an empty closeable future which will repeat the mapped computation every given `interval` until

@@ -362,7 +362,7 @@ class CloseableTransformersSpec extends munit.FunSuite {
     val mapped = Closeable.map(original)(_ => "foo")
 
     val isClosed = Signal(0)
-    mapped.onClose { isClosed.mutate(_ + 1)  }
+    mapped.onClose { () =>  isClosed.mutate(_ + 1)   }
 
     mapped.close()
     waitFor(isClosed, 1)
@@ -373,7 +373,7 @@ class CloseableTransformersSpec extends munit.FunSuite {
     val mapped = Closeable.map(original)(_ => "foo")
 
     val isClosed = Signal(0)
-    original.onClose { isClosed.mutate(_ + 1) }
+    original.onClose { () =>  isClosed.mutate(_ + 1)  }
 
     mapped.close()
     waitFor(isClosed, 1)
@@ -384,7 +384,7 @@ class CloseableTransformersSpec extends munit.FunSuite {
     val mapped = Closeable.map(original)(_ => "foo")
 
     val isClosed = Signal(0)
-    mapped.onClose { isClosed.mutate(_ + 1) }
+    mapped.onClose { () =>  isClosed.mutate(_ + 1)  }
 
     original.close()
 
@@ -409,11 +409,11 @@ class CloseableTransformersSpec extends munit.FunSuite {
   test("In a zipped stream, closing the transformed one calls all onClose") {
     val isClosed = Signal(0)
     val original1 = GeneratorStream.heartbeat(HeartBeatMs)
-    original1.onClose { isClosed.mutate(_ + 1); () }
+    original1.onClose { () =>  isClosed.mutate(_ + 1); ()  }
     val original2 = GeneratorStream.heartbeat((HeartBeatMs.toMillis * 2).millis)
-    original2.onClose { isClosed.mutate(_ + 1); () }
+    original2.onClose { () =>  isClosed.mutate(_ + 1); ()  }
     val zipped = Closeable.zip(original1, original2)
-    zipped.onClose { isClosed.mutate(_ + 1) }
+    zipped.onClose { () =>  isClosed.mutate(_ + 1)  }
 
     zipped.close()
 
@@ -427,11 +427,11 @@ class CloseableTransformersSpec extends munit.FunSuite {
   test("In a zipped stream, closing the original ones closes the transformed ones too") {
     val isClosed = Signal(0)
     val original1 = GeneratorStream.heartbeat(HeartBeatMs)
-    original1.onClose {isClosed.mutate(_ + 1)}
+    original1.onClose { () => isClosed.mutate(_ + 1) }
     val original2 = GeneratorStream.heartbeat((HeartBeatMs.toMillis * 2).millis)
-    original2.onClose {isClosed.mutate(_ + 1)}
+    original2.onClose { () => isClosed.mutate(_ + 1) }
     val zipped = Closeable.zip(original1, original2)
-    zipped.onClose {isClosed.mutate(_ + 1)}
+    zipped.onClose { () => isClosed.mutate(_ + 1) }
 
     original1.close()
 
@@ -490,7 +490,7 @@ class CloseableTransformersSpec extends munit.FunSuite {
     }
 
     val isClosed = Signal(false)
-    mapped.onClose { isClosed ! true }
+    mapped.onClose { () =>  isClosed ! true  }
 
     mapped.close()
     waitFor(isClosed, true)
@@ -529,7 +529,7 @@ class CloseableTransformersSpec extends munit.FunSuite {
     }
 
     val isClosed = Signal(false)
-    mapped.onClose { isClosed ! true }
+    mapped.onClose { () =>  isClosed ! true  }
 
     mapped.close()
     waitFor(isClosed, true)
@@ -576,7 +576,7 @@ class CloseableTransformersSpec extends munit.FunSuite {
     }
 
     val isClosed = Signal(false)
-    mapped.onClose { isClosed ! true }
+    mapped.onClose { () =>  isClosed ! true  }
 
     mapped.close()
     waitFor(isClosed, true)
@@ -640,7 +640,7 @@ class CloseableTransformersSpec extends munit.FunSuite {
     }
 
     val isClosed = Signal(false)
-    mapped.onClose { isClosed ! true }
+    mapped.onClose { () =>  isClosed ! true  }
 
     mapped.close()
     waitFor(isClosed, true)
@@ -931,7 +931,7 @@ class CloseableTransformersSpec extends munit.FunSuite {
     val dropped = Closeable.drop(original, 10)
 
     val isClosed = Signal(false)
-    dropped.onClose { isClosed ! true }
+    dropped.onClose { () =>  isClosed ! true  }
 
     dropped.close()
     waitFor(isClosed, true)
@@ -1006,7 +1006,7 @@ class CloseableTransformersSpec extends munit.FunSuite {
     val dropped = Closeable.dropWhile(original, _ < 10)
 
     val isClosed = Signal(false)
-    dropped.onClose { isClosed ! true }
+    dropped.onClose { () =>  isClosed ! true  }
 
     dropped.close()
     waitFor(isClosed, true)

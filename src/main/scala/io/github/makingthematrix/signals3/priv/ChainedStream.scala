@@ -10,7 +10,7 @@ final private[signals3] class ChainedStream[E, W <: E](first: FiniteStream[E], s
   override protected[signals3] def onWire(): Unit =
     if (!first.isClosed) {
       first.subscribe(this)
-      first.onClose {
+      first.onClose { () =>
         second.subscribe(this)
         first.unsubscribe(this)
       }

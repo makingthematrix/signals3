@@ -1,6 +1,8 @@
 package io.github.makingthematrix.signals3.priv
 
 import io.github.makingthematrix.signals3.Behaviors
+import io.github.makingthematrix.signals3.Behaviors.TF
+import io.github.makingthematrix.signals3.actors.MutableActor
 
 import scala.collection.mutable
 import scala.util.chaining.scalaUtilChainingOps
@@ -49,36 +51,49 @@ private[signals3] final class BehaviorRegistry(name: String) {
 		* Registers the given block of code in [[Behaviors]] under a newly generated
 		* id and adds that id to the registry.
 		*
-		* @param body The code to run when the lifecycle event fires.
+		* @param f The code to run when the lifecycle event fires.
 		* @return The generated id of the registered function.
 		*/
-	def add(body: => Any): String = Behaviors.registerF(() => body, s"on$name").tap { id => behs += id }
-
+	def add(f: () => Any): String = Behaviors.registerF(f, s"on$name").tap { id => behs += id }
+	
 	/**
 		* Registers the given block of code in [[Behaviors]] under a newly generated id, adds that id to
 		* the registry, and marks it as ''one-shot'': after a successful run of the event, the function
 		* is unregistered from [[Behaviors]]. A failed run keeps it, so a retry works.
 		*
-		* @param body The code to run when the lifecycle event fires.
+		* @param f The code to run when the lifecycle event fires.
 		*/
-	def addOneShot(body: => Any): Unit = {
-		val id = Behaviors.registerF(() => body, s"on$name")
+	def addOneShot(f: () => Any): Unit = {
+		val id = Behaviors.registerF(f, s"on$name")
+		behs += id
+		oneshots += id
+	}
+
+	def add[Msg, State](tf: TF[Msg, State]): String = Behaviors.registerTF(tf, s"on$name").tap { id => behs += id }
+
+	def addOneShot[Msg, State](tf: TF[Msg, State]): Unit = {
+		val id = Behaviors.registerTF(tf, s"on$name")
 		behs += id
 		oneshots += id
 	}
 
 	/**
-		* Adds the id of an already registered behavior.
+		* Adds the id of an already registered behavior. It can be the id of a plain behavior
+		* ([[Behaviors.getBeh]]) or of a total behavior which takes the actor
+		* ([[Behaviors.getTBeh]] - registered e.g. by the `TF` variants of the `on*` methods);
+		* the `run(actor)` variant applies the latter with the actor at the moment of the run.
+		* An id of any other kind can also be attached, but it will never run (it is silently skipped).
 		*
 		* @param id The id of a behavior registered in [[Behaviors]] - for example, one shared by
 		*           several objects to make them all run the same behavior.
 		* @return `true` if the id was added; `false` if there is no behavior registered under it
 		*         in [[Behaviors]].
 		*/
-	def addId(id: String): Boolean = Behaviors.getBeh(id) match {
-		case Some(_) => behs += id; true
-		case None    => false
-	}
+	def addId(id: String): Boolean =
+		if (Behaviors.isRegistered(id)) {
+			behs += id
+			true
+		} else false
 
 	/**
 		* Registers the given function in [[Behaviors]] under a newly generated
@@ -137,6 +152,24 @@ private[signals3] final class BehaviorRegistry(name: String) {
 		}
 		res
 	}
+
+	def run[Msg, State](actor: MutableActor[Msg, State]): Boolean = {
+		val res = try {
+			behs.foreach { id =>
+				val tf = Behaviors.getTBeh[Msg, State](id)
+				if (tf.isDefined) tf.foreach(_.tf(actor)) else Behaviors.getBeh(id).foreach(_.f()) 
+			}
+			true
+		} catch {
+			case t: Throwable => fails.foreach(id => Behaviors.getFail(id).foreach(_.f(t))); false
+		}
+		if (res && oneshots.nonEmpty) {
+			oneshots.foreach(Behaviors.unregister)
+			oneshots.clear()
+		}
+		res
+	}
+
 
 	/**
 		* Removes all behavior and failure ids from this registry. The functions registered in [[Behaviors]]
