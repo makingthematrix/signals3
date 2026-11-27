@@ -94,11 +94,13 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	systemStream.foreach { msg => systemMsgs.updateAndGet(_ :+ msg); updateReactiveBeat() }
 
 	/**
-		* Adds a new behavior to the actor by its id. The behavior - a partial function registered in
-		* [[Behaviors]] - is not stored here: the actor keeps only the id, and the function is retrieved
-		* from `Behaviors` at the moment a message is given to it. A behavior with the same id cannot
-		* be added twice. The new behavior is prepended to the list of existing behaviors, so it runs
-		* before them and can take over the processing of a message.
+		* Sets the partial behavior which handles the incoming messages without a behavior id.
+		* The behavior - a partial function registered in [[Behaviors]] - is not stored here:
+		* the actor keeps only the id, and the function is retrieved from `Behaviors` at the moment
+		* a message is given to it. Setting a behavior pushes its id onto the actor's behavior stack;
+		* the top of the stack is the current behavior. The previous behaviors stay on the stack -
+		* they can be returned to with [[unwindBehavior]] or invoked by their id through a message
+		* which carries one. Setting the current behavior again is a no-op.
 		*
 		* @param id The id of a behavior registered in [[Behaviors]].
 		*/
@@ -111,8 +113,13 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 			case _ => respond(p, invalidId(id))
 		}
 
+	/**
+		* Unwinds the actor's behavior stack: the current behavior is popped and the previously set
+		* one becomes current again. The bottom of the stack is the empty-id sentinel - an actor with
+		* no behavior - which cannot be unwound: unwinding it is a silent no-op.
+		*/
 	private def unwindBehavior(p: Option[Promise[SystemMsg]]): Unit = {
-		if (behaviorStack.nonEmpty) behaviorStack.pop()
+		if (currentBehavior.nonEmpty) behaviorStack.pop()
 		respond(p, Done)
 	}
 
@@ -216,31 +223,31 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	}
 
 	private def addOnBeat(tbehId: String, p: Option[Promise[SystemMsg]]): Unit = {
-		if (isClosed) ActorIsClosed
+		if (isClosed) respond(p, ActorIsClosed[SystemMsg])
 		else if (onBeat(tbehId)) respond(p, Done)
 		else respond(p, invalidId(tbehId))
 	}
 
 	private def addOnInit(behId: String, p: Option[Promise[SystemMsg]]): Unit = {
-		if (isInitialized) ActorIsInit
+		if (isInitialized) respond(p, ActorIsInit[SystemMsg])
 		else if (onInit(behId)) respond(p, Done)
 		else respond(p, invalidId(behId))
 	}
 
 	private def addOnPause(behId: String, p: Option[Promise[SystemMsg]]): Unit = {
-		if (isClosed) ActorIsClosed
+		if (isClosed) respond(p, ActorIsClosed[SystemMsg])
 		else if (onPause(behId)) respond(p, Done)
 		else respond(p, invalidId(behId))
 	}
 
 	private def addOnUnpause(behId: String, p: Option[Promise[SystemMsg]]): Unit = {
-		if (isClosed) ActorIsClosed
+		if (isClosed) respond(p, ActorIsClosed[SystemMsg])
 		else if (onUnpause(behId)) respond(p, Done)
 		else respond(p, invalidId(behId))
 	}
 
 	private def addOnClose(behId: String, p: Option[Promise[SystemMsg]]): Unit = {
-		if (isClosed) ActorIsClosed
+		if (isClosed) respond(p, ActorIsClosed[SystemMsg])
 		else if (onClose(behId)) respond(p, Done)
 		else respond(p, invalidId(behId))
 	}
