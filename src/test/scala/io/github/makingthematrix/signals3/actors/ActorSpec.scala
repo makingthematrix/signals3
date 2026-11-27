@@ -316,6 +316,24 @@ class ActorSpec extends FunSuite{
 		close(actor)
 	}
 
+	test("a composite behavior drives the actor through its id") {
+		val pfA: PF[String, Int] = { case ("a", _) => Some("A:a") }
+		val pfB: PF[String, Int] = { case ("b", _) => Some("B:b") }
+		PBeh.or("spec-actor-composite", "ac-a" -> pfA, "ac-b" -> pfB)
+		val actor = ActorBuilder[String, Int](0).setBehavior("spec-actor-composite").build()
+
+		assertEquals(resultCF(actor ? "a"), "A:a")
+		assertEquals(resultCF(actor ? "b"), "B:b")
+		close(actor)
+
+		// an "and" composite stays partial: a message neither behavior handles ends with a failed ask, not a crash
+		val pfC: PF[String, Int] = { case ("c", _) => Some("C:c") }
+		PBeh.and("spec-actor-composite-and", "ac-c" -> pfC, "ac-d" -> pfB)
+		val actor2 = ActorBuilder[String, Int](0).setBehavior("spec-actor-composite-and").build()
+		assert(tryResultCF(actor2 ? "z").isFailure, "a message nobody handles should end up unhandled")
+		close(actor2)
+	}
+
 	// ==================== Edge Cases ====================
 
 	test("Actor closed while messages in-flight") {

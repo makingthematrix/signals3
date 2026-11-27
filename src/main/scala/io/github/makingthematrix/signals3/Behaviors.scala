@@ -75,10 +75,36 @@ object Behaviors {
 
 	object Beh {
 		def unapply(id: String): Option[Beh] = getBeh(id)
+
+		def register(behId: String, f: () => Any): Option[Beh] =
+			if (behId.nonEmpty) {
+				if (registerBeh(behId -> f)) Some(behId -> f)
+				else {
+					println(s"Beh.register, Beh with id $behId is already registered")
+					None
+				}
+			} else Some(registerF(f) -> f)
+
+		inline def register[Msg, State](f: () => Any): Beh = register("", f).get
+
+		inline def unregister(id: String): Boolean = behs.remove(id).isDefined
 	}
 
 	object Fail {
 		def unapply(id: String): Option[Fail] = getFail(id)
+
+		def register(failId: String, t: Throwable => Any): Option[Fail] =
+			if (failId.nonEmpty) {
+				if (registerFail(failId -> t)) Some(failId -> t)
+				else {
+					println(s"Fail.register, Fail with id $failId is already registered")
+					None
+				}
+			} else Some(registerFailCase(t) -> t)
+
+		inline def register[Msg, State](t: Throwable => Any): Fail = register("", t).get
+
+		inline def unregister(id: String): Boolean = fails.remove(id).isDefined
 	}
 	/**
 		* The type of a custom behavior: a partial function that takes a message and an actor and returns an optional response.
@@ -88,8 +114,8 @@ object Behaviors {
 	/**
 		* A ''partial'' behavior: a partial function (`PF`) paired with a unique id.
 		*
-		* A partial behavior tries to process an incoming message, but it may decide that it doesn't handle it,
-		* in which case the next behavior in the actor's behavior list is given a chance.
+		* A partial behavior tries to process an incoming message. If not successful, the message is either ignored
+		* or an `unhandledMsg` error is being returned to the sender.
 		*/
 	type PBeh[Msg, State] = (id: String, pf: PF[Msg, State])
 
@@ -126,14 +152,14 @@ object Behaviors {
 	/**
 		* Registers a new partial behavior in the library.
 		*
-		* @param beh The partial behavior to register: a tuple of a unique id and a partial function.
+		* @param pbeh The partial behavior to register: a tuple of a unique id and a partial function.
 		* @return `true` if the behavior was registered, `false` if this id is already taken by any behavior
 		*         of any kind (the existing one is kept).
 		*/
-	def registerPBeh[Msg, State](beh: PBeh[Msg, State]): Boolean =
-		if (isRegistered(beh.id)) false
+	def registerPBeh[Msg, State](pbeh: PBeh[Msg, State]): Boolean =
+		if (isRegistered(pbeh.id)) false
 		else {
-			pbehs += beh.id -> beh.pf.asInstanceOf[AnyPF]
+			pbehs += pbeh.id -> pbeh.pf.asInstanceOf[AnyPF]
 			true
 		}
 		
@@ -183,6 +209,62 @@ object Behaviors {
 
 	object PBeh {
 		def unapply[Msg, State](id: String): Option[PBeh[Msg, State]] = getPBeh(id)
+
+		extension [Msg, State] (pbeh: PBeh[Msg, State]) {
+			inline infix def orElse(otherPBeh: PBeh[Msg, State]): PBeh[Msg, State] = PBeh.or(pbeh, otherPBeh)
+			inline infix def andThen(otherPBeh: PBeh[Msg, State]): PBeh[Msg, State] = PBeh.and(pbeh, otherPBeh)
+			inline def isDefinedAt(msg: Msg, actor: MutableActor[Msg, State]): Boolean = pbeh.pf.isDefinedAt(msg, actor)
+		}
+
+		inline def or[Msg, State](newPBehId: String, pbeh1: PBeh[Msg, State], pbehs: PBeh[Msg, State]*): Option[PBeh[Msg, State]] =
+			register(newPBehId, (pbeh1 :: pbehs.toList).map(_.pf).reduce(_ orElse _))
+
+		inline def or[Msg, State](pbeh1: PBeh[Msg, State], pbehs: PBeh[Msg, State]*): PBeh[Msg, State] = or("", pbeh1, pbehs*).get
+
+		def orElseId[Msg,State](newPBehId: String, pbehId1: String, pbehIds: String*): Option[PBeh[Msg, State]] = {
+			val validPBehs = getValidPBehs[Msg, State](pbehId1, pbehIds*)
+			if (validPBehs.nonEmpty) or(newPBehId, validPBehs.head, validPBehs.tail*) else None
+		}
+
+		def and[Msg, State](newPBehId: String, pbeh1: PBeh[Msg, State], pbehs: PBeh[Msg, State]*): Option[PBeh[Msg, State]] =  {
+			val newPf: PF[Msg, State] = (pbeh1 :: pbehs.toList).map(_.pf).reduce { case (pf1, pf2) =>
+				val pf: PF[Msg, State] = { case (msg, actor) if pf1.isDefinedAt(msg, actor) || pf2.isDefinedAt(msg, actor) =>
+					val rsp1 = if (pf1.isDefinedAt(msg, actor)) pf1(msg, actor) else None
+					val rsp2 = if (pf2.isDefinedAt(msg, actor)) pf2(msg, actor) else None
+					rsp2.orElse(rsp1)
+				}
+				pf
+			}
+			register(newPBehId, newPf)
+		}
+
+		inline def and[Msg, State](pbeh1: PBeh[Msg, State], pbehs: PBeh[Msg, State]*): PBeh[Msg, State] = and("", pbeh1, pbehs*).get
+
+		def andThenId[Msg, State](newPBehId: String, pbehId1: String, pbehIds: String*): Option[PBeh[Msg, State]] = {
+			val validPBehs = getValidPBehs[Msg, State](pbehId1, pbehIds*)
+			if (validPBehs.nonEmpty) and(newPBehId, validPBehs.head, validPBehs.tail *) else None
+		}
+
+		private def getValidPBehs[Msg, State](pbehId1: String, pbehIds: String*): List[PBeh[Msg, State]] = {
+			val (validIds, invalidIds) = (pbehId1 :: pbehIds.toList).partition(pbehs.contains)
+			if (invalidIds.nonEmpty) {
+				println(s"PBeh.getvalidPBeh, invalid PBeh ids: ${invalidIds.mkString(", ")}")
+				Nil
+			} else validIds.flatMap(getPBeh[Msg, State])
+		}
+
+		def register[Msg, State](pbehId: String, pf: PF[Msg, State]): Option[PBeh[Msg, State]] =
+			if (pbehId.nonEmpty) {
+				if (registerPBeh(pbehId -> pf)) Some(pbehId -> pf)
+				else {
+					println(s"PBeh.register, PBeh with id $pbehId is already registered")
+					None
+				}
+			} else Some(registerPF(pf) -> pf)
+
+		inline def register[Msg,State](pf: PF[Msg, State]): PBeh[Msg, State] = register("", pf).get
+
+		inline def unregister(id: String): Boolean = pbehs.remove(id).isDefined
 	}
 	
 	/**
@@ -200,6 +282,19 @@ object Behaviors {
 		
 	object TBeh {
 		def unapply[Msg, State](id: String): Option[TBeh[Msg, State]] = getTBeh(id)
+
+		def register[Msg, State](tbehId: String, tf: TF[Msg, State]): Option[TBeh[Msg, State]] =
+			if (tbehId.nonEmpty) {
+				if (registerTBeh(tbehId -> tf)) Some(tbehId -> tf)
+				else {
+					println(s"TBeh.register, TBeh with id $tbehId is already registered")
+					None
+				}
+			} else Some(registerTF(tf) -> tf)
+
+		inline def register[Msg, State](tf: TF[Msg, State]): TBeh[Msg, State] = register("", tf).get
+
+		inline def unregister(id: String): Boolean = tbehs.remove(id).isDefined
 	}
 	
 	def reset(): Unit = {

@@ -504,10 +504,12 @@ final class ActorBuilder[Msg, State] (val id: String,
 	  }
     validInits.foreach(actor.onInit)
 
-	  if (Behaviors.isRegistered(pbehId)) actor.setBehavior(pbehId)
-	  else {
-      println(s"Invalid behavior id found when building Actor ${id}: $pbehId")
-    }
+	  if (pbehId.nonEmpty) {
+		  if (Behaviors.isRegistered(pbehId)) actor.setBehavior(pbehId)
+		  else {
+			  println(s"Invalid behavior id found when building Actor ${id}: $pbehId")
+		  }
+	  }
 
 	  val (validBeats, invalidBeats) = onBeatIds.partition(Behaviors.isRegistered)
 	  if (invalidBeats.nonEmpty) {
