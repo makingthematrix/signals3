@@ -239,8 +239,7 @@ class ActorSystemRemoteSpec extends FunSuite {
     val multi = ActorBuilder[String, Int](0)
 	    .withSystem(b)
       .withId("multiB")
-      .setBehavior("upper")
-	    .setBehavior("lower") // lower should override upper
+      .setBehavior("lower")
       .build()
 
     awaitRef(b, "multiB")

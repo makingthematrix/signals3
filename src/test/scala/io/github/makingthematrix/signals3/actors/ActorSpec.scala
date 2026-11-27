@@ -261,6 +261,61 @@ class ActorSpec extends FunSuite{
 		close(actor)
 	}
 
+	// ==================== Behavior Stack ====================
+
+	test("SetBehavior pushes and UnwindBehavior pops the behavior stack") {
+		val actor = create[String] { case (msg, _) => Some(s"Outer: $msg") }
+		val inner: PF[String, Unit] = { case (msg, _) => Some(s"Inner: $msg") }
+		Behaviors.registerPBeh("stack_inner" -> inner)
+
+		assertEquals(resultCF(actor ? "1"), "Outer: 1")
+
+		expectSuccessCF(actor ? SetBehavior("stack_inner"), Done)
+		assertEquals(resultCF(actor ? "2"), "Inner: 2")
+
+		expectSuccessCF(actor ? UnwindBehavior, Done)
+		assertEquals(resultCF(actor ? "3"), "Outer: 3")
+
+		close(actor)
+	}
+
+	test("SetBehavior with the id of the current behavior is a no-op") {
+		val outer: PF[String, Unit] = { case (msg, _) => Some(s"Outer: $msg") }
+		Behaviors.registerPBeh("noop_outer" -> outer)
+		val actor = ActorBuilder[String]().setBehavior("noop_outer").build()
+
+		// setting the current behavior again succeeds without pushing it on the stack, so the single
+		// unwind below pops the builder's behavior back to the empty-id sentinel - if the no-op pushed
+		// the id instead, the behavior would be restored and the message would be handled
+		expectSuccessCF(actor ? SetBehavior("noop_outer"), Done)
+		expectSuccessCF(actor ? UnwindBehavior, Done)
+		assert(tryResultCF(actor ? "1").isFailure, "setting the current behavior again should not push it on the stack")
+
+		close(actor)
+	}
+
+	test("SetBehavior with an unknown id fails with InvalidId") {
+		val actor = create[Int] { case _ => None }
+		expectFailureCF(actor ? SetBehavior("no_such_behavior"), Actor.InvalidIdException("no_such_behavior"))
+		close(actor)
+	}
+
+	test("UnwindBehavior below the last behavior is a silent no-op") {
+		val outer: PF[String, Unit] = { case (msg, _) => Some(s"Outer: $msg") }
+		Behaviors.registerPBeh("unwind_outer" -> outer)
+		val actor = ActorBuilder[String]().setBehavior("unwind_outer").build()
+
+		// unwinding the only behavior leaves the empty-id sentinel - an actor with no current behavior
+		expectSuccessCF(actor ? UnwindBehavior, Done)
+		assert(tryResultCF(actor ? "1").isFailure, "a message without a behavior id should not be handled")
+
+		// unwinding the sentinel itself is a silent no-op, and the actor remains usable by behavior id
+		expectSuccessCF(actor ? UnwindBehavior, Done)
+		assertEquals(resultCF(actor ? ("unwind_outer" -> "2")), "Outer: 2")
+
+		close(actor)
+	}
+
 	// ==================== Edge Cases ====================
 
 	test("Actor closed while messages in-flight") {

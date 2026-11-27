@@ -269,8 +269,8 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	private def onMessage(msg: Msg, bId: String): Try[Option[Msg]] = {
 		// The functions are retrieved from Behaviors by the stored ids at the moment of the processing;
 		// an id whose function is no longer registered is a silent no-op (the message ends up unhandled).
-		// A named behavior (bId) must be attached to this actor; the unnamed dispatch goes through
-		// the list of attached behaviors and takes the first one which handles the message.
+		// The unnamed dispatch goes to the current behavior - the top of the behavior stack. A message
+		// with a behavior id is routed to the behavior with that id directly, even if it is not the current one.
 		val pfOpt: Option[PF[Msg, State]] =
 			Behaviors.getPBeh[Msg, State](if (bId.isEmpty) currentBehavior else bId).map(_.pf)
 		pfOpt match {
@@ -311,9 +311,9 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	}
 
 	// Processes regular messages; should NOT be called directly - always from `processMessages`
-	// Note: A message may result in altering the list of behaviors, but the new behaviors will be used only in the next processing
-	// This is actually consistent with sending a system message for altering the list of behaviors, as system messages are
-	// processed before regular ones, so at the beginning of the next processing the lsit will be changed and that new list
+	// Note: A message may result in altering the behavior stack, but the new current behavior will be used only in the next processing.
+	// This is actually consistent with sending a system message for altering the behavior stack, as system messages are
+	// processed before regular ones, so at the beginning of the next processing the stack will be changed and its new top
 	// will be used for that processing of regular messages.
 	private def processRegularMessages(): Unit = {
 		val entries = flushMsgEntries()

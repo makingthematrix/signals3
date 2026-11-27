@@ -14,8 +14,10 @@ import scala.reflect.{ClassTag, TypeTest}
 	* - `Close`: the actor should terminate its operations.
 	* - `Done`: a response message confirming that the operation was successful.
 	* - `InvalidId`: a response message indicating that the provided behavior ID is invalid, usually combined with `CloseableFuture.failed`
-	* - `AddBehavior(pbehId)` - adds the partial behavior registered under this id to the actor
-	* - `RemoveBehavior(pbehId)` - removes the partial behavior from the actor
+	* - `SetBehavior(pbehId)` - pushes the partial behavior registered under this id onto the actor's behavior stack,
+	*   making it the current behavior; setting the current behavior again is a no-op
+	* - `UnwindBehavior` - pops the actor's behavior stack, so the previously set behavior becomes current again;
+	*   unwinding below the last behavior is a silent no-op
 	* - `AddOnBeat(tbehId)` - adds the total behavior registered under this id to the actor's heartbeat
 	* - `RemoveOnBeat(tbehId)` - removes the heartbeat behavior with this id from the actor, if attached
 	* - `ResetOnBeat` - removes all the actor's heartbeat behaviors
@@ -29,7 +31,7 @@ import scala.reflect.{ClassTag, TypeTest}
 	* - `ResetOnInit`, `ResetOnPause`, `ResetOnUnpause`, `ResetOnClose` - detach all the ids of the
 	*   given lifecycle event; the functions stay registered in the `Behaviors` library
 	* - `Spawn(...)` - the actor should spawn a new sub-actor with the specified parameters: id, initial
-	*   state, behavior ids, heartbeat, and the ids of the behaviors for all five lifecycle events
+	*   state, the id of its behavior, heartbeat, and the ids of the behaviors for all five lifecycle events
 	*   (`onInit`, `onBeat`, `onPause`, `onUnpause`, `onClose`).
 	* - `NewChild(child)` - the response for `Spawn` with the new actor's JVM reference (todo: change to ActorRef?)
 	* - `ActorClosed(actorId)` - informs that another actor has closed

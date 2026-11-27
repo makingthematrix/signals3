@@ -97,7 +97,7 @@ object Utils {
 			.build()
 	}
 
-	/** Builds an actor with named behaviors; the first behavior in the list is the first one tried. */
+	/** Builds an actor with named behaviors; the last behavior in the list becomes the current behavior - the rest are reachable only by their ids. */
 	def createWithBehaviors[Msg](behaviors: (String, PF[Msg, Unit])*)
 	                            (using ExecutionContext): Actor[Msg, Unit] & Closeable & Pausable = {
 		behaviors.foreach(beh => assert(Behaviors.registerPBeh(beh)))

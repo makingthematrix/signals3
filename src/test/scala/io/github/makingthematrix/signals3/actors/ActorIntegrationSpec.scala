@@ -58,7 +58,7 @@ class ActorIntegrationSpec extends FunSuite {
     close(parent)
   }
 
-  test("Spawn with explicit behaviors overrides inheritance") {
+  test("Spawn with an explicit behavior overrides inheritance") {
     val parent = create[String] { case (msg, _) => Some(s"Parent: $msg") }
     val childBeh: PF[String, Unit] = { case (msg, _) => Some(s"Child: $msg") }
 	  Behaviors.registerPBeh("c" -> childBeh)
