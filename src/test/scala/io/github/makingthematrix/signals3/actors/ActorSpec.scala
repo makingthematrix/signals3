@@ -219,53 +219,44 @@ class ActorSpec extends FunSuite{
 
 	// ==================== Behavior ID Message Routing ====================
 
-	test("ask with behavior ID routes message to specific behavior") {
+	test("ask with behavior ID routes message to a non-current behavior") {
 		val actor = create[String] { case (msg, _) => Some(s"Default: $msg") }
 
-		// Add a special behavior
+		// "ask_special_42" is registered in Behaviors but never attached to this actor;
+		// a named ask resolves the id directly, even though it is not the current behavior
 		val behavior: PF[String, Unit] = {case ("42", _) => Some("Special: 42")}
-		Behaviors.registerPBeh("special_42" -> behavior)
-		val cfAdd = actor ? SystemMsg.SetBehavior("special_42")
-		awaitCF(cfAdd)
+		Behaviors.registerPBeh("ask_special_42" -> behavior)
 
-		// Message 42 should be handled by the special behavior when using its ID
-		val response = actor ? ("special_42" -> "42")
+		// If the routing was broken and the message fell through to the current behavior, we would get "Default: 42"
+		val response = actor ? ("ask_special_42" -> "42")
 		assertEquals(resultCF(response), "Special: 42")
 
 		close(actor)
 	}
 
-	test("bang with behavior ID routes message to specific behavior") {
+	test("bang with behavior ID routes message to a non-current behavior") {
 		val received = Signal(false)
 		val receivedSpecial = Signal(false)
 
-		val actor = create[Int] { case _ => None }
+		// The current behavior is the one set in the builder
+		val actor = create[Int] { case _ => received ! true; None }
 
-		// Add behaviors via system messages
-		val defaultBehavior: PF[Int, Unit] = {case _ => received ! true; None}
+		// "bang_special" is registered in Behaviors but never attached to this actor;
+		// a named bang resolves the id directly, even though it is not the current behavior
 		val specialBehavior: PF[Int, Unit] = {case _ => receivedSpecial ! true; None}
+		Behaviors.registerPBeh("bang_special" -> specialBehavior)
 
-		Behaviors.registerPBeh("default" -> defaultBehavior)
-		Behaviors.registerPBeh("special" -> specialBehavior)
-
-		awaitCF(actor ? SystemMsg.SetBehavior("default"))
-		awaitCF(actor ? SystemMsg.SetBehavior("special"))
-
-		// Send via bang without behavior ID - should use normal processing
+		// An unnamed bang goes to the current behavior only
 		actor ! 1
-		waitFor(received, true)
+		assert(waitFor(received, true), "an unnamed bang should go to the current behavior")
+		assert(!receivedSpecial.currentValue.getOrElse(false), "the special behavior should not be triggered by an unnamed bang")
 
-		// Reset and send with behavior ID
 		received ! false
-		receivedSpecial ! false
 
-		// Send via bang with specific behavior ID
-		actor.tell(2, "special")
-		waitFor(receivedSpecial, true)
-
-		// The default behavior should NOT have been triggered
-		Thread.sleep(100)
-		assert(!received.currentValue.getOrElse(false), "Default behavior should not be triggered when using behavior ID")
+		// A named bang routes to the behavior with the given ID, even though it is not the current one
+		actor.tell(2, "bang_special")
+		assert(waitFor(receivedSpecial, true), "a named bang should route to the behavior with the given ID")
+		assert(!received.currentValue.getOrElse(false), "the current behavior should not be triggered by a named bang")
 
 		close(actor)
 	}
