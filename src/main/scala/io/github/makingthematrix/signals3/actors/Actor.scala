@@ -241,7 +241,7 @@ object Actor {
 	def apply[Msg, State](state: State, pf: PF[Msg, State], beat: HeartBeatStrategy)
 	                          (using ExecutionContext): Actor[Msg, State] =
 		new ActorImpl(IdGenerator.generate(), state, beat).tap { actor =>
-			actor.addBehavior(Behaviors.registerPF(pf))
+			actor.setBehavior(Behaviors.registerPF(pf))
 			actor.initialize()
 		}
 

@@ -10,988 +10,925 @@ import scala.concurrent.TimeoutException
 import scala.concurrent.duration.*
 import scala.util.Try
 
-class ActorSpec extends FunSuite {
-  import Utils.*
-  import Utils.MyMsg.*
-
-  private val eventContext = EventContext()
-  import Threading.defaultContext
-
-  given Timeout: FiniteDuration = 1.seconds
-
-  override def beforeEach(context: BeforeEach): Unit = {
-	  eventContext.start()
-	  Behaviors.reset()
-  }
-
-  override def afterEach(context: AfterEach): Unit = {
-	  eventContext.stop()
-	  Behaviors.reset()
-  }
-
-  test("Request-response message sending") {
-    val actor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Default: $msg")) })
-    val response = actor ? MyInt(42)
-    assertEquals(resultCF(response), MyStr("Default: 42"))
-    close(actor)
-  }
-
-  test("Fire-and-forget message sending") {
-    val received = Signal(false)
-    val actor = create[Int, Boolean](false, { case (_, actor) =>
-      actor.state = true
-      received ! true
-      None
-    })
-    actor ! 1
-    waitFor(received, true)
-    assert(actor.state)
-    close(actor)
-  }
-
-  test("Concurrent message processing") {
-    val actor = create[Int, Int](0, { case (msg, actor) =>
-      actor.state += msg
-      Some(actor.state)
-    })
-
-    waitFor(actor.isInitializedSignal, true)
-
-    val futures: Seq[CloseableFuture[Int]] = (1 to 10).map { actor ? _ }
-    val results: CloseableFuture[Iterable[Int]] = CloseableFuture.sequence(futures)
-    val finalResult: Int = resultCF(results)(using 2.seconds).max
-    assertEquals(finalResult, 55)
-    close(actor)
-  }
-
-  // ==================== Custom Heartbeat Strategies ====================
-
-  test("Reactive heartbeat idles at longMs and reacts at shortMs") {
-    val beats = Signal(0)
-    val actor = ActorBuilder[Unit, Int](0)
-      .addBehaviorPF { case _ => None }
-      .withHeartbeat(HeartBeatStrategy.Reactive(20.millis, 200.millis))
-      .addOnBeatTF { _ => beats.mutate(_ + 1) }
-      .build()
-    waitFor(actor.isInitializedSignal, true)
-    Thread.sleep(200L) // warm-up: let any initial beat burst settle
-    beats ! 0
-    Thread.sleep(600L)
-    // an idle Reactive actor beats at the long cadence (~200ms); a reverted inversion
-    // would busy-beat at shortMs (~20ms) producing many more beats
-    val count = beats.currentValue.getOrElse(0)
-    assert(count >= 1, s"idle Reactive produced no beats in 600ms")
-    assert(count <= 8, s"idle Reactive produced $count beats in 600ms; expected the long (200ms) cadence")
-    close(actor)
-  }
-
-  test("CustomLinear heartbeat calls the interval function for each beat") {
-    val calls = Signal(0)
-    val beats = Signal(0)
-    val actor = ActorBuilder[Unit, Int](0)
-      .addBehaviorPF { case _ => None }
-      .withHeartbeat(HeartBeatStrategy.CustomLinear { () => calls.mutate(_ + 1); 20.millis })
-      .addOnBeatTF { _ => beats.mutate(_ + 1) }
-      .build()
-    waitFor(actor.isInitializedSignal, true)
-    assert(waitFor(beats.map(_ >= 3), true))
-    assert(waitFor(calls.map(_ >= 3), true))
-    close(actor)
-  }
-
-  test("CustomLinear can change the interval dynamically at runtime") {
-    val beats = Signal(0)
-    @volatile var fast = true
-    val actor = ActorBuilder[Unit, Int](0)
-      .addBehaviorPF { case _ => None }
-      .withHeartbeat(HeartBeatStrategy.CustomLinear { () => if fast then 20.millis else 300.millis })
-      .addOnBeatTF { _ => beats.mutate(_ + 1) }
-      .build()
-    waitFor(actor.isInitializedSignal, true)
-    assert(waitFor(beats.map(_ >= 3), true))
-    fast = false
-    val countWhenSlowed = beats.currentValue.getOrElse(0)
-    Thread.sleep(400L)
-    val countAfter = beats.currentValue.getOrElse(0)
-    val slowWindowBeats = countAfter - countWhenSlowed
-    // if the change was not picked up, the fast cadence would add ~20 beats in 400ms
-    assert(slowWindowBeats <= 3, s"CustomLinear added $slowWindowBeats beats in 400ms after slowing down the interval")
-    assert(slowWindowBeats >= 1, s"CustomLinear stopped beating after the interval change")
-    close(actor)
-  }
-
-  test("a short heartbeat timeout fails a long-running behavior") {
-    val slowBehavior: PF[Int, Unit] = { case (msg, _) => Thread.sleep(500L); Some(msg + 1) }
-    val shortTimeout = ActorBuilder[Int]()
-      .addBehaviorPF(slowBehavior)
-      .withHeartbeat(HeartBeatStrategy.CustomLinear(() => 20.millis, 100.millis))
-      .build()
-    intercept[TimeoutException](resultCF(shortTimeout ? 1))
-    close(shortTimeout)
-
-    val longTimeout = ActorBuilder[Int]()
-      .addBehaviorPF(slowBehavior)
-      .withHeartbeat(HeartBeatStrategy.CustomLinear(() => 20.millis, 1500.millis))
-      .build()
-    val response = resultCF(longTimeout ? 1)(using 2.seconds)
-    assertEquals(response, 2)
-    close(longTimeout)
-  }
-
-  test("CustomReactive interval receives the current hasMsg state") {
-    val flags = Signal(Seq.empty[Boolean])
-    val actor = ActorBuilder[Int, Int](0)
-      .addBehaviorPF { case (msg, _) => Some(msg + 1) }
-      .withHeartbeat(HeartBeatStrategy.CustomReactive { hasMsg =>
-        flags.mutate(_ :+ hasMsg)
-        20.millis
-      })
-      .build()
-    waitFor(actor.isInitializedSignal, true)
-    assertEquals(resultCF(actor ? 1), 2)
-    assert(waitFor(flags.map(_.contains(false)), true)) // idle beats report an empty queue
-    assert(waitFor(flags.map(_.contains(true)), true))  // an incoming message reports a non-empty queue
-    close(actor)
-  }
-
-  test("CustomReactive adapts its cadence to hasMsg") {
-    val beats = Signal(0)
-    val actor = ActorBuilder[Int, Int](0)
-      .addBehaviorPF { case (msg, _) => Some(msg + 1) }
-      .withHeartbeat(HeartBeatStrategy.CustomReactive { hasMsg => if hasMsg then 20.millis else 250.millis })
-      .addOnBeatTF { _ => beats.mutate(_ + 1) }
-      .build()
-    waitFor(actor.isInitializedSignal, true)
-    Thread.sleep(200L) // warm-up: let any initial beat burst settle
-    beats ! 0
-    Thread.sleep(600L)
-    val idleBeats = beats.currentValue.getOrElse(0)
-    assert(idleBeats <= 8, s"idle CustomReactive produced $idleBeats beats in 600ms; expected the slow (250ms) cadence")
-    // a message must be answered on the fast cadence, well within the idle interval
-    val fastResponse = resultCF(actor ? 1)(using 300.millis)
-    assertEquals(fastResponse, 2)
-    close(actor)
-  }
-
-  test("CustomReactive with zero interval forces an immediate beat") {
-    val actor = ActorBuilder[Int, Int](0)
-      .addBehaviorPF { case (msg, _) => Some(msg + 1) }
-      .withHeartbeat(HeartBeatStrategy.CustomReactive { hasMsg => if hasMsg then 0.millis else 200.millis })
-      .build()
-    waitFor(actor.isInitializedSignal, true)
-    Thread.sleep(150L) // settle on the slow idle cadence
-    val start = System.nanoTime()
-    val forcedResponse = resultCF(actor ? 1)(using 300.millis)
-    assertEquals(forcedResponse, 2)
-    val elapsedMs = (System.nanoTime() - start) / 1000000L
-    // the zero interval forces a beat at once; waiting for the next scheduled 200ms beat would take much longer
-    assert(elapsedMs < 150L, s"the message took $elapsedMs ms; expected an immediate forced beat")
-    close(actor)
-  }
-
-  test("Spawn with a custom heartbeat strategy") {
-    val beats = Signal(0)
-    val parent = create[Unit, Int](0, { case _ => None })
-    val child = spawn[Unit, Int](parent) {
-      SystemMsg.Spawn(actorId = "custom-beat-child", state = Some(0),
-        heartbeat = Some(HeartBeatStrategy.CustomLinear(() => 20.millis)),
-        onBeat = Set(Behaviors.registerTF[Unit, Int] { _ => beats.mutate(_ + 1) }))
-    }
-    assert(waitFor(beats.map(_ >= 3), true))
-    close(child)
-    close(parent)
-  }
-
-  test("Actor.apply accepts a custom heartbeat strategy") {
-    val pf: PF[Int, Unit] = { case (msg: Int, _) => Some(msg + 1) }
-    val actor = Actor(pf, HeartBeatStrategy.CustomLinear(() => 20.millis))
-      .asInstanceOf[Actor[Int, Unit] & Closeable]
-    assertEquals(resultCF(actor ? 1), 2)
-    close(actor)
-  }
-
-  // ==================== Behavior Modification ====================
-
-  test("attaching the same behavior id twice is rejected with InvalidId") {
-    val actor = create[String] { case (msg, _) => Some(s"Default: $msg") }
-    val behavior: PF[String, Unit] = { case ("42", _) => Some("Special: 42") }
-    assert(Behaviors.registerPBeh("spec-duplicate-attach" -> behavior))
-
-    expectSuccessCF(actor ? SystemMsg.AddBehavior("spec-duplicate-attach"), Done)
-    // attaching the same id again is rejected - the actor keeps the original
-    expectFailureCF(actor ? SystemMsg.AddBehavior("spec-duplicate-attach"),
-      Actor.InvalidIdException("spec-duplicate-attach"))
-
-    // the originally attached behavior still handles the message
-    assertEquals(resultCF(actor ? "42"), "Special: 42")
-    close(actor)
-  }
-
-  // ==================== Behavior ID Message Routing ====================
-
-  test("ask with behavior ID routes message to specific behavior") {
-    val actor = create[String]{ case (msg, _) => Some(s"Default: $msg") }
-    
-    // Add a special behavior
-    val behavior: PF[String, Unit] = { case ("42", _) => Some("Special: 42") }
-	  Behaviors.registerPBeh("special_42" -> behavior)
-    val cfAdd = actor ? SystemMsg.AddBehavior("special_42")
-    awaitCF(cfAdd)
-
-    // Message 42 should be handled by the special behavior when using its ID
-    val response = actor ? ("special_42" -> "42")
-    assertEquals(resultCF(response), "Special: 42")
-    
-    close(actor)
-  }
-
-  test("bang with behavior ID routes message to specific behavior") {
-    val received = Signal(false)
-    val receivedSpecial = Signal(false)
-    
-    val actor = create[Int]{ case _ => None }
-    
-    // Add behaviors via system messages
-    val defaultBehavior: PF[Int, Unit] = { case _ => received ! true; None }
-    val specialBehavior: PF[Int, Unit] = { case _ => receivedSpecial ! true; None }
-
-	  Behaviors.registerPBeh("default" -> defaultBehavior)
-	  Behaviors.registerPBeh("special" -> specialBehavior)
-
-    awaitCF(actor ? SystemMsg.AddBehavior("default"))
-    awaitCF(actor ? SystemMsg.AddBehavior("special"))
-    
-    // Send via bang without behavior ID - should use normal processing
-    actor ! 1
-    waitFor(received, true)
-    
-    // Reset and send with behavior ID
-    received ! false
-    receivedSpecial ! false
-    
-    // Send via bang with specific behavior ID
-    actor.tell(2, "special")
-    waitFor(receivedSpecial, true)
-    
-    // The default behavior should NOT have been triggered
-    Thread.sleep(100)
-    assert(!received.currentValue.getOrElse(false), "Default behavior should not be triggered when using behavior ID")
-    
-    close(actor)
-  }
-
-  // ==================== Edge Cases ====================
-
-  test("Actor closed while messages in-flight") {
-    val actor = create[String] { case (msg, _) =>
-      Thread.sleep(50)
-      Some(s"Processed: $msg")
-    }
-    
-    val futures = (1 to 5).map(n => actor ? n.toString)
-    actor ! SystemMsg.Close
-    waitFor(actor.isClosedSignal, true)
-
-    val res = CloseableFuture.sequence(futures)
-    tryResult(res.future)(using 2.seconds)
-  }
-
-  test("System messages with messages in queue") {
-    val received = Signal(false)
-    val actor = create[Int, Boolean](false, { case (_, actor) =>
-      actor.state = true
-      received ! true
-      None
-    })
-    
-    actor ! SystemMsg.Pause
-    waitFor(actor.isPausedSignal, true)
-    
-    actor ! 1
-    actor ! 2
-    Thread.sleep(100)
-    assert(!received.currentValue.contains(true))
-    
-    actor ! SystemMsg.Unpause
-    waitFor(actor.isPausedSignal, false)
-    waitFor(received, true)
-    assert(actor.state)
-    
-    close(actor)
-  }
-
-  // ==================== Error Handling ====================
-
-  test("Actor continues processing after behavior exception") {
-    var callCount = 0
-    val actor = create[String] { case (msg, _) =>
-      callCount += 1
-      if (msg == "1") throw new RuntimeException("Test error") else Some(s"Processed: $msg")
-    }
-    
-    intercept[RuntimeException](resultCF(actor ? "1"))
-    
-    val response2 = actor ? "2"
-    assertEquals(resultCF(response2), "Processed: 2")
-    assertEquals(callCount, 2)
-    close(actor)
-  }
-
-  // ==================== DispatchQueue Integration ====================
-
-  test("Serial dispatch queue with multiple behaviors") {
-    val behavior1: PF[String, Unit] = { case ("42", _) => Some("Special: 42") }
-    val behavior2: PF[String, Unit] = { case (msg, _) => Some(s"Default: $msg") }
-    val actor =
-      ActorBuilder[String]()
-        .addBehaviorPFs(List(behavior1, behavior2))
-        .withSerialDispatch()
-        .build()
-        .asInstanceOf[Actor[String, Unit] & Closeable]
-
-    waitForResult(actor.isInitializedSignal, true)
-
-    assertEquals(resultCF(actor ? "42"), "Special: 42")
-    assertEquals(resultCF(actor ? "1"), "Default: 1")
-    close(actor)
-  }
-
-  // ==================== System Message Behavior Management ====================
-
-  test("AddBehavior and RemoveBehavior via system messages") {
-    val actor = create[String] { case (msg, _) => Some(s"Default: $msg") }
-    
-    val behavior: PF[String, Unit] = { case ("42", _) => Some("Special: 42") }
-
-	  Behaviors.registerPBeh("testId" -> behavior)
-	  actor ! SystemMsg.AddBehavior("testId")
-	  assertEquals(resultCF(actor ? "42"), "Special: 42")
-    
-    actor ! SystemMsg.RemoveBehavior("testId")
-    assertEquals(resultCF(actor ? "42"), "Default: 42")
-    
-    close(actor)
-  }
-
-  // ==================== System Message with Response ====================
-
-  test("Pause system message with response via ?") {
-    val actor = create[Unit] { case _ => None }
-    
-    val pauseFuture = actor ? SystemMsg.Pause
-    resultCF(pauseFuture)
-    waitFor(actor.isPausedSignal, true)
-    close(actor)
-  }
-
-  test("Unpause system message with response via ?") {
-    val actor = create[Unit] { case _ => None }
-    
-    actor ! SystemMsg.Pause
-    waitFor(actor.isPausedSignal, true)
-    
-    val unpauseFuture = actor ? SystemMsg.Unpause
-    resultCF(unpauseFuture)
-    waitFor(actor.isPausedSignal, false)
-    close(actor)
-  }
-
-  // ==================== Close Response Guarantees ====================
-
-  test("Close via ? completes only after actor is closed") {
-    val actor = create[Unit] { case _ => None }
-
-    val closeFuture = actor ? SystemMsg.Close
-    
-    // The future should NOT be completed yet
-    val poll1 = Try(resultCF(closeFuture)(using 10.millis))
-    assert(poll1.isFailure) // Should timeout because actor is not closed yet
-    
-    // Wait for the close to actually complete
-    resultCF(closeFuture)(using 2.seconds)
-    
-    // Now the actor should be closed
-    waitFor(actor.isClosedSignal, true)
-  }
-
-  test("Only the first close via ? completes, the next one fails") {
-    val actor = create[Unit] { case _ => None }
-
-    waitFor(actor.isInitializedSignal, true)
-
-    val closeFuture1 = actor ? SystemMsg.Close
-    resultCF(closeFuture1)
-
-    val closeFuture2 = actor ? SystemMsg.Close
-    val res = Try(resultCF(closeFuture2)(using 1.seconds))
-    assert(res.isFailure) // should time out
-
-    waitFor(actor.isClosedSignal, true)
-  }
-
-  test("Close via ? when actor has pending messages") {
-    val received = Signal(false)
-    val actor = create[Int] { case _ => received ! true; None }
-    
-    // Send a message that will take time
-    actor ! 1
-    
-    // Close the actor - should wait for message to be processed
-    val closeFuture = actor ? SystemMsg.Close
-    
-    awaitCF(closeFuture)(using 2.seconds)
-    waitFor(actor.isClosedSignal, true)
-    
-    // The message should have been processed before close completed
-    waitFor(received, true)
-  }
-
-  test("a failed close behavior keeps the actor open and the close can be retried") {
-    val actor = create[Unit] { case _ => None }
-    var firstAttempt = true
-    var failed: Option[Throwable] = None
-    actor.onClose { () => if (firstAttempt) { firstAttempt = false; throw new RuntimeException("close failed") } }
-    actor.onCloseFailed { t => failed = Some(t) }
-
-    // the close request fails with CloseFailedException
-    intercept[Actor.CloseFailedException] { resultCF(actor ? SystemMsg.Close) }
-
-    // nothing was closed: the actor stays open...
-    assert(!actor.isClosed)
-    // ...and the exception was reported to the close-failure behaviors
-    assert(failed.exists(_.getMessage.contains("close failed")))
-
-    // a retry, now without the throwing behavior, closes the actor normally
-    assertEquals(resultCF(actor ? SystemMsg.Close), Done)
-    waitFor(actor.isClosedSignal, true)
-  }
-
-  // ==================== in/out Stream Tests =====================
-
-  test("in stream receives messages sent to actor") {
-    val actor = create[Int]{ case (msg, _) => Some(msg + 1) }
-    val received = Signal(Seq.empty[Int])
-    
-    // Subscribe to in stream
-    actor.in.foreach { msg => received.mutate(_ :+ msg) }
-    
-    // Send messages via in stream
-    actor.in ! 1
-    actor.in ! 2
-    actor.in ! 3
-    
-    // Wait for messages
-    waitForResult(received, Seq(1, 2, 3))
-    
-    close(actor)
-  }
-
-  test("out stream receives responses when behavior sends to it") {
-    val actor = create[String] { case (msg, actor) =>
-      // Behavior explicitly sends response to out stream
-      actor.out ! s"Response: $msg"
-      None
-    }
-    val responses = Signal(Seq.empty[String])
-    
-    // Subscribe to the out stream to receive responses
-    actor.out.foreach { rsp =>
-      responses.mutate(_ :+ rsp)
-    }
-    
-    // Send messages via in stream
-    actor.in ! "1"
-    actor.in ! "2"
-    
-    // Wait for responses via out stream
-    waitForResult(responses, Seq("Response: 1", "Response: 2"))
-    
-    close(actor)
-  }
-
-  test("in and out streams work together for bidirectional communication") {
-    // This test demonstrates using in/out streams as an alternative to ! and ? operators
-    val actor = create[String] { case (msg, actor) =>
-      // The behavior processes the message and sends response to out stream
-      actor.out ! s"Processed: $msg"
-      None
-    }
-    
-    val receivedResponses = Signal(Seq.empty[String])
-    
-    // Subscribe to out stream to receive responses
-    actor.out.foreach { rsp =>
-      receivedResponses.mutate(_ :+ rsp)
-    }
-    
-    // Send messages via in stream
-    actor.in ! "10"
-    actor.in ! "20"
-    actor.in ! "30"
-    
-    // Wait for all responses to be received via out stream
-    waitForResult(receivedResponses, Seq("Processed: 10", "Processed: 20", "Processed: 30"))
-    
-    close(actor)
-  }
-
-  test("piping messages from external stream to actor in stream") {
-    // This test demonstrates a real-world scenario where external events are piped to the actor
-    val externalStream: SourceStream[String] = Stream()
-    val actor = create[String] { case (msg, actor) =>
-      // Behavior sends responses to out stream
-      actor.out ! s"Handled: $msg"
-      None
-    }
-    val received = Signal(Seq.empty[String])
-    
-    // Subscribe to actor's responses via out stream
-    actor.out.foreach { rsp =>
-      received.mutate(_ :+ rsp)
-    }
-    
-    // Pipe external stream to actor's in stream
-    externalStream.pipeTo(actor.in)
-    
-    // Send messages to external stream, which will be forwarded to actor
-    externalStream ! "1"
-    externalStream ! "2"
-    externalStream ! "3"
-    
-    // Wait for responses via out stream
-    waitForResult(received, Seq("Handled: 1", "Handled: 2", "Handled: 3"))
-    
-    close(actor)
-  }
-
-  // ==================== onInit Tests =====================
-
-  test("onInit receives the actor as parameter") {
-    var receivedActor: Option[Actor[String, Unit]] = None
-    
-    val actor = create[String]({ case (msg, _) => Some(s"Processed: $msg") }, onInit = { a => receivedActor = Some(a) })
-    
-    // onInit should have received the actor
-    assert(receivedActor.isDefined)
-    assert(receivedActor.contains(actor))
-    close(actor)
-  }
-
-  test("onInit is called before the actor starts processing messages") {
-    val order = Signal(Seq.empty[String])
-    
-    val actor = create[String]({ case (msg, _) =>
-      order.mutate(_ :+ "behavior")
-      Some(s"Processed: $msg")
-    }, onInit = { _ => order.mutate(_ :+ "onInit") })
-    
-    // Send a message immediately
-    actor ! "1"
-    
-    // onInit should have been called before the behavior processes the message
-    waitForResult(order, Seq("onInit", "behavior"))
-    close(actor)
-  }
-
-  test("onInit with serial dispatch queue") {
-    val initCalled = Signal(false)
-
-    val actor =
-      ActorBuilder[String]()
-        .addBehaviorPF { case (msg, _) => Some(s"Processed: $msg") }
-        .addOnInitF { () => initCalled ! true }
-        .withSerialDispatch()
-        .build()
-        .asInstanceOf[Actor[String, String] & Closeable]
-
-    waitFor(initCalled, true)
-    close(actor)
-  }
-
-  test("onInit can send messages via out stream") {
-    val initMessage = Signal("")
-    
-    val actor = create[String]({ case (msg, _) => Some(s"Processed: $msg") }, onInit = { actorImpl => actorImpl.out ! "Initialized" })
-    
-    actor.out.foreach { msg => initMessage ! msg }
-    
-    waitFor(initMessage, "Initialized")
-    close(actor)
-  }
-
-  test("onInit can modify actor state") {
-    val actor = create[MyMsg, Int](0, { case (_, actor) => Some(MyStr(s"State: ${actor.state}")) }, onInit = { _.state = 100 })
-    
-    // State should have been modified by onInit
-    assertEquals(actor.state, 100)
-    
-    val response = actor ? MyInt(1)
-    assertEquals(resultCF(response), MyStr("State: 100"))
-    close(actor)
-  }
-
-  test("onInit can send messages to external stream") {
-    val externalStreamReceived = Signal(Seq.empty[String])
-    val externalStream: SourceStream[String] = Stream()
-    
-    val actor = create[String]({ case (msg, _) => Some(s"Processed: $msg") },
-      onInit = { _ =>
-        externalStream ! "Actor initialized"
-        externalStream ! "Ready to process"
-      })
-    
-    externalStream.foreach { msg => externalStreamReceived.mutate(_ :+ msg) }
-    
-    waitForResult(externalStreamReceived, Seq("Actor initialized", "Ready to process"))
-    close(actor)
-  }
-
-  test("onInit bidirectional handshake between two actors") {
-    val handshakeComplete = Signal(false)
-    
-    // Create first actor with a reference to where the second will send its handshake
-    val actor1 = create[String]({ case (msg, _) => Some(s"A1: $msg") })
-    
-    // Create second actor with onInit that sends a message to actor1's in stream
-    val actor2 = create[String]({ case (msg, _) => Some(s"A2: $msg") }, onInit = { _ => actor1.in ! "42" })
-    
-    actor1.in.foreach { msg => if (msg == "42") handshakeComplete ! true }
-    
-    waitFor(handshakeComplete, true)
-    
-    close(actor1)
-    close(actor2)
-  }
-
-  test("onInit exception handling with resource cleanup") {
-    // onInit is called during initialization, and if it throws an exception, it's caught, logged,
-    // and the external result remains simply that the actor is not initialized, but closed.
-    val actor = create[Unit]({ case _ => None }, onInit = { _ => throw new RuntimeException("Init error") })
-    assert(!actor.isInitialized)
-    assert(actor.isClosed)
-  }
-
-  // an actor whose onBeat increments a counter in its state and reports it to `beats`
-  private class BeatingActor(beats: SourceSignal[Int])
-    extends ActorImpl[Unit, Int]("beating", 0, HeartBeatStrategy.Linear(20L.millis)) {
-    onBeat { actor =>
-      actor.state += 1
-      beats ! actor.state
-    }
-  }
-
-  test("onBeat is called on every beat") {
-    val beats = Signal(0)
-    val actor = BeatingActor(beats)
-    actor.initialize()
-    assert(waitFor(beats.map(_ >= 5), true))
-    close(actor)
-  }
-
-  test("onBeat is not called while the actor is paused") {
-    val beats = Signal(0)
-    val actor = BeatingActor(beats)
-    actor.initialize()
-    assert(waitFor(beats.map(_ >= 2), true))
-    actor.pause()
-    waitFor(actor.isPausedSignal, true)
-    Thread.sleep(50L) // let a beat already in progress finish
-    val countWhenPaused = actor.state
-    Thread.sleep(200L)
-    assertEquals(actor.state, countWhenPaused)
-    actor.unpause()
-    assert(waitFor(beats.map(_ > countWhenPaused), true))
-    close(actor)
-  }
-
-  test("onBeat works with a serial dispatch queue") {
-    val beats = Signal(0)
-    val actor = ActorBuilder[Unit, Int](0)
-      .addBehaviorPF { case _ => None }
-      .addOnBeatTF { _ => beats.mutate(_ + 1) }
-      .withSerialDispatch()
-      .build()
-    waitFor(actor.isInitializedSignal, true)
-    assert(waitFor(beats.map(_ >= 3), true))
-    close(actor)
-  }
-
-  test("onBeat can send messages via out stream") {
-    val actor = ActorBuilder[String]()
-      .addBehaviorPF { case (msg, _) => Some(s"Processed: $msg") }
-      .withLinearHeartbeat(20L)
-      .addOnBeatTF { a => a.out ! "beat" }
-      .build()
-    val beats = Signal(Seq.empty[String])
-    actor.out.foreach { msg => beats.mutate(_ :+ msg) }
-    waitFor(actor.isInitializedSignal, true)
-    assert(waitFor(beats.map(_.size >= 3), true))
-    close(actor)
-  }
-
-  // ==================== SystemMsg.AddOnBeat ====================
-
-  test("AddOnBeat via ? responds with Done") {
-    val beats = Signal(0)
-    val actor = create[Unit, Int](0, { case _ => None })
-    val cf = actor ? AddOnBeat(Behaviors.registerTF[Unit, Int] { _ => beats.mutate(_ + 1) })
-    assertEquals(resultCF(cf), Done)
-    assert(waitFor(beats.map(_ >= 2), true))
-    close(actor)
-  }
-
-  test("AddOnBeat via ! applies the callback") {
-    val beats = Signal(0)
-    val actor = create[Unit, Int](0, { case _ => None })
-    actor ! AddOnBeat(Behaviors.registerTF[Unit, Int] { _ => beats.mutate(_ + 1) })
-    assert(waitFor(beats.map(_ >= 2), true))
-    close(actor)
-  }
-
-  test("ResetOnBeat replaces the previous callback") {
-    val beats1 = Signal(0)
-    val beats2 = Signal(0)
-    val actor = ActorBuilder[Unit, Int](0)
-      .addBehaviorPF { case _ => None }
-      .withLinearHeartbeat(20L)
-      .addOnBeatTF { _ => beats1.mutate(_ + 1) }
-      .build()
-    assert(waitFor(beats1.map(_ >= 2), true))
-	  expectSuccessCF(actor ? ResetOnBeat, Done)
-    val cf = actor ? AddOnBeat(Behaviors.registerTF[Unit, Int] { _ => beats2.mutate(_ + 1) })
-	  expectSuccessCF(cf, Done)
-    val count1 = beats1.currentValue.getOrElse(0)
-    assert(waitFor(beats2.map(_ >= 2), true)) // at least two beats since the swap
-    Thread.sleep(60L) // long enough that a still-attached old callback would have fired
-    assertEquals(beats1.currentValue.getOrElse(0), count1)
-    close(actor)
-  }
-
-  test("AddOnBeat sent while paused takes effect after unpause") {
-    val beats1 = Signal(0)
-    val beats2 = Signal(0)
-    val actor = ActorBuilder[Unit, Int](0)
-      .addBehaviorPF { case _ => None }
-      .withLinearHeartbeat(20L)
-      .addOnBeatTF { _ => beats1.mutate(_ + 1) }
-      .build()
-    assert(waitFor(beats1.map(_ >= 2), true))
-    actor ! SystemMsg.Pause
-    waitFor(actor.isPausedSignal, true)
-    Thread.sleep(50L) // let a beat already in progress finish
-	  expectSuccessCF(actor ? ResetOnBeat, Done)
-    val countWhenPaused = beats1.currentValue.getOrElse(0)
-    // system messages are processed even while the actor is paused
-    val cf = actor ? AddOnBeat(Behaviors.registerTF[Unit, Int] { _ => beats2.mutate(_ + 1) })
-    assertEquals(resultCF(cf), Done)
-    // neither the old nor the new callback runs while paused
-    Thread.sleep(100L)
-    assertEquals(beats1.currentValue.getOrElse(0), countWhenPaused)
-    assertEquals(beats2.currentValue.getOrElse(0), 0)
-    assertEquals(resultCF(actor ? SystemMsg.Unpause), Done)
-    // after unpause only the new callback fires
-    assert(waitFor(beats2.map(_ >= 2), true))
-    assertEquals(beats1.currentValue.getOrElse(0), countWhenPaused)
-    close(actor)
-  }
-
-  test("ResetOnBeat + Actor.DoNothing actually does nothing") {
-    val beats = Signal(0)
-    val actor = ActorBuilder[Unit, Int](0)
-      .addBehaviorPF { case _ => None }
-      .withLinearHeartbeat(20L)
-      .addOnBeatTF { _ => beats.mutate(_ + 1) }
-      .build()
-    assert(waitFor(beats.map(_ >= 2), true))
-	  expectSuccessCF(actor ? ResetOnBeat, Done)
-    val cf = actor ? AddOnBeat(Behaviors.registerTF[Unit, Int]((_: MutableActor[Unit, Int]) => ()))
-    assertEquals(resultCF(cf), Done)
-    val count = beats.currentValue.getOrElse(0)
-    Thread.sleep(100L) // several beats - the callback must stay disabled
-    assertEquals(beats.currentValue.getOrElse(0), count)
-    close(actor)
-  }
-
-  // ==================== SystemMsg lifecycle events ====================
-
-  test("AddOnPause and RemoveOnPause via system messages") {
-    val actor = create[String] { case (msg, _) => Some(msg) }
-    var count = 0
-    val id = Behaviors.registerF(() => count += 1, "spec-onpause-add")
-
-    expectSuccessCF(actor ? SystemMsg.AddOnPause(id), Done)
-    expectSuccessCF(actor ? SystemMsg.Pause, Done)
-    assertEquals(count, 1)
-
-    actor ! SystemMsg.RemoveOnPause(id)
-    expectSuccessCF(actor ? SystemMsg.Unpause, Done)
-    expectSuccessCF(actor ? SystemMsg.Pause, Done)
-    assertEquals(count, 1)   // the behavior was removed - the second pause runs nothing
-    close(actor)
-  }
-
-  test("AddOnUnpause and RemoveOnUnpause via system messages") {
-    val actor = create[String] { case (msg, _) => Some(msg) }
-    var count = 0
-    val id = Behaviors.registerF(() => count += 1, "spec-onunpause-add")
-
-    expectSuccessCF(actor ? SystemMsg.Pause, Done)
-    actor ! SystemMsg.AddOnUnpause(id)
-    actor ! SystemMsg.RemoveOnUnpause(id)
-    expectSuccessCF(actor ? SystemMsg.Unpause, Done)
-    assertEquals(count, 0)   // the behavior was removed before the unpause ran
-
-    expectSuccessCF(actor ? SystemMsg.AddOnUnpause(id), Done)
-    expectSuccessCF(actor ? SystemMsg.Pause, Done)
-    expectSuccessCF(actor ? SystemMsg.Unpause, Done)
-    assertEquals(count, 1)
-    close(actor)
-  }
-
-  test("AddOnInit and ResetOnInit via system messages work only before initialization") {
-    val countSignal = SourceSignal(0)
-    val id = Behaviors.registerF(() => countSignal.mutate(_ + 1), "spec-oninit-add")
-    val actor = new ActorImpl[Unit, Int]("spec-addoninit-actor", 0, HeartBeatStrategy.Linear(20L.millis))
-    assert(!actor.isInitialized)
-	  actor ! SystemMsg.AddOnInit(id)
-	  waitForResult(countSignal, 0)
-    actor.initialize()
-	  waitFor(actor.isInitializedSignal, true)
-    assert(actor.isInitialized)
-
-	  waitForResult(countSignal, 1)
-
-    // the init event is one-shot: adding the behavior again after the init ran does nothing
-	  actor ! SystemMsg.AddOnInit(id)
-
-	  Thread.sleep(100L)
-	  
-	  waitForResult(countSignal, 1)
-
-	  // ResetOnInit severs the (long dead) ids without a complaint
-    expectSuccessCF(actor ? SystemMsg.ResetOnInit, Done)
-    close(actor)
-  }
-
-  test("AddOnClose and RemoveOnClose via system messages") {
-    var closed = false
-    val id = Behaviors.registerF(() => closed = true, "spec-onclose-add")
-
-    val actor = create[String] { case (msg, _) => Some(msg) }
-    expectSuccessCF(actor ? SystemMsg.AddOnClose(id), Done)
-    actor ! SystemMsg.RemoveOnClose(id)
-    resultCF(actor ? SystemMsg.Close)
-    waitFor(actor.isClosedSignal, true)
-    assert(!closed)          // the close behavior was removed before the close ran
-
-    val actor2 = create[String] { case (msg, _) => Some(msg) }
-    expectSuccessCF(actor2 ? SystemMsg.AddOnClose(id), Done)
-    expectSuccessCF(actor2 ? SystemMsg.Close, Done)
-    assert(closed)          // this time the close behavior was attached and ran
-  }
-
-  // ==================== Spawn and onBeat ====================
-
-  test("Spawn with onBeat creates a child that calls the callback") {
-    val beats = Signal(0)
-    val parent = create[Unit, Int](0, { case _ => None })
-    val child = spawn[Unit, Int](parent) {
-      SystemMsg.Spawn(actorId = "beating-child", state = Some(0),
-        heartbeat = Some(HeartBeatStrategy.Linear(20L.millis)),
-        onBeat = Set(Behaviors.registerTF[Unit, Int] { _ => beats.mutate(_ + 1) }))
-    }
-    assert(waitFor(beats.map(_ >= 3), true))
-    close(child)
-    close(parent)
-  }
-
-  test("Spawn without onBeat; the child can get one later via AddOnBeat") {
-    val beats = Signal(0)
-    val parent = create[Unit, Int](0, { case _ => None })
-    val child = spawn[Unit, Int](parent) {
-      SystemMsg.Spawn(actorId = "boring-child", state = Some(0))
-    }
-    val cf = child ? AddOnBeat(Behaviors.registerTF[Unit, Int] { _ => beats.mutate(_ + 1) })
-    assertEquals(resultCF(cf), Done)
-    assert(waitFor(beats.map(_ >= 2), true))
-    close(child)
-    close(parent)
-  }
-
-  test("a spawned child does not inherit the parent's onBeat") {
-    val beatenIds = Signal(Set.empty[String])
-    val parent = ActorBuilder[Unit, Int](0)
-      .addBehaviorPF { case _ => None }
-      .withLinearHeartbeat(20L)
-      .addOnBeatTF { a => beatenIds.mutate(_ + a.id) }
-      .build()
-    val child = spawn[Unit, Int](parent) {
-      SystemMsg.Spawn(actorId = "child-no-onbeat", state = Some(0))
-    }
-    assert(waitFor(beatenIds.map(_.nonEmpty), true))
-    Thread.sleep(300L) // at 20ms beats an inherited callback would have fired multiple times
-    val ids = beatenIds.currentValue.getOrElse(Set.empty)
-    assert(ids.contains(parent.id))
-    assert(!ids.contains("child-no-onbeat"))
-    close(child)
-    close(parent)
-  }
-
-  // ==================== *ById wiring ====================
-
-  test("onInitById attaches an initialization behavior before the actor is initialized") {
-    var initialized = false
-    assert(registerBeh("spec-oninit-byid" -> (() => initialized = true)))
-
-    // the by-id behaviors must be attached before the actor is initialized
-    val actor = new ActorImpl[Unit, Int]("spec-oninit-byid-actor", 0)
-    assert(!actor.isInitialized)
-    assert(actor.onInit("spec-oninit-byid"))
-    // an unregistered id is reported and attaches nothing
-    assert(!actor.onInit("spec-never-registered-oninit"))
-
-    actor.initialize()
-    assert(actor.isInitialized)
-    assert(initialized)
-
-    // a behavior attached after the initialization is registered but will never run
-    var late = false
-    assert(registerBeh("spec-oninit-byid-late" -> (() => late = true)))
-    assert(actor.onInit("spec-oninit-byid-late"))
-    assert(!late)
-
-    close(actor)
-  }
-
-  test("onBeatId attaches a heartbeat behavior from the behavior library") {
-    val actor = new ActorImpl[Unit, Int]("spec-onbeat-byid-actor", 0, HeartBeatStrategy.Linear(20L.millis))
-    assert(registerTBeh[Unit, Int]("spec-onbeat-byid" -> { a => a.state += 1 }))
-    assert(!actor.isInitialized)
-    assert(actor.onBeat("spec-onbeat-byid"))
-    assert(!actor.onBeat("spec-never-registered-tbeh"))
-
-    actor.initialize()
-    Thread.sleep(120L) // at 20ms beats the attached behavior must fire several times
-    assert(actor.state >= 2)
-
-    close(actor)
-  }
-
-  test("a throwing onBeat behavior prevents the remaining ones from running and notifies onBeatFailed") {
-    // the beat behaviors run in a single try-catch: the first one that throws (the last registered,
-    // as they run in reverse order) aborts the remaining ones on every beat
-    var beatCount = 0
-    var failed: Option[Throwable] = None
-    val actor = new ActorImpl[Unit, Int]("spec-onbeat-throwing", 0, HeartBeatStrategy.Linear(20L.millis)) {
-      onBeat { _ => throw new RuntimeException("beat failed") }
-      onBeat { _ => beatCount += 1 }
-      onBeatFailed { t => failed = Some(t) }
-    }
-    actor.initialize()
-    Thread.sleep(120L) // several beats; on every one of them the throwing behavior aborts the rest
-
-    assert(failed.exists(_.getMessage.contains("beat failed")))
-    assertEquals(beatCount, 0, "the older beat behavior should never run")
-    close(actor)
-  }
+class ActorSpec extends FunSuite{
+
+	import Utils.*
+	import Utils.MyMsg.*
+
+	private val eventContext = EventContext()
+	import Threading.defaultContext
+
+	given Timeout: FiniteDuration = 1.seconds
+
+	override def beforeEach(context: BeforeEach): Unit = {
+		eventContext.start()
+		Behaviors.reset()
+	}
+
+	override def afterEach(context: AfterEach): Unit = {
+		eventContext.stop()
+		Behaviors.reset()
+	}
+
+	test("Request-response message sending") {
+		val actor = create[MyMsg]({ case (MyInt(msg), _) => Some(MyStr(s"Default: $msg")) })
+		val response = actor ? MyInt(42)
+		assertEquals(resultCF(response), MyStr("Default: 42"))
+		close(actor)
+	}
+
+	test("Fire-and-forget message sending") {
+		val received = Signal(false)
+		val actor = create[Int, Boolean](false, { case (_, actor) =>
+			actor.state = true
+			received ! true
+			None
+		})
+		actor ! 1
+		waitFor(received, true)
+		assert(actor.state)
+		close(actor)
+	}
+
+	test("Concurrent message processing") {
+		val actor = create[Int, Int](0, { case (msg, actor) =>
+			actor.state += msg
+			Some(actor.state)
+		})
+
+		waitFor(actor.isInitializedSignal, true)
+
+		val futures: Seq[CloseableFuture[Int]] = (1 to 10).map {actor ? _}
+		val results: CloseableFuture[Iterable[Int]] = CloseableFuture.sequence(futures)
+		val finalResult: Int = resultCF(results)(using 2.seconds).max
+		assertEquals(finalResult, 55)
+		close(actor)
+	}
+
+	// ==================== Custom Heartbeat Strategies ====================
+
+	test("Reactive heartbeat idles at longMs and reacts at shortMs") {
+		val beats = Signal(0)
+		val actor = ActorBuilder[Unit, Int](0)
+			.setBehaviorPF { case _ => None }
+			.withHeartbeat(HeartBeatStrategy.Reactive(20.millis, 200.millis))
+			.addOnBeatTF { _ => beats.mutate(_ + 1) }
+			.build()
+		waitFor(actor.isInitializedSignal, true)
+		Thread.sleep(200L) // warm-up: let any initial beat burst settle
+		beats ! 0
+		Thread.sleep(600L)
+		// an idle Reactive actor beats at the long cadence (~200ms); a reverted inversion
+		// would busy-beat at shortMs (~20ms) producing many more beats
+		val count = beats.currentValue.getOrElse(0)
+		assert(count >= 1, s"idle Reactive produced no beats in 600ms")
+		assert(count <= 8, s"idle Reactive produced $count beats in 600ms; expected the long (200ms) cadence")
+		close(actor)
+	}
+
+	test("CustomLinear heartbeat calls the interval function for each beat") {
+		val calls = Signal(0)
+		val beats = Signal(0)
+		val actor = ActorBuilder[Unit, Int](0)
+			.setBehaviorPF { case _ => None }
+			.withHeartbeat(HeartBeatStrategy.CustomLinear { () => calls.mutate(_ + 1); 20.millis })
+			.addOnBeatTF { _ => beats.mutate(_ + 1) }
+			.build()
+		waitFor(actor.isInitializedSignal, true)
+		assert(waitFor(beats.map(_ >= 3), true))
+		assert(waitFor(calls.map(_ >= 3), true))
+		close(actor)
+	}
+
+	test("CustomLinear can change the interval dynamically at runtime") {
+		val beats = Signal(0)
+		@volatile var fast = true
+		val actor = ActorBuilder[Unit, Int](0)
+			.setBehaviorPF { case _ => None }
+			.withHeartbeat(HeartBeatStrategy.CustomLinear { () => if fast then 20.millis
+			else 300.millis
+			})
+			.addOnBeatTF { _ => beats.mutate(_ + 1) }
+			.build()
+		waitFor(actor.isInitializedSignal, true)
+		assert(waitFor(beats.map(_ >= 3), true))
+		fast = false
+		val countWhenSlowed = beats.currentValue.getOrElse(0)
+		Thread.sleep(400L)
+		val countAfter = beats.currentValue.getOrElse(0)
+		val slowWindowBeats = countAfter - countWhenSlowed
+		// if the change was not picked up, the fast cadence would add ~20 beats in 400ms
+		assert(slowWindowBeats <= 3, s"CustomLinear added $slowWindowBeats beats in 400ms after slowing down the interval")
+		assert(slowWindowBeats >= 1, s"CustomLinear stopped beating after the interval change")
+		close(actor)
+	}
+
+	test("a short heartbeat timeout fails a long-running behavior") {
+		val slowBehavior: PF[Int, Unit] = {case (msg, _) => Thread.sleep(500L); Some(msg + 1)}
+		val shortTimeout = ActorBuilder[Int]()
+			.setBehaviorPF(slowBehavior)
+			.withHeartbeat(HeartBeatStrategy.CustomLinear(() => 20.millis, 100.millis))
+			.build()
+		intercept[TimeoutException](resultCF(shortTimeout ? 1))
+		close(shortTimeout)
+
+		val longTimeout = ActorBuilder[Int]()
+			.setBehaviorPF(slowBehavior)
+			.withHeartbeat(HeartBeatStrategy.CustomLinear(() => 20.millis, 1500.millis))
+			.build()
+		val response = resultCF(longTimeout ? 1)(using 2.seconds)
+		assertEquals(response, 2)
+		close(longTimeout)
+	}
+
+	test("CustomReactive interval receives the current hasMsg state") {
+		val flags = Signal(Seq.empty[Boolean])
+		val actor = ActorBuilder[Int, Int](0)
+			.setBehaviorPF { case (msg, _) => Some(msg + 1) }
+			.withHeartbeat(HeartBeatStrategy.CustomReactive { hasMsg =>
+				flags.mutate(_ :+ hasMsg)
+				20.millis
+			})
+			.build()
+		waitFor(actor.isInitializedSignal, true)
+		assertEquals(resultCF(actor ? 1), 2)
+		assert(waitFor(flags.map(_.contains(false)), true)) // idle beats report an empty queue
+		assert(waitFor(flags.map(_.contains(true)), true)) // an incoming message reports a non-empty queue
+		close(actor)
+	}
+
+	test("CustomReactive adapts its cadence to hasMsg") {
+		val beats = Signal(0)
+		val actor = ActorBuilder[Int, Int](0)
+			.setBehaviorPF { case (msg, _) => Some(msg + 1) }
+			.withHeartbeat(HeartBeatStrategy.CustomReactive { hasMsg => if hasMsg then 20.millis
+			else 250.millis
+			})
+			.addOnBeatTF { _ => beats.mutate(_ + 1) }
+			.build()
+		waitFor(actor.isInitializedSignal, true)
+		Thread.sleep(200L) // warm-up: let any initial beat burst settle
+		beats ! 0
+		Thread.sleep(600L)
+		val idleBeats = beats.currentValue.getOrElse(0)
+		assert(idleBeats <= 8, s"idle CustomReactive produced $idleBeats beats in 600ms; expected the slow (250ms) cadence")
+		// a message must be answered on the fast cadence, well within the idle interval
+		val fastResponse = resultCF(actor ? 1)(using 300.millis)
+		assertEquals(fastResponse, 2)
+		close(actor)
+	}
+
+	test("CustomReactive with zero interval forces an immediate beat") {
+		val actor = ActorBuilder[Int, Int](0)
+			.setBehaviorPF { case (msg, _) => Some(msg + 1) }
+			.withHeartbeat(HeartBeatStrategy.CustomReactive { hasMsg => if hasMsg then 0.millis
+			else 200.millis
+			})
+			.build()
+		waitFor(actor.isInitializedSignal, true)
+		Thread.sleep(150L) // settle on the slow idle cadence
+		val start = System.nanoTime()
+		val forcedResponse = resultCF(actor ? 1)(using 300.millis)
+		assertEquals(forcedResponse, 2)
+		val elapsedMs = (System.nanoTime() - start) / 1000000L
+		// the zero interval forces a beat at once; waiting for the next scheduled 200ms beat would take much longer
+		assert(elapsedMs < 150L, s"the message took $elapsedMs ms; expected an immediate forced beat")
+		close(actor)
+	}
+
+	test("Spawn with a custom heartbeat strategy") {
+		val beats = Signal(0)
+		val parent = create[Unit, Int](0, { case _ => None })
+		val child = spawn[Unit, Int](parent) {
+			SystemMsg.Spawn(actorId = "custom-beat-child", state = Some(0),
+				heartbeat = Some(HeartBeatStrategy.CustomLinear(() => 20.millis)),
+				onBeat = Set(Behaviors.registerTF[Unit, Int] { _ => beats.mutate(_ + 1) }))
+		}
+		assert(waitFor(beats.map(_ >= 3), true))
+		close(child)
+		close(parent)
+	}
+
+	test("Actor.apply accepts a custom heartbeat strategy") {
+		val pf: PF[Int, Unit] = {case (msg: Int, _) => Some(msg + 1)}
+		val actor = Actor(pf, HeartBeatStrategy.CustomLinear(() => 20.millis))
+			.asInstanceOf[Actor[Int, Unit] & Closeable]
+		assertEquals(resultCF(actor ? 1), 2)
+		close(actor)
+	}
+
+	// ==================== Behavior ID Message Routing ====================
+
+	test("ask with behavior ID routes message to specific behavior") {
+		val actor = create[String] { case (msg, _) => Some(s"Default: $msg") }
+
+		// Add a special behavior
+		val behavior: PF[String, Unit] = {case ("42", _) => Some("Special: 42")}
+		Behaviors.registerPBeh("special_42" -> behavior)
+		val cfAdd = actor ? SystemMsg.SetBehavior("special_42")
+		awaitCF(cfAdd)
+
+		// Message 42 should be handled by the special behavior when using its ID
+		val response = actor ? ("special_42" -> "42")
+		assertEquals(resultCF(response), "Special: 42")
+
+		close(actor)
+	}
+
+	test("bang with behavior ID routes message to specific behavior") {
+		val received = Signal(false)
+		val receivedSpecial = Signal(false)
+
+		val actor = create[Int] { case _ => None }
+
+		// Add behaviors via system messages
+		val defaultBehavior: PF[Int, Unit] = {case _ => received ! true; None}
+		val specialBehavior: PF[Int, Unit] = {case _ => receivedSpecial ! true; None}
+
+		Behaviors.registerPBeh("default" -> defaultBehavior)
+		Behaviors.registerPBeh("special" -> specialBehavior)
+
+		awaitCF(actor ? SystemMsg.SetBehavior("default"))
+		awaitCF(actor ? SystemMsg.SetBehavior("special"))
+
+		// Send via bang without behavior ID - should use normal processing
+		actor ! 1
+		waitFor(received, true)
+
+		// Reset and send with behavior ID
+		received ! false
+		receivedSpecial ! false
+
+		// Send via bang with specific behavior ID
+		actor.tell(2, "special")
+		waitFor(receivedSpecial, true)
+
+		// The default behavior should NOT have been triggered
+		Thread.sleep(100)
+		assert(!received.currentValue.getOrElse(false), "Default behavior should not be triggered when using behavior ID")
+
+		close(actor)
+	}
+
+	// ==================== Edge Cases ====================
+
+	test("Actor closed while messages in-flight") {
+		val actor = create[String] { case (msg, _) =>
+			Thread.sleep(50)
+			Some(s"Processed: $msg")
+		}
+
+		val futures = (1 to 5).map(n => actor ? n.toString)
+		actor ! SystemMsg.Close
+		waitFor(actor.isClosedSignal, true)
+
+		val res = CloseableFuture.sequence(futures)
+		tryResult(res.future)(using 2.seconds)
+	}
+
+	test("System messages with messages in queue") {
+		val received = Signal(false)
+		val actor = create[Int, Boolean](false, { case (_, actor) =>
+			actor.state = true
+			received ! true
+			None
+		})
+
+		actor ! SystemMsg.Pause
+		waitFor(actor.isPausedSignal, true)
+
+		actor ! 1
+		actor ! 2
+		Thread.sleep(100)
+		assert(!received.currentValue.contains(true))
+
+		actor ! SystemMsg.Unpause
+		waitFor(actor.isPausedSignal, false)
+		waitFor(received, true)
+		assert(actor.state)
+
+		close(actor)
+	}
+
+	// ==================== Error Handling ====================
+
+	test("Actor continues processing after behavior exception") {
+		var callCount = 0
+		val actor = create[String] { case (msg, _) =>
+			callCount += 1
+			if (msg == "1") throw new RuntimeException("Test error")
+			else Some(s"Processed: $msg")
+		}
+
+		intercept[RuntimeException](resultCF(actor ? "1"))
+
+		val response2 = actor ? "2"
+		assertEquals(resultCF(response2), "Processed: 2")
+		assertEquals(callCount, 2)
+		close(actor)
+	}
+
+	// ==================== System Message with Response ====================
+
+	test("Pause system message with response via ?") {
+		val actor = create[Unit] { case _ => None }
+
+		val pauseFuture = actor ? SystemMsg.Pause
+		resultCF(pauseFuture)
+		waitFor(actor.isPausedSignal, true)
+		close(actor)
+	}
+
+	test("Unpause system message with response via ?") {
+		val actor = create[Unit] { case _ => None }
+
+		actor ! SystemMsg.Pause
+		waitFor(actor.isPausedSignal, true)
+
+		val unpauseFuture = actor ? SystemMsg.Unpause
+		resultCF(unpauseFuture)
+		waitFor(actor.isPausedSignal, false)
+		close(actor)
+	}
+
+	// ==================== Close Response Guarantees ====================
+
+	test("Close via ? completes only after actor is closed") {
+		val actor = create[Unit] { case _ => None }
+
+		val closeFuture = actor ? SystemMsg.Close
+
+		// The future should NOT be completed yet
+		val poll1 = Try(resultCF(closeFuture)(using 10.millis))
+		assert(poll1.isFailure) // Should timeout because actor is not closed yet
+
+		// Wait for the close to actually complete
+		resultCF(closeFuture)(using 2.seconds)
+
+		// Now the actor should be closed
+		waitFor(actor.isClosedSignal, true)
+	}
+
+	test("Only the first close via ? completes, the next one fails") {
+		val actor = create[Unit] { case _ => None }
+
+		waitFor(actor.isInitializedSignal, true)
+
+		val closeFuture1 = actor ? SystemMsg.Close
+		resultCF(closeFuture1)
+
+		val closeFuture2 = actor ? SystemMsg.Close
+		val res = Try(resultCF(closeFuture2)(using 1.seconds))
+		assert(res.isFailure) // should time out
+
+		waitFor(actor.isClosedSignal, true)
+	}
+
+	test("Close via ? when actor has pending messages") {
+		val received = Signal(false)
+		val actor = create[Int] { case _ => received ! true; None }
+
+		// Send a message that will take time
+		actor ! 1
+
+		// Close the actor - should wait for message to be processed
+		val closeFuture = actor ? SystemMsg.Close
+
+		awaitCF(closeFuture)(using 2.seconds)
+		waitFor(actor.isClosedSignal, true)
+
+		// The message should have been processed before close completed
+		waitFor(received, true)
+	}
+
+	test("a failed close behavior keeps the actor open and the close can be retried") {
+		val actor = create[Unit] { case _ => None }
+		var firstAttempt = true
+		var failed: Option[Throwable] = None
+		actor.onClose { () => if (firstAttempt) {firstAttempt = false; throw new RuntimeException("close failed")} }
+		actor.onCloseFailed { t => failed = Some(t) }
+
+		// the close request fails with CloseFailedException
+		intercept[Actor.CloseFailedException] {resultCF(actor ? SystemMsg.Close)}
+
+		// nothing was closed: the actor stays open...
+		assert(!actor.isClosed)
+		// ...and the exception was reported to the close-failure behaviors
+		assert(failed.exists(_.getMessage.contains("close failed")))
+
+		// a retry, now without the throwing behavior, closes the actor normally
+		assertEquals(resultCF(actor ? SystemMsg.Close), Done)
+		waitFor(actor.isClosedSignal, true)
+	}
+
+	// ==================== in/out Stream Tests =====================
+
+	test("in stream receives messages sent to actor") {
+		val actor = create[Int] { case (msg, _) => Some(msg + 1) }
+		val received = Signal(Seq.empty[Int])
+
+		// Subscribe to in stream
+		actor.in.foreach { msg => received.mutate(_ :+ msg) }
+
+		// Send messages via in stream
+		actor.in ! 1
+		actor.in ! 2
+		actor.in ! 3
+
+		// Wait for messages
+		waitForResult(received, Seq(1, 2, 3))
+
+		close(actor)
+	}
+
+	test("out stream receives responses when behavior sends to it") {
+		val actor = create[String] { case (msg, actor) =>
+			// Behavior explicitly sends response to out stream
+			actor.out ! s"Response: $msg"
+			None
+		}
+		val responses = Signal(Seq.empty[String])
+
+		// Subscribe to the out stream to receive responses
+		actor.out.foreach { rsp =>
+			responses.mutate(_ :+ rsp)
+		}
+
+		// Send messages via in stream
+		actor.in ! "1"
+		actor.in ! "2"
+
+		// Wait for responses via out stream
+		waitForResult(responses, Seq("Response: 1", "Response: 2"))
+
+		close(actor)
+	}
+
+	test("in and out streams work together for bidirectional communication") {
+		// This test demonstrates using in/out streams as an alternative to ! and ? operators
+		val actor = create[String] { case (msg, actor) =>
+			// The behavior processes the message and sends response to out stream
+			actor.out ! s"Processed: $msg"
+			None
+		}
+
+		val receivedResponses = Signal(Seq.empty[String])
+
+		// Subscribe to out stream to receive responses
+		actor.out.foreach { rsp =>
+			receivedResponses.mutate(_ :+ rsp)
+		}
+
+		// Send messages via in stream
+		actor.in ! "10"
+		actor.in ! "20"
+		actor.in ! "30"
+
+		// Wait for all responses to be received via out stream
+		waitForResult(receivedResponses, Seq("Processed: 10", "Processed: 20", "Processed: 30"))
+
+		close(actor)
+	}
+
+	test("piping messages from external stream to actor in stream") {
+		// This test demonstrates a real-world scenario where external events are piped to the actor
+		val externalStream: SourceStream[String] = Stream()
+		val actor = create[String] { case (msg, actor) =>
+			// Behavior sends responses to out stream
+			actor.out ! s"Handled: $msg"
+			None
+		}
+		val received = Signal(Seq.empty[String])
+
+		// Subscribe to actor's responses via out stream
+		actor.out.foreach { rsp =>
+			received.mutate(_ :+ rsp)
+		}
+
+		// Pipe external stream to actor's in stream
+		externalStream.pipeTo(actor.in)
+
+		// Send messages to external stream, which will be forwarded to actor
+		externalStream ! "1"
+		externalStream ! "2"
+		externalStream ! "3"
+
+		// Wait for responses via out stream
+		waitForResult(received, Seq("Handled: 1", "Handled: 2", "Handled: 3"))
+
+		close(actor)
+	}
+
+	// ==================== onInit Tests =====================
+
+	test("onInit receives the actor as parameter") {
+		var receivedActor: Option[Actor[String, Unit]] = None
+
+		val actor = create[String]({ case (msg, _) => Some(s"Processed: $msg") }, onInit = { a => receivedActor = Some(a) })
+
+		// onInit should have received the actor
+		assert(receivedActor.isDefined)
+		assert(receivedActor.contains(actor))
+		close(actor)
+	}
+
+	test("onInit is called before the actor starts processing messages") {
+		val order = Signal(Seq.empty[String])
+
+		val actor = create[String]({ case (msg, _) =>
+			order.mutate(_ :+ "behavior")
+			Some(s"Processed: $msg")
+		}, onInit = { _ => order.mutate(_ :+ "onInit") })
+
+		// Send a message immediately
+		actor ! "1"
+
+		// onInit should have been called before the behavior processes the message
+		waitForResult(order, Seq("onInit", "behavior"))
+		close(actor)
+	}
+
+	test("onInit with serial dispatch queue") {
+		val initCalled = Signal(false)
+
+		val actor =
+			ActorBuilder[String]()
+				.setBehaviorPF { case (msg, _) => Some(s"Processed: $msg") }
+				.addOnInitF { () => initCalled ! true }
+				.withSerialDispatch()
+				.build()
+				.asInstanceOf[Actor[String, String] & Closeable]
+
+		waitFor(initCalled, true)
+		close(actor)
+	}
+
+	test("onInit can send messages via out stream") {
+		val initMessage = Signal("")
+
+		val actor = create[String]({ case (msg, _) => Some(s"Processed: $msg") }, onInit = { actorImpl => actorImpl.out ! "Initialized" })
+
+		actor.out.foreach { msg => initMessage ! msg }
+
+		waitFor(initMessage, "Initialized")
+		close(actor)
+	}
+
+	test("onInit can modify actor state") {
+		val actor = create[MyMsg, Int](0, { case (_, actor) => Some(MyStr(s"State: ${actor.state}")) }, onInit = {_.state = 100})
+
+		// State should have been modified by onInit
+		assertEquals(actor.state, 100)
+
+		val response = actor ? MyInt(1)
+		assertEquals(resultCF(response), MyStr("State: 100"))
+		close(actor)
+	}
+
+	test("onInit can send messages to external stream") {
+		val externalStreamReceived = Signal(Seq.empty[String])
+		val externalStream: SourceStream[String] = Stream()
+
+		val actor = create[String]({ case (msg, _) => Some(s"Processed: $msg") },
+			onInit = { _ =>
+				externalStream ! "Actor initialized"
+				externalStream ! "Ready to process"
+			})
+
+		externalStream.foreach { msg => externalStreamReceived.mutate(_ :+ msg) }
+
+		waitForResult(externalStreamReceived, Seq("Actor initialized", "Ready to process"))
+		close(actor)
+	}
+
+	test("onInit bidirectional handshake between two actors") {
+		val handshakeComplete = Signal(false)
+
+		// Create first actor with a reference to where the second will send its handshake
+		val actor1 = create[String]({ case (msg, _) => Some(s"A1: $msg") })
+
+		// Create second actor with onInit that sends a message to actor1's in stream
+		val actor2 = create[String]({ case (msg, _) => Some(s"A2: $msg") }, onInit = { _ => actor1.in ! "42" })
+
+		actor1.in.foreach { msg => if (msg == "42") handshakeComplete ! true }
+
+		waitFor(handshakeComplete, true)
+
+		close(actor1)
+		close(actor2)
+	}
+
+	test("onInit exception handling with resource cleanup") {
+		// onInit is called during initialization, and if it throws an exception, it's caught, logged,
+		// and the external result remains simply that the actor is not initialized, but closed.
+		val actor = create[Unit]({ case _ => None }, onInit = { _ => throw new RuntimeException("Init error") })
+		assert(!actor.isInitialized)
+		assert(actor.isClosed)
+	}
+
+	// an actor whose onBeat increments a counter in its state and reports it to `beats`
+	private class BeatingActor(beats: SourceSignal[Int])
+		extends ActorImpl[Unit, Int]("beating", 0, HeartBeatStrategy.Linear(20L.millis)){
+		onBeat { actor =>
+			actor.state += 1
+			beats ! actor.state
+		}
+	}
+
+	test("onBeat is called on every beat") {
+		val beats = Signal(0)
+		val actor = BeatingActor(beats)
+		actor.initialize()
+		assert(waitFor(beats.map(_ >= 5), true))
+		close(actor)
+	}
+
+	test("onBeat is not called while the actor is paused") {
+		val beats = Signal(0)
+		val actor = BeatingActor(beats)
+		actor.initialize()
+		assert(waitFor(beats.map(_ >= 2), true))
+		actor.pause()
+		waitFor(actor.isPausedSignal, true)
+		Thread.sleep(50L) // let a beat already in progress finish
+		val countWhenPaused = actor.state
+		Thread.sleep(200L)
+		assertEquals(actor.state, countWhenPaused)
+		actor.unpause()
+		assert(waitFor(beats.map(_ > countWhenPaused), true))
+		close(actor)
+	}
+
+	test("onBeat works with a serial dispatch queue") {
+		val beats = Signal(0)
+		val actor = ActorBuilder[Unit, Int](0)
+			.setBehaviorPF { case _ => None }
+			.addOnBeatTF { _ => beats.mutate(_ + 1) }
+			.withSerialDispatch()
+			.build()
+		waitFor(actor.isInitializedSignal, true)
+		assert(waitFor(beats.map(_ >= 3), true))
+		close(actor)
+	}
+
+	test("onBeat can send messages via out stream") {
+		val actor = ActorBuilder[String]()
+			.setBehaviorPF { case (msg, _) => Some(s"Processed: $msg") }
+			.withLinearHeartbeat(20L)
+			.addOnBeatTF { a => a.out ! "beat" }
+			.build()
+		val beats = Signal(Seq.empty[String])
+		actor.out.foreach { msg => beats.mutate(_ :+ msg) }
+		waitFor(actor.isInitializedSignal, true)
+		assert(waitFor(beats.map(_.size >= 3), true))
+		close(actor)
+	}
+
+	// ==================== SystemMsg.AddOnBeat ====================
+
+	test("AddOnBeat via ? responds with Done") {
+		val beats = Signal(0)
+		val actor = create[Unit, Int](0, { case _ => None })
+		val cf = actor ? AddOnBeat(Behaviors.registerTF[Unit, Int] { _ => beats.mutate(_ + 1) })
+		assertEquals(resultCF(cf), Done)
+		assert(waitFor(beats.map(_ >= 2), true))
+		close(actor)
+	}
+
+	test("AddOnBeat via ! applies the callback") {
+		val beats = Signal(0)
+		val actor = create[Unit, Int](0, { case _ => None })
+		actor ! AddOnBeat(Behaviors.registerTF[Unit, Int] { _ => beats.mutate(_ + 1) })
+		assert(waitFor(beats.map(_ >= 2), true))
+		close(actor)
+	}
+
+	test("ResetOnBeat replaces the previous callback") {
+		val beats1 = Signal(0)
+		val beats2 = Signal(0)
+		val actor = ActorBuilder[Unit, Int](0)
+			.setBehaviorPF { case _ => None }
+			.withLinearHeartbeat(20L)
+			.addOnBeatTF { _ => beats1.mutate(_ + 1) }
+			.build()
+		assert(waitFor(beats1.map(_ >= 2), true))
+		expectSuccessCF(actor ? ResetOnBeat, Done)
+		val cf = actor ? AddOnBeat(Behaviors.registerTF[Unit, Int] { _ => beats2.mutate(_ + 1) })
+		expectSuccessCF(cf, Done)
+		val count1 = beats1.currentValue.getOrElse(0)
+		assert(waitFor(beats2.map(_ >= 2), true)) // at least two beats since the swap
+		Thread.sleep(60L) // long enough that a still-attached old callback would have fired
+		assertEquals(beats1.currentValue.getOrElse(0), count1)
+		close(actor)
+	}
+
+	test("AddOnBeat sent while paused takes effect after unpause") {
+		val beats1 = Signal(0)
+		val beats2 = Signal(0)
+		val actor = ActorBuilder[Unit, Int](0)
+			.setBehaviorPF { case _ => None }
+			.withLinearHeartbeat(20L)
+			.addOnBeatTF { _ => beats1.mutate(_ + 1) }
+			.build()
+		assert(waitFor(beats1.map(_ >= 2), true))
+		actor ! SystemMsg.Pause
+		waitFor(actor.isPausedSignal, true)
+		Thread.sleep(50L) // let a beat already in progress finish
+		expectSuccessCF(actor ? ResetOnBeat, Done)
+		val countWhenPaused = beats1.currentValue.getOrElse(0)
+		// system messages are processed even while the actor is paused
+		val cf = actor ? AddOnBeat(Behaviors.registerTF[Unit, Int] { _ => beats2.mutate(_ + 1) })
+		assertEquals(resultCF(cf), Done)
+		// neither the old nor the new callback runs while paused
+		Thread.sleep(100L)
+		assertEquals(beats1.currentValue.getOrElse(0), countWhenPaused)
+		assertEquals(beats2.currentValue.getOrElse(0), 0)
+		assertEquals(resultCF(actor ? SystemMsg.Unpause), Done)
+		// after unpause only the new callback fires
+		assert(waitFor(beats2.map(_ >= 2), true))
+		assertEquals(beats1.currentValue.getOrElse(0), countWhenPaused)
+		close(actor)
+	}
+
+	test("ResetOnBeat + Actor.DoNothing actually does nothing") {
+		val beats = Signal(0)
+		val actor = ActorBuilder[Unit, Int](0)
+			.setBehaviorPF { case _ => None }
+			.withLinearHeartbeat(20L)
+			.addOnBeatTF { _ => beats.mutate(_ + 1) }
+			.build()
+		assert(waitFor(beats.map(_ >= 2), true))
+		expectSuccessCF(actor ? ResetOnBeat, Done)
+		val cf = actor ? AddOnBeat(Behaviors.registerTF[Unit, Int]((_: MutableActor[Unit, Int]) => ()))
+		assertEquals(resultCF(cf), Done)
+		val count = beats.currentValue.getOrElse(0)
+		Thread.sleep(100L) // several beats - the callback must stay disabled
+		assertEquals(beats.currentValue.getOrElse(0), count)
+		close(actor)
+	}
+
+	// ==================== SystemMsg lifecycle events ====================
+
+	test("AddOnPause and RemoveOnPause via system messages") {
+		val actor = create[String] { case (msg, _) => Some(msg) }
+		var count = 0
+		val id = Behaviors.registerF(() => count += 1, "spec-onpause-add")
+
+		expectSuccessCF(actor ? SystemMsg.AddOnPause(id), Done)
+		expectSuccessCF(actor ? SystemMsg.Pause, Done)
+		assertEquals(count, 1)
+
+		actor ! SystemMsg.RemoveOnPause(id)
+		expectSuccessCF(actor ? SystemMsg.Unpause, Done)
+		expectSuccessCF(actor ? SystemMsg.Pause, Done)
+		assertEquals(count, 1) // the behavior was removed - the second pause runs nothing
+		close(actor)
+	}
+
+	test("AddOnUnpause and RemoveOnUnpause via system messages") {
+		val actor = create[String] { case (msg, _) => Some(msg) }
+		var count = 0
+		val id = Behaviors.registerF(() => count += 1, "spec-onunpause-add")
+
+		expectSuccessCF(actor ? SystemMsg.Pause, Done)
+		actor ! SystemMsg.AddOnUnpause(id)
+		actor ! SystemMsg.RemoveOnUnpause(id)
+		expectSuccessCF(actor ? SystemMsg.Unpause, Done)
+		assertEquals(count, 0) // the behavior was removed before the unpause ran
+
+		expectSuccessCF(actor ? SystemMsg.AddOnUnpause(id), Done)
+		expectSuccessCF(actor ? SystemMsg.Pause, Done)
+		expectSuccessCF(actor ? SystemMsg.Unpause, Done)
+		assertEquals(count, 1)
+		close(actor)
+	}
+
+	test("AddOnInit and ResetOnInit via system messages work only before initialization") {
+		val countSignal = SourceSignal(0)
+		val id = Behaviors.registerF(() => countSignal.mutate(_ + 1), "spec-oninit-add")
+		val actor = new ActorImpl[Unit, Int]("spec-addoninit-actor", 0, HeartBeatStrategy.Linear(20L.millis))
+		assert(!actor.isInitialized)
+		actor ! SystemMsg.AddOnInit(id)
+		waitForResult(countSignal, 0)
+		actor.initialize()
+		waitFor(actor.isInitializedSignal, true)
+		assert(actor.isInitialized)
+
+		waitForResult(countSignal, 1)
+
+		// the init event is one-shot: adding the behavior again after the init ran does nothing
+		actor ! SystemMsg.AddOnInit(id)
+
+		Thread.sleep(100L)
+
+		waitForResult(countSignal, 1)
+
+		// ResetOnInit severs the (long dead) ids without a complaint
+		expectSuccessCF(actor ? SystemMsg.ResetOnInit, Done)
+		close(actor)
+	}
+
+	test("AddOnClose and RemoveOnClose via system messages") {
+		var closed = false
+		val id = Behaviors.registerF(() => closed = true, "spec-onclose-add")
+
+		val actor = create[String] { case (msg, _) => Some(msg) }
+		expectSuccessCF(actor ? SystemMsg.AddOnClose(id), Done)
+		awaitCF(actor ? SystemMsg.RemoveOnClose(id))
+		resultCF(actor ? SystemMsg.Close)
+		waitFor(actor.isClosedSignal, true)
+		assert(!closed) // the close behavior was removed before the close ran
+
+		val actor2 = create[String] { case (msg, _) => Some(msg) }
+		expectSuccessCF(actor2 ? SystemMsg.AddOnClose(id), Done)
+		expectSuccessCF(actor2 ? SystemMsg.Close, Done)
+		assert(closed) // this time the close behavior was attached and ran
+	}
+
+	// ==================== Spawn and onBeat ====================
+
+	test("Spawn with onBeat creates a child that calls the callback") {
+		val beats = Signal(0)
+		val parent = create[Unit, Int](0, { case _ => None })
+		val child = spawn[Unit, Int](parent) {
+			SystemMsg.Spawn(actorId = "beating-child", state = Some(0),
+				heartbeat = Some(HeartBeatStrategy.Linear(20L.millis)),
+				onBeat = Set(Behaviors.registerTF[Unit, Int] { _ => beats.mutate(_ + 1) }))
+		}
+		assert(waitFor(beats.map(_ >= 3), true))
+		close(child)
+		close(parent)
+	}
+
+	test("Spawn without onBeat; the child can get one later via AddOnBeat") {
+		val beats = Signal(0)
+		val parent = create[Unit, Int](0, { case _ => None })
+		val child = spawn[Unit, Int](parent) {
+			SystemMsg.Spawn(actorId = "boring-child", state = Some(0))
+		}
+		val cf = child ? AddOnBeat(Behaviors.registerTF[Unit, Int] { _ => beats.mutate(_ + 1) })
+		assertEquals(resultCF(cf), Done)
+		assert(waitFor(beats.map(_ >= 2), true))
+		close(child)
+		close(parent)
+	}
+
+	test("a spawned child does not inherit the parent's onBeat") {
+		val beatenIds = Signal(Set.empty[String])
+		val parent = ActorBuilder[Unit, Int](0)
+			.setBehaviorPF { case _ => None }
+			.withLinearHeartbeat(20L)
+			.addOnBeatTF { a => beatenIds.mutate(_ + a.id) }
+			.build()
+		val child = spawn[Unit, Int](parent) {
+			SystemMsg.Spawn(actorId = "child-no-onbeat", state = Some(0))
+		}
+		assert(waitFor(beatenIds.map(_.nonEmpty), true))
+		Thread.sleep(300L) // at 20ms beats an inherited callback would have fired multiple times
+		val ids = beatenIds.currentValue.getOrElse(Set.empty)
+		assert(ids.contains(parent.id))
+		assert(!ids.contains("child-no-onbeat"))
+		close(child)
+		close(parent)
+	}
+
+	// ==================== *ById wiring ====================
+
+	test("onInitById attaches an initialization behavior before the actor is initialized") {
+		var initialized = false
+		assert(registerBeh("spec-oninit-byid" -> (() => initialized = true)))
+
+		// the by-id behaviors must be attached before the actor is initialized
+		val actor = new ActorImpl[Unit, Int]("spec-oninit-byid-actor", 0)
+		assert(!actor.isInitialized)
+		assert(actor.onInit("spec-oninit-byid"))
+		// an unregistered id is reported and attaches nothing
+		assert(!actor.onInit("spec-never-registered-oninit"))
+
+		actor.initialize()
+		assert(actor.isInitialized)
+		assert(initialized)
+
+		// a behavior attached after the initialization is registered but will never run
+		var late = false
+		assert(registerBeh("spec-oninit-byid-late" -> (() => late = true)))
+		assert(actor.onInit("spec-oninit-byid-late"))
+		assert(!late)
+
+		close(actor)
+	}
+
+	test("onBeatId attaches a heartbeat behavior from the behavior library") {
+		val actor = new ActorImpl[Unit, Int]("spec-onbeat-byid-actor", 0, HeartBeatStrategy.Linear(20L.millis))
+		assert(registerTBeh[Unit, Int]("spec-onbeat-byid" -> { a => a.state += 1 }))
+		assert(!actor.isInitialized)
+		assert(actor.onBeat("spec-onbeat-byid"))
+		assert(!actor.onBeat("spec-never-registered-tbeh"))
+
+		actor.initialize()
+		Thread.sleep(120L) // at 20ms beats the attached behavior must fire several times
+		assert(actor.state >= 2)
+
+		close(actor)
+	}
 }

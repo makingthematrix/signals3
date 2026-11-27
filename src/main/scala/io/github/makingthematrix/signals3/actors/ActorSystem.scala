@@ -172,7 +172,7 @@ final class ActorSystem[Msg, State] private (
 		if (children.contains(data.actorId)) respond(p, invalidId(data.actorId)) else {
 			val b1 = ActorBuilder[Msg, State](data.state.getOrElse(this.state))
 				.withIdIf(data.actorId.nonEmpty, data.actorId)
-				.addBehaviorsIf(data.behaviors.nonEmpty, data.behaviors, this.behaviors)
+				.setBehaviorIf(data.behavior.nonEmpty, data.behavior, this.currentBehavior)
 				.withHeartbeat(data.heartbeat.getOrElse(this.heartbeat))
 				.withTags(tags + ActorTag.Child)
 				.withParent(this)

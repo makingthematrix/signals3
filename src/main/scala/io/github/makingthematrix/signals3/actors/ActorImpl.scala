@@ -10,6 +10,7 @@ import io.github.makingthematrix.signals3.actors.SystemMsg.Done
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.Conversion.into
 import scala.annotation.static
+import scala.collection.mutable
 import scala.collection.mutable.Queue as MQueue
 import scala.concurrent.duration.{DurationLong, FiniteDuration}
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
@@ -46,10 +47,12 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 	private val systemMsgs = new AtomicReference[MQueue[SysEntry]](emptyQueue)
 	// a stream that serves as a single entry for the systemMsgs list to prevent concurrent modification; see the "! operator.
 	protected val systemStream: SourceStream[SysEntry] = Stream[SysEntry]()
-	// a variable list of the ids of the actor's behaviors - partial functions which try to process an
+	// the id of the actor's behavior - a partial function which tries to process an
 	// incoming message; the functions live in `Behaviors` and are retrieved by the id at the moment
 	// a message is processed; see the processMessages method.
-	protected var behaviors: List[String] = Nil
+	private val behaviorStack = mutable.Stack[String]("")
+	protected def currentBehavior: String = behaviorStack.head
+
 	// the "beating heart" of the actor; depending on the strategy, accumulated messages are processed at each beat or when the message appears (reactive).
 	private lazy val beat = GeneratorStream.heartbeat(() => interval())
 	
@@ -99,28 +102,19 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		*
 		* @param id The id of a behavior registered in [[Behaviors]].
 		*/
-	private[actors] def addBehavior(id: String, p: Option[Promise[SystemMsg]] = None): Unit =
-		if (behaviors.contains(id)) respond(p, invalidId(id))
+	private[actors] def setBehavior(id: String, p: Option[Promise[SystemMsg]] = None): Unit =
+		if (id == currentBehavior) respond(p, Done)
 		else Behaviors.getPBeh[Msg, State](id) match {
 			case Some(_) =>
-				behaviors ::= id
+				behaviorStack.push(id)
 				respond(p, Done)
 			case _ => respond(p, invalidId(id))
 		}
 
-	/**
-		* Removes a behavior from the actor's list of behaviors based on its unique identifier.
-		* The specified behavior will no longer be part of the message processing sequence.
-		* Its function stays registered in [[Behaviors]] - only the actor's connection to it is severed.
-		*
-		* @param id The unique identifier of the behavior to be removed.
-		*/
-	private def removeBehavior(id: String): Unit =
-		behaviors = behaviors.filterNot(_ == id)
-
-	// adds all the given behavior ids in front of the list of behaviors, maintaining their own internal order
-	private[actors] def addBehaviors(ids: Iterable[String]): Unit =
-		behaviors = ids.toList ::: behaviors
+	private def unwindBehavior(p: Option[Promise[SystemMsg]]): Unit = {
+		if (behaviorStack.nonEmpty) behaviorStack.pop()
+		respond(p, Done)
+	}
 
 	override def ask(msg: SystemMsg): CloseableFuture[SystemMsg] =
 		if (!isClosed) {
@@ -199,8 +193,8 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		case (Pause, p)              => pause(); respond(p, Done)
 		case (Unpause, p)            => unpause(); respond(p, Done)
 		case (Close, p)              => if (p.isEmpty) close() else respond(p, shutdown().map(_ => Done))
-		case (AddBehavior(pbehId), p)=> addBehavior(pbehId, p)
-		case (RemoveBehavior(id), p) => removeBehavior(id); respond(p, Done)
+		case (SetBehavior(pbehId), p) => setBehavior(pbehId, p)
+		case (UnwindBehavior, p)     => unwindBehavior(p)
 		case (SpawnT(data), p)       => spawn(data, p)
 		case (ActorClosed(id), p)    => removeChild(id, p)
 		case (AddOnBeat(tbehId), p)  => addOnBeat(tbehId, p)
@@ -220,10 +214,10 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		case (ResetOnClose, p)          => resetOnClose(); respond(p, Done)
 		case (other, p)              => respond(p, unhandledMsg(other.toString))
 	}
-	
+
 	private def addOnBeat(tbehId: String, p: Option[Promise[SystemMsg]]): Unit = {
 		if (isClosed) ActorIsClosed
-		else if (onBeat(tbehId)) respond(p, Done) 
+		else if (onBeat(tbehId)) respond(p, Done)
 		else respond(p, invalidId(tbehId))
 	}
 
@@ -250,7 +244,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		else if (onClose(behId)) respond(p, Done)
 		else respond(p, invalidId(behId))
 	}
-	
+
 	private def processMsgEntry(entry: MsgEntry): Unit = {
 		val (msg, pOpt, bId) = entry
 		val res = if (bId.nonEmpty) onMessage(msg, bId) else Try(onMessage(msg)).flatten
@@ -271,11 +265,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		// A named behavior (bId) must be attached to this actor; the unnamed dispatch goes through
 		// the list of attached behaviors and takes the first one which handles the message.
 		val pfOpt: Option[PF[Msg, State]] =
-			if (bId.isEmpty)
-				behaviors.iterator.flatMap(Behaviors.getPBeh[Msg, State]).find(_.pf.isDefinedAt(msg, this)).map(_.pf)
-			else if (behaviors.contains(bId))
-				Behaviors.getPBeh[Msg, State](bId).map(_.pf)
-			else None
+			Behaviors.getPBeh[Msg, State](if (bId.isEmpty) currentBehavior else bId).map(_.pf)
 		pfOpt match {
 			case Some(pf) if isSerial => Try(pf(msg, this))
 			case Some(pf)             => Try(Await.result(Future {pf(msg, this)}, heartbeat.timeout))
@@ -295,7 +285,7 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 		if (children.contains(data.actorId)) respond(p, invalidId(data.actorId)) else {
 			val b1 = ActorBuilder[Msg, State](data.state.getOrElse(this.state))
 				.withIdIf(data.actorId.nonEmpty, data.actorId)
-				.addBehaviorsIf(data.behaviors.nonEmpty, data.behaviors, this.behaviors)
+				.setBehaviorIf(data.behavior.nonEmpty, data.behavior, this.currentBehavior)
 				.withHeartbeat(data.heartbeat.getOrElse(this.heartbeat))
 				.withTags(tags + ActorTag.Child)
 				.withParent(this)

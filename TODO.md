@@ -3,16 +3,6 @@
 ## Open
 
 ### To do
-- [x] Behaviors: A storage for behaviors (total/partial functions + ids) - this actually might be much complicated than it seems
-  - [x] Create Behaviors object (a singleton)
-  - [x] Move Beh to Behaviors and rename it PBeh (Partial Behavior)
-  - [x] Create TBeh (Total Behavior)
-  - [x] Create mutable maps for both and a way to register new behaviors
-  - [x] Hardcode some behaviors
-  - [x] In all 5 events: onInit, onBeat, onPause, onUnpause, onClose; switch to behaviors
-  - [x] Enable a way to add a behaviors only by id
-  - [x] Add, remove and reset behaviors with system messages
-    // loop: implement -> test -> refactor
 - [ ] Refactor partial behaviors to only one behavior at once allowed + behaviors folding in Behaviors
 - [ ] Go through usages of onInit and onClose and think if some of them can be turned to one-shots. Or: any inline lambda can be one-shot?
 - [ ] Try out opaque types for lifecycle events identifiers
@@ -65,5 +55,14 @@
 - [x] Merge heartbeat strategies Agitated and Reactive into a smarter Reactive
 - [x] Enable an actor to take a special behavior that's run on every heartbeat even if there are no messages 
 - [x] Make a Custom heartbeat strategy that takes a behavior
-
+- [x] Behaviors: A storage for behaviors (total/partial functions + ids) - this actually might be much complicated than it seems
+    - [x] Create Behaviors object (a singleton)
+    - [x] Move Beh to Behaviors and rename it PBeh (Partial Behavior)
+    - [x] Create TBeh (Total Behavior)
+    - [x] Create mutable maps for both and a way to register new behaviors
+    - [x] Hardcode some behaviors
+    - [x] In all 5 events: onInit, onBeat, onPause, onUnpause, onClose; switch to behaviors
+    - [x] Enable a way to add a behaviors only by id
+    - [x] Add, remove and reset behaviors with system messages
+      // loop: implement -> test -> refactor
 

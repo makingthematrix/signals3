@@ -37,7 +37,7 @@ The four kinds are stored in separate maps, and every `register*` method checks 
   `registerTF` (generate id + register); unchecked-cast retrieval `getPBeh[Msg, State]`/`getTBeh[Msg, State]`.
 - **`SystemMsg.scala`** - id-based cases only: `AddBehavior(behId)`, `RemoveBehavior(id)`,
   `AddOnBeat(tbehId)`, `Spawn(..., behaviors: List[String], onInit: List[String], onBeat: List[String], ...)`.
-  Removed: `AddBehaviorPF`, typed `AddBehavior`, typed `AddOnBeat`, the `SystemMsg.addOnBeat` companion helper.
+  Removed: `AddBehaviorPF`, typed `SetBehavior`, typed `AddOnBeat`, the `SystemMsg.addOnBeat` companion helper.
 - **`ActorBuilder.scala`** - fields are id lists (`pbehIds`, `onInitIds`, `onBeatIds`, `onPauseIds`,
   `onUnpauseIds`, `onCloseIds`); `buildActor` wires onInitIds via `onInit`, behaviors via `getPBeh` +
   `addBehaviors`, onBeatIds via `onBeatById`.
@@ -189,7 +189,7 @@ contradiction: `addBehavior` PREPENDS, so the new behavior runs FIRST and can ta
 (the doc used to claim the opposite). Interim builder change (P6 will restructure further):
 `buildActor` keeps the invalid-id diagnostic against `getPBeh` and wires `validIds` directly.
 `spawn` sites in `ActorImpl` and `ActorSystem` pass `this.behaviors` (already ids). Verified by an
-18-check smoke: builder wiring, invalid-id skip, runtime `AddBehavior`/`RemoveBehavior` (precedence,
+18-check smoke: builder wiring, invalid-id skip, runtime `SetBehavior`/`RemoveBehavior` (precedence,
 double-add and unknown-id rejections, function surviving in `Behaviors`), the named-behavior path,
 mid-flight unregister skip, one pf shared by two actors, and spawn inheritance of behavior ids.
 Smoke file deleted after.
@@ -330,11 +330,11 @@ The maintainer tightened the rule: **no implicit cleanup at all**.
    guaranteed relative run order among behaviors configured through the builder or attached to a
    lifecycle registry. All order-tracking bookkeeping (newest-first lists, reversed attaches,
    dedup checks) was removed. **Still ordered, out of scope of this decision:** `ActorImpl.behaviors`
-   (a `List` - a runtime `AddBehavior` through a system message still runs first in the message
+   (a `List` - a runtime `SetBehavior` through a system message still runs first in the message
    dispatch and can take over) and `MutableActor._onBeat` (a `List`). The maintainer may want to
    unify them later. **P8 must watch out for:** order-sensitive test expectations (`createWithBehaviors`
    docs, behavior-takeover assertions for builder-configured behaviors - takeover via runtime
-   `AddBehavior` is preserved).
+   `SetBehavior` is preserved).
 
 Consequences for later phases:
 - P5-P7: library-internal by-name wiring that is genuinely run-once (e.g. `ActorImpl`'s `onInit {...}`,
@@ -359,7 +359,7 @@ Consequences for later phases:
 
 - **Partial behaviors are OUT of this refactoring (decision by the maintainer).** `Spawn.behaviors`
   stays a `List[String]` and `ActorImpl.behaviors`/`behSet` keeps its `List` (+prepend, runtime
-  `AddBehavior` takeover semantics) - they have not been converted to sets. **Future plan (the
+  `SetBehavior` takeover semantics) - they have not been converted to sets. **Future plan (the
   maintainer):** a very different refactoring of partial behaviors is intended later - to allow
   only ONE partial behavior at a time per actor (replacing the current lists/chains of partial
   behaviors and their dispatch precedence entirely). Until then, they stay as-is - both in the actor

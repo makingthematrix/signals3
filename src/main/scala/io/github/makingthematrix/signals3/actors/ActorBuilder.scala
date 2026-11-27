@@ -42,7 +42,7 @@ import scala.concurrent.duration.*
   */
 final class ActorBuilder[Msg, State] (val id: String,
                                       val state: State,
-                                      val pbehIds: Set[String] = Set.empty,
+                                      val pbehId: String = "",
                                       val heartbeat: HeartBeatStrategy = defBeat,
                                       val onInitIds: Set[String] = Set.empty,
                                       val useSerialDispatch: Boolean = false,
@@ -61,7 +61,7 @@ final class ActorBuilder[Msg, State] (val id: String,
   // so no field can be accidentally dropped on the way.
   private def copy(id: String = id,
                    state: State = state,
-                   pbehIds: Set[String] = pbehIds,
+                   pbehId: String = pbehId,
                    heartbeat: HeartBeatStrategy = heartbeat,
                    onInitIds: Set[String] = onInitIds,
                    useSerialDispatch: Boolean = useSerialDispatch,
@@ -75,7 +75,7 @@ final class ActorBuilder[Msg, State] (val id: String,
                    onCloseIds: Set[String] = onCloseIds,
                    beatFuncs: List[TF[Msg, State]] = beatFuncs
                   ): ActorBuilder[Msg, State] =
-    new ActorBuilder(id, state, pbehIds, heartbeat, onInitIds, useSerialDispatch, executionContext,
+    new ActorBuilder(id, state, pbehId, heartbeat, onInitIds, useSerialDispatch, executionContext,
       tags, onBeatIds, parent, system, onPauseIds, onUnpauseIds, onCloseIds, beatFuncs)
 
   /**
@@ -114,49 +114,24 @@ final class ActorBuilder[Msg, State] (val id: String,
    * @param behaviorId The id of the behavior.
    * @return A new builder with the added behavior
    */
-  inline def addBehavior(behaviorId: String): ActorBuilder[Msg, State] = copy(pbehIds = pbehIds + behaviorId)
+  inline def setBehavior(behaviorId: String): ActorBuilder[Msg, State] = copy(pbehId = behaviorId)
 
-  inline def addBehaviorIf(p: => Boolean, behaviorId: => String): ActorBuilder[Msg, State] =
-    if (p) addBehavior(behaviorId) else this
+  inline def setBehaviorIf(p: => Boolean, behaviorId: => String): ActorBuilder[Msg, State] =
+    if (p) setBehavior(behaviorId) else this
 
-  inline def addBehaviorIf(p: => Boolean, behaviorId: => String, orElse: => String): ActorBuilder[Msg, State] =
-    addBehavior(if (p) behaviorId else orElse)
+  inline def setBehaviorIf(p: => Boolean, behaviorId: => String, orElse: => String): ActorBuilder[Msg, State] =
+    setBehavior(if (p) behaviorId else orElse)
 
   /**
    * Registers a partial behavior in [[Behaviors]] under a generated id and adds that id to the builder.
-   * The generated id is readable afterwards through `pbehIds`.
+   * The generated id is readable afterwards through `pbehId`.
    *
    * @param pf The partial function which tries to process an incoming message.
    * @return A new builder with the added behavior
    */
-  inline def addBehaviorPF(pf: PF[Msg, State]): ActorBuilder[Msg, State] =
-    copy(pbehIds = pbehIds + Behaviors.registerPF(pf))
-
-  /**
-   * Registers all the given partial behaviors in [[Behaviors]] under generated ids and adds those
-   * ids to the builder, with no guaranteed relative order among them.
-   *
-   * @param pfs The partial functions to register and add.
-   * @return A new builder with the added behaviors
-   */
-  inline def addBehaviorPFs(pfs: Iterable[PF[Msg, State]]): ActorBuilder[Msg, State] =
-    copy(pbehIds = pbehIds ++ pfs.map(Behaviors.registerPF(_)))
-
-  /**
-   * Adds multiple behavior ids.
-   *
-   * @param newBehaviors The ids of the behaviors to add
-   * @return A new builder with the added behavior ids
-   */
-  inline def addBehaviors(newBehaviors: Iterable[String]): ActorBuilder[Msg, State] =
-    copy(pbehIds = pbehIds ++ newBehaviors)
-
-  inline def addBehaviorsIf(p: => Boolean, newBehaviors: => Iterable[String]): ActorBuilder[Msg, State] =
-    if (p) addBehaviors(newBehaviors) else this
-
-  inline def addBehaviorsIf(p: => Boolean, newBehaviors: => Iterable[String], orElse: => Iterable[String]): ActorBuilder[Msg, State] =
-    addBehaviors(if (p) newBehaviors else orElse)
-
+  inline def setBehaviorPF(pf: PF[Msg, State]): ActorBuilder[Msg, State] =
+    copy(pbehId = Behaviors.registerPF(pf))
+	
   /**
    * Sets the heartbeat strategy.
    *
@@ -529,11 +504,10 @@ final class ActorBuilder[Msg, State] (val id: String,
 	  }
     validInits.foreach(actor.onInit)
 
-    val (validPBehs, invalidPbehs) = pbehIds.partition(Behaviors.isRegistered)
-    if (invalidPbehs.nonEmpty) {
-      println(s"Invalid behavior ids found when building Actor ${id}: $invalidPbehs")
+	  if (Behaviors.isRegistered(pbehId)) actor.setBehavior(pbehId)
+	  else {
+      println(s"Invalid behavior id found when building Actor ${id}: $pbehId")
     }
-    actor.addBehaviors(validPBehs)
 
 	  val (validBeats, invalidBeats) = onBeatIds.partition(Behaviors.isRegistered)
 	  if (invalidBeats.nonEmpty) {

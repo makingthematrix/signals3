@@ -195,7 +195,7 @@ class ActorSystemSpec extends FunSuite {
     val received = SourceSignal(0)
     val a = ActorBuilder[String, Int](0)
       .withId("a")
-      .addBehaviorPF { case (msg, _) => received.mutate(_ + 1); Some(s"A: $msg") }
+      .setBehaviorPF { case (msg, _) => received.mutate(_ + 1); Some(s"A: $msg") }
       .withSystem(sys).build()
     val ref = awaitRef(sys, "a")
     ref ! "42"
@@ -388,26 +388,7 @@ class ActorSystemSpec extends FunSuite {
 
     close(onB, a, b)
   }
-
-  test("cross-system AddBehavior and RemoveBehavior reach the peer's actor") {
-    val (a, b) = crossRegistered()
-    val onB    = newActor(b, "onB", { case (msg, _) if msg.startsWith("d:") => Some(s"D: $msg") })
-    val extra: PF[String, Int] = { case (msg, _) if msg.startsWith("e:") => Some(s"E: $msg") }
-
-    awaitRef(b, "onB")
-    val ref = remoteRef(a, "onB", "B")
-    assert(tryResultCF(ref ? "e:1").isFailure, "the default behavior should not handle 'e:' messages")
-
-	  Behaviors.registerPBeh("extra" -> extra)
-    expectSuccessCF(a.ask(AddBehavior("extra"), ActorPath.Remote("B", "onB")), Done)
-    expectSuccessCF(ref ? "e:1", "E: e:1")
-
-    expectSuccessCF(a.ask(RemoveBehavior("extra"), ActorPath.Remote("B", "onB")), Done)
-    assert(tryResultCF(ref ? "e:2").isFailure, "the removed behavior still handled the message")
-
-    close(onB, a, b)
-  }
-
+	
   test("cross-system AskForRefAsync for an actor missing on the peer fails with InvalidIdException") {
     val (a, b) = crossRegistered()
     val capturer = new CapturingActor(a)
@@ -949,7 +930,7 @@ class ActorSystemSpec extends FunSuite {
     val sys = newSystem[String]("sys")
     val a = ActorBuilder[String, Int](0)
       .withId("built")
-      .addBehaviorPF { case (msg, _) => Some(s"built: $msg") }
+      .setBehaviorPF { case (msg, _) => Some(s"built: $msg") }
       .withTags(Set(ActorTag.Log))
       .withSystem(sys)
       .build()
@@ -986,7 +967,7 @@ class ActorSystemSpec extends FunSuite {
     val sys    = newSystem[String]("sys")
     val parent = ActorBuilder[String, Int](0)
       .withId("parent")
-      .addBehaviorPF { case (msg, _) => Some(s"parent: $msg") }
+      .setBehaviorPF { case (msg, _) => Some(s"parent: $msg") }
       .withTags(Set(ActorTag.Log))
       .withSystem(sys)
       .build()

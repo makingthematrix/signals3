@@ -42,13 +42,13 @@ import scala.reflect.{ClassTag, TypeTest}
 	*/
 enum SystemMsg {
 	case Pause, Unpause, Close, Done, InvalidId
-	case AddBehavior(pbehId: String)
+	case SetBehavior(pbehId: String)
+	case UnwindBehavior
 	case AddOnBeat(tbehId: String)
 	case AddOnInit(behId: String)
 	case AddOnPause(behId: String)
 	case AddOnUnpause(behId: String)
 	case AddOnClose(behId: String)
-	case RemoveBehavior(pbehId: String)
 	case RemoveOnBeat(tbehId: String)
 	case RemoveOnInit(behId: String)
 	case RemoveOnPause(behId: String)
@@ -61,7 +61,7 @@ enum SystemMsg {
 	case ResetOnClose
 	case Spawn[State](actorId: String = "",
 	                       state: Option[State] = None,
-	                       behaviors: List[String] = Nil,
+	                       behavior: String = "",
 	                       heartbeat: Option[HeartBeatStrategy] = None,
 	                       onInit: Set[String] = Set.empty,
 	                       onBeat: Set[String] = Set.empty,

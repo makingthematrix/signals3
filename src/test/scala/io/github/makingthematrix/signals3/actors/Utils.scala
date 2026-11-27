@@ -49,33 +49,33 @@ object Utils {
 
 	def create[Msg](pf: PF[Msg, Unit])(using ExecutionContext): Actor[Msg, Unit] & Closeable & Pausable =
 		ActorBuilder[Msg]()
-			.addBehaviorPF(pf)
+			.setBehaviorPF(pf)
 			.build()
 
 	def create[Msg](id: String)(pf: PF[Msg, Unit])(using ExecutionContext): Actor[Msg, Unit] & Closeable & Pausable =
 		ActorBuilder[Msg]()
 			.withId(id)
-			.addBehaviorPF(pf)
+			.setBehaviorPF(pf)
 			.build()
 
 	def create[Msg, State](state: State, pf: PF[Msg, State])
 	                      (using ExecutionContext): Actor[Msg, State] & Closeable & Pausable =
 		ActorBuilder[Msg, State](state)
-			.addBehaviorPF(pf)
+			.setBehaviorPF(pf)
 			.build()
 
 	def create[Msg, State](id: String, state: State, pf: PF[Msg, State])
 	                      (using ExecutionContext): Actor[Msg, State] & Closeable & Pausable =
 		ActorBuilder[Msg, State](state)
 			.withId(id)
-			.addBehaviorPF(pf)
+			.setBehaviorPF(pf)
 			.build()
 
 
 	def create[Msg](pf: PF[Msg, Unit], hbs: HeartBeatStrategy)
 	               (using ExecutionContext): Actor[Msg, Unit] & Closeable & Pausable =
 		ActorBuilder[Msg, Unit](())
-			.addBehaviorPF(pf)
+			.setBehaviorPF(pf)
 			.withHeartbeat(hbs)
 			.build()
 
@@ -83,7 +83,7 @@ object Utils {
 	                      (using ExecutionContext): Actor[Msg, State] & Closeable & Pausable = {
 		val id = Behaviors.registerTF(onInit)
 		ActorBuilder[Msg, State](state)
-			.addBehaviorPF(pf)
+			.setBehaviorPF(pf)
 			.addOnInit(id)
 			.build()
 	}
@@ -92,7 +92,7 @@ object Utils {
 	               (using ExecutionContext): Actor[Msg, Unit] & Closeable & Pausable = {
 		val id = Behaviors.registerTF(onInit)
 		ActorBuilder[Msg, Unit](())
-			.addBehaviorPF(pf)
+			.setBehaviorPF(pf)
 			.addOnInit(id)
 			.build()
 	}
@@ -101,13 +101,13 @@ object Utils {
 	def createWithBehaviors[Msg](behaviors: (String, PF[Msg, Unit])*)
 	                            (using ExecutionContext): Actor[Msg, Unit] & Closeable & Pausable = {
 		behaviors.foreach(beh => assert(Behaviors.registerPBeh(beh)))
-		ActorBuilder[Msg]().addBehaviors(behaviors.map(_._1)).build()
+		ActorBuilder[Msg]().setBehavior(behaviors.last._1).build()
 	}
 
 	def createWithBehaviors[Msg](sys: ActorSystem[Msg, Int], id: String, behaviors: (String, PF[Msg, Int])*)
 	                            (using ExecutionContext): Actor[Msg, Int] & Closeable = {
 		behaviors.foreach(beh => assert(Behaviors.registerPBeh(beh)))
-		ActorBuilder[Msg, Int](0).withId(id).withSystem(sys).addBehaviors(behaviors.map(_._1)).build()
+		ActorBuilder[Msg, Int](0).withId(id).withSystem(sys).setBehavior(behaviors.last._1).build()
 	}
 
 def newSystem[Msg](id: String)(using ExecutionContext): ActorSystem[Msg, Int] & Closeable & Pausable =
@@ -123,12 +123,12 @@ def newSystem[Msg](id: String)(using ExecutionContext): ActorSystem[Msg, Int] & 
 	def newActor[Msg, State](sys: ActorSystem[Msg, ?], id: String, defState: State, pf: PF[Msg, State])
 	            (using ExecutionContext): Actor[Msg, State] & Closeable & Pausable = {
 		val pbehId = Behaviors.registerPF(pf)
-		ActorBuilder[Msg, State](defState).withId(id).addBehavior(pbehId).withSystem(sys).build()
+		ActorBuilder[Msg, State](defState).withId(id).setBehavior(pbehId).withSystem(sys).build()
 	}
 	def newActor(sys: ActorSystem[String, ?], id: String, pf: PF[String, Int])
 	            (using ExecutionContext): Actor[String, Int] & Closeable & Pausable = {
 		val pbehId = Behaviors.registerPF(pf)
-		ActorBuilder[String, Int](0).withId(id).addBehavior(pbehId).withSystem(sys).build()
+		ActorBuilder[String, Int](0).withId(id).setBehavior(pbehId).withSystem(sys).build()
 	}
 	
 	def awaitRef[Msg](sys: ActorSystem[Msg, ?], id: String): ActorRef[Msg] = {
@@ -199,7 +199,7 @@ def newSystem[Msg](id: String)(using ExecutionContext): ActorSystem[Msg, Int] & 
 		val pbehId = Behaviors.registerPF { case (msg, _) => Some(s"$id: $msg") }
 		val a = ActorBuilder[String, Int](0)
 			.withId(id)
-			.addBehavior(pbehId)
+			.setBehavior(pbehId)
 			.build()
 		resultCF(sys ? Register(a, tags.toSet)) match {
 			case Ref(_) => a

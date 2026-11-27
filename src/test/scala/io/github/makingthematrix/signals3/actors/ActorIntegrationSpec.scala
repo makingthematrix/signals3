@@ -7,7 +7,6 @@ import Utils.*
 
 import SystemMsg.*
 import actors.Utils.*
-import actors.Utils.MyMsg.*
 
 import munit.FunSuite
 
@@ -34,84 +33,6 @@ class ActorIntegrationSpec extends FunSuite {
 		eventContext.stop()
 		Behaviors.reset()
 	}
-  
-  // ============================================================================
-  // Thread Safety Tests for Behavior Modifications
-  // ============================================================================
-
-  /**
-   * Test that removing a behavior that doesn't exist doesn't cause errors.
-   */
-  test("Removing non-existent behavior is safe") {
-    val actor = create[String, String]("0", {
-      case (msg, _) => Some(s"Default: $msg")
-    })
-
-    // Try to remove a behavior that doesn't exist
-    // Should complete successfully without error
-    expectSuccessCF(actor.ask(SystemMsg.RemoveBehavior("non-existent")), Done)
-
-    close(actor)
-  }
-
-  // ============================================================================
-  // Message Processing During Behavior Modification Tests
-  // ============================================================================
-  
-  /**
-   * Test that behavior modifications don't cause message loss.
-   */
-  test("Behavior modifications do not cause message loss") {
-    val actor = create[MyMsg] { case (MyInt(n), _) => Some(MyMsg(s"Default: $n")) }
-
-    val numMessages = 100
-    val receivedCount = SourceSignal(0)
-    
-    // Add a behavior that records received messages - catch-all pattern
-    val recordingBehavior: PF[MyMsg, Unit] = {
-      case (MyInt(n), _) =>
-        receivedCount.mutate(_ + 1)
-        Some(MyStr(s"Recorded: $n"))
-    }
-
-	  Behaviors.registerPBeh("recorder" -> recordingBehavior)
-
-	  expectSuccessCF(actor ? SystemMsg.AddBehavior("recorder"), Done)
-    
-    // Send messages
-    val futures: Seq[Future[MyMsg]] = (0 until numMessages).map { i =>
-      Future {
-        val response = actor.ask(MyInt(i))
-        Await.result(response, 1.second)
-      }
-    }
-    
-    // Concurrently modify behaviors - use message values that won't match any sent messages
-    val modificationFutures = (0 until 100).map { i =>
-      Future {
-        val behaviorId = s"temp-$i"
-        val behavior: PF[MyMsg, Unit] = {
-          case (MyInt(n), _) if n == -999999 - i => Some(MyStr(s"Temp: $n"))
-        }
-	      Behaviors.registerPBeh(behaviorId -> behavior)
-	      val future = actor.ask(SystemMsg.AddBehavior(behaviorId))
-        Await.result(future, 1.second)
-        Thread.sleep(1) // Small delay
-        val removeFuture = actor.ask(SystemMsg.RemoveBehavior(behaviorId))
-        Await.result(removeFuture, 1.second)
-      }
-    }
-    
-    // Wait for all operations to complete
-    Await.result(Future.sequence(futures), 10.seconds)
-    Await.result(Future.sequence(modificationFutures), 10.seconds)
-    
-    // Verify all messages were received
-    waitFor(receivedCount, numMessages)
-    assertEquals(receivedCount.currentValue.getOrElse(0), numMessages)
-    
-    close(actor)
-  }
 
   // ============================================================================
   // Spawn: Core ? Round-Trip
@@ -141,7 +62,7 @@ class ActorIntegrationSpec extends FunSuite {
     val parent = create[String] { case (msg, _) => Some(s"Parent: $msg") }
     val childBeh: PF[String, Unit] = { case (msg, _) => Some(s"Child: $msg") }
 	  Behaviors.registerPBeh("c" -> childBeh)
-    val child = spawn(parent)(Spawn(behaviors = List("c")))
+    val child = spawn(parent)(Spawn(behavior = "c"))
     expectSuccessCF(child ? "1", "Child: 1")
     expectSuccessCF(parent ? "1", "Parent: 1")
     close(child)

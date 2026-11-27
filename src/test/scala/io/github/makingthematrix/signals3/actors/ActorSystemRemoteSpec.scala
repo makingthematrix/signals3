@@ -57,7 +57,7 @@ class ActorSystemRemoteSpec extends FunSuite {
     val behavior: PF[String, Int] = { case (msg, _) => received.mutate(_ + 1); Some(s"C: $msg") }
 
     Behaviors.registerPBeh("default" -> behavior)
-    val child = spawn(sys)(Spawn(actorId = "c", behaviors = List("default")))
+    val child = spawn(sys)(Spawn(actorId = "c", behavior = "default"))
     resultCF(sys ? AskForRef("c")) match {
       case Ref(ref) =>
         ref.asInstanceOf[ActorRef[String]] ! "42"
@@ -131,7 +131,7 @@ class ActorSystemRemoteSpec extends FunSuite {
     val (a, b) = crossRegistered()
     val behavior: PF[String, Int] = { case (msg, _) => Some(s"B: $msg") }
     Behaviors.registerPBeh("default" -> behavior)
-    val child = spawn(b)(Spawn(actorId = "spawned", behaviors = List("default")))
+    val child = spawn(b)(Spawn(actorId = "spawned", behavior = "default"))
     resultCF(a ? AskForRef("spawned", "B")) match {
       case Ref(ref) => expectSuccessCF(ref.asInstanceOf[ActorRef[String]] ? "1", "B: 1")
       case other    => fail(s"Unexpected AskForRef response: $other")
@@ -237,9 +237,11 @@ class ActorSystemRemoteSpec extends FunSuite {
     Behaviors.registerPBeh("upper" -> upper)
     Behaviors.registerPBeh("lower" -> lower)
     val multi = ActorBuilder[String, Int](0)
+	    .withSystem(b)
       .withId("multiB")
-      .addBehavior("upper").addBehavior("lower")
-      .withSystem(b).build()
+      .setBehavior("upper")
+	    .setBehavior("lower") // lower should override upper
+      .build()
 
     awaitRef(b, "multiB")
     val ref = remoteRef(a, "multiB", "B")
@@ -329,7 +331,7 @@ class ActorSystemRemoteSpec extends FunSuite {
     val behavior: PF[String, Int] = { case (msg, _) => Some(s"G:$msg") }
     val child = spawn(b)(Spawn(actorId = "kid"))
     Behaviors.registerPBeh("default" -> behavior)
-    val grandchild = spawn(child)(Spawn(actorId = "grandkid", behaviors = List("default")))
+    val grandchild = spawn(child)(Spawn(actorId = "grandkid", behavior = "default"))
     // no awaitRef here: the lookup must queue behind the pending Register
     resultCF(a ? AskForRef("grandkid", "B")) match {
       case Ref(ref) => expectSuccessCF(ref.asInstanceOf[ActorRef[String]] ? "1", "G:1")

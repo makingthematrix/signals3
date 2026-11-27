@@ -27,7 +27,7 @@ In the stress test this means a `Pause` published *before* an `Unpause` can be *
 
 - This is a pre-existing issue in the message layer, not something introduced by the cross-system system messages. It affects **all** messages, user and system, local and cross-system.
 - It is a low-probability race per message pair: single-threaded sequences with synchronization between sends (a `waitFor`, or waiting for an `ask` response) effectively never hit it, which is why the rest of the suite is stable.
-- But it breaks the basic actor-model expectation that `tell(a); tell(b)` from one sender delivers `a` before `b`, and it makes any concurrent overlap of non-idempotent control messages (`Pause`/`Unpause`, `AddBehavior`/`RemoveBehavior`) unsafe — the failure mode is a permanently stuck actor.
+- But it breaks the basic actor-model expectation that `tell(a); tell(b)` from one sender delivers `a` before `b`, and it makes any concurrent overlap of non-idempotent control messages (`Pause`/`Unpause`, `SetBehavior`/`RemoveBehavior`) unsafe — the failure mode is a permanently stuck actor.
 
 ### Possible directions
 

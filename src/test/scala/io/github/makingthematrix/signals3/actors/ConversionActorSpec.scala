@@ -74,11 +74,11 @@ class ConversionActorSpec extends FunSuite {
 
   private def newActor[Msg](sys: ActorSystem[Msg, Int], id: String, behaviors: (String, PF[Msg, Int])*): Actor[Msg, Int] & Closeable = {
     behaviors.foreach(beh => assert(Behaviors.registerPBeh(beh)))
-	  ActorBuilder[Msg, Int](0).withId(id).withSystem(sys).addBehaviors(behaviors.map(_._1)).build()
+	  ActorBuilder[Msg, Int](0).withId(id).withSystem(sys).setBehavior(behaviors.map(_._1).last).build()
   }
 
-	private def newActorWithBehaviors[Msg](sys: ActorSystem[Msg, Int], id: String, behaviorIds: String*): Actor[Msg, Int] & Closeable = {
-		ActorBuilder[Msg, Int](0).withId(id).withSystem(sys).addBehaviors(behaviorIds).build()
+	private def newActorWithBehavior[Msg](sys: ActorSystem[Msg, Int], id: String, behaviorId: String): Actor[Msg, Int] & Closeable = {
+		ActorBuilder[Msg, Int](0).withId(id).withSystem(sys).setBehavior(behaviorId).build()
 	}
 
   /** Two actor systems with different message types: B is registered on A through a conversion bridge. */
@@ -131,13 +131,13 @@ class ConversionActorSpec extends FunSuite {
   test("ask with a behavior id converts before routing to the named behavior") {
     val special: PF[Proto, Unit] = { case (p, _) => Some(Text(s"S:$p")) }
     val default: PF[Proto, Unit] = { case (p, _) => Some(Text(s"D:$p")) }
-    val actor = createWithBehaviors("default" -> default, "special" -> special)
+    val actor = createWithBehaviors("special" -> special, "default" -> default)
 
     expectSuccessCF(actor.ask(42, "special"), Text("S:Num(42)"))
     // tuple elements are not converted inside the call - the message must be passed as Msg
     expectSuccessCF(actor.ask("hello", "special"), Text("S:Text(hello)"))
     // regular routing is untouched by the conversions
-    expectSuccessCF(actor ? Num(1), Text("D:Num(1)"))
+	  expectSuccessCF(actor ? Num(1), Text("D:Num(1)"))
     close(actor)
   }
 
@@ -250,7 +250,7 @@ class ConversionActorSpec extends FunSuite {
 
     val sys = newSystem[Proto]("tagLocal")
     val pbehId = Behaviors.registerPF { case (Text(s), _) => Some(Text(s)) }
-    val target = newActorWithBehaviors(sys, "t", pbehId)
+    val target = newActorWithBehavior(sys, "t", pbehId)
     val ref = awaitRef(sys, "t")
     expectSuccessCF(ref ? Tag("local"), Text("local#"))
     close(target, sys)
@@ -258,7 +258,7 @@ class ConversionActorSpec extends FunSuite {
     val a = newSystem[Proto]("tagRemoteA")
     val b = newSystem[Proto]("tagRemoteB")
     awaitCF(a ? RegisterSystem(b.toRemote))
-    val onB = newActorWithBehaviors(b, "onB", pbehId)
+    val onB = newActorWithBehavior(b, "onB", pbehId)
     awaitRef(b, "onB")
     resultCF(a ? AskForRef("onB", "tagRemoteB")) match {
       case Ref(ref0) =>
