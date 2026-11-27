@@ -48,13 +48,9 @@ trait CanBeClosed {
    * @return The generated id of the registered function - save it to `Behaviors.unregister` the
    *         function manually, if you ever need to.
    */
-  inline final def onClose(f: () => Any): String = registry.add(f)
+  inline final def onClose(f: () => Any): Unit = registry.addOneShot(f)
 
-	inline final def onCloseOneShot(f:() => Any): Unit = registry.addOneShot(f)
-
-	inline final def onClose[Msg, State](tf: TF[Msg, State]): String = registry.add(tf)
-
-	inline final def onCloseOneShot[Msg, State](tf: TF[Msg, State]): Unit = registry.addOneShot(tf)
+	inline final def onClose[Msg, State](tf: TF[Msg, State]): Unit = registry.addOneShot(tf)
 
 	/**
    * Registers an already registered close behavior by its id.
@@ -71,9 +67,7 @@ trait CanBeClosed {
    * @param f The function to run when the close fails.
    * @return The generated id of the registered function.
    */
-  inline final def onCloseFailed(f: Throwable => Any): String = registry.addFail(f)
-
-	inline final def onCloseFailedOneShot(f: Throwable => Any): Unit = registry.addFailOneShot(f)
+  inline final def onCloseFailed(f: Throwable => Any): Unit = registry.addFailOneShot(f)
 
   /**
    * Registers an already registered failure behavior by its id.

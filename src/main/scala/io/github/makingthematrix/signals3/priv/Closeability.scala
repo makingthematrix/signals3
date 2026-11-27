@@ -17,7 +17,7 @@ import io.github.makingthematrix.signals3.Closeable
 private[signals3] trait Closeability(sources: Closeable*) extends Closeable {
   @volatile private var open = sources.length
 
-  sources.foreach(_.onCloseOneShot { () =>
+  sources.foreach(_.onClose { () =>
     synchronized {
       open -= 1
       if (open == 0) runOnClose()

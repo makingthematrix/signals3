@@ -46,4 +46,13 @@ class CloseableGeneratorSignal[V] protected[signals3] (init: V,
 
   override def pause(): Boolean = if (!isClosed) super.pause() else false
   override def unpause(): Boolean = if (!isClosed) super.unpause() else false
+
+
+	override def closeAndCheck(): Boolean =
+		if (isClosed) false
+		else if (super.closeAndCheck()) {
+			resetOnPause()
+			resetOnUnpause()
+			true
+		} else false
 }

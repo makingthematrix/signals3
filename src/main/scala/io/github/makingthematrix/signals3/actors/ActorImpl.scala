@@ -394,6 +394,9 @@ private[actors] class ActorImpl[Msg, State](override val id: String,
 			flushSystemEntries().collect { case (_, Some(p)) => p }.foreach(_.tryFailure(actorIsClosed))
 			parent.foreach(_ ! ActorClosed(id))
 			system.foreach(_ ! ActorClosed(id))
+			resetOnPause()
+			resetOnUnpause()
+			resetOnBeat()
 			beat.isClosedSignal.onTrue.map(_ => ActorClosed(id))
 		}
 	}

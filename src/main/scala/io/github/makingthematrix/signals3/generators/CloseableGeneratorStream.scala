@@ -42,4 +42,12 @@ class CloseableGeneratorStream[E] protected[signals3] (interval: FiniteDuration 
 
   override def pause(): Boolean = if (!isClosed) super.pause() else false
   override def unpause(): Boolean = if (!isClosed) super.unpause() else false
+
+	override def closeAndCheck(): Boolean = 
+		if (isClosed) false 
+		else if (super.closeAndCheck()) {
+			resetOnPause()
+			resetOnUnpause()
+			true
+		} else false
 }

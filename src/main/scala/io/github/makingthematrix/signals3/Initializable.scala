@@ -24,16 +24,10 @@ trait CanBeInitialized {
 		* there after a successful initialization.
 		*
 		* @param f The code to run on initialization.
-		* @return The generated id of the registered function - save it to `Behaviors.unregister` the
-		*         function manually, if you ever need to.
 		*/
-	inline final def onInit(f: () => Any): String = registry.add(f)
+	inline final def onInit(f: () => Any): Unit = registry.addOneShot(f)
 
-	inline final def onInitOneShot(f: () => Any): Unit = registry.addOneShot(f)
-
-	inline final def onInit[Msg, State](tf: TF[Msg, State]): String = registry.add(tf)
-
-	inline final def onInitOneShot[Msg, State](tf: TF[Msg, State]): Unit = registry.addOneShot(tf)
+	inline final def onInit[Msg, State](tf: TF[Msg, State]): Unit = registry.addOneShot(tf)
 	
 	/**
 		* Registers an already registered initialization behavior by its id.
@@ -56,9 +50,7 @@ trait CanBeInitialized {
 		* @param f The function to run when the initialization fails.
 		* @return The generated id of the registered function.
 		*/
-	inline final def onInitFailed(f: Throwable => Any): String = registry.addFail(f)
-
-	inline final def onInitFailedOneShot(f: Throwable => Any): Unit = registry.addFailOneShot(f)
+	inline final def onInitFailed(f: Throwable => Any): Unit = registry.addFailOneShot(f)
 	
 	/**
 		* Registers an already registered failure behavior by its id.

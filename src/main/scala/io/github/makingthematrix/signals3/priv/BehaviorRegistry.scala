@@ -178,12 +178,14 @@ private[signals3] final class BehaviorRegistry(name: String) {
 	def reset(): Unit = {
 		behs.clear()
 		fails.clear()
+		oneshots.foreach(Behaviors.unregister)
 		oneshots.clear()
 	}
 	
 	def remove(id: String): Unit = {
 		behs -= id
 		fails -= id
+		if (oneshots.contains(id)) Behaviors.unregister(id)
 		oneshots -= id
 	}
 }
