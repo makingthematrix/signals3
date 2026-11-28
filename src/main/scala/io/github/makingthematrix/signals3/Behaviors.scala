@@ -2,7 +2,7 @@ package io.github.makingthematrix.signals3
 
 import io.github.makingthematrix.signals3.actors.MutableActor
 
-import scala.collection.mutable
+import java.util.concurrent.ConcurrentHashMap
 import scala.util.Try
 import scala.util.chaining.scalaUtilChainingOps
 
@@ -37,15 +37,22 @@ object Behaviors {
 	type Beh = (id: String, f: () => Any)
 	type Fail = (id: String, f: Throwable => Any)
 
-	private val behs = mutable.HashMap[String, () => Any]()
-	private val fails = mutable.HashMap[String, Throwable => Any]()
-	
-	def registerBeh(beh: Beh): Boolean =
+	// The registries of behaviors, keyed by id. They are ConcurrentHashMaps: the library is a global
+	// singleton - behaviors are registered, unregistered, and looked up from many threads at once
+	// (builders, stream lifecycle events, system messages, every actor dispatch). The reads are lock-free;
+	// every write is taken under `lock`, which makes the cross-registry uniqueness check atomic.
+	private val behs = new ConcurrentHashMap[String, () => Any]()
+	private val fails = new ConcurrentHashMap[String, Throwable => Any]()
+
+	private val lock = new AnyRef
+
+	def registerBeh(beh: Beh): Boolean = lock.synchronized {
 		if (isRegistered(beh.id)) false
 		else {
-			behs += beh.id -> beh.f
+			behs.put(beh.id, beh.f)
 			true
 		}
+	}
 
 	/**
 		* Registers a [[Beh]] function under a newly generated id and returns that id. The id prefix
@@ -55,12 +62,13 @@ object Behaviors {
 	inline def registerF(f: () => Any, prefix: String = "beh"): String =
 		IdGenerator.generate(prefix).tap { id => registerBeh(id -> f) }
 	
-	def registerFail(fail: Fail): Boolean =
+	def registerFail(fail: Fail): Boolean = lock.synchronized {
 		if (isRegistered(fail.id)) false
 		else {
-			fails += fail.id -> fail.f
+			fails.put(fail.id, fail.f)
 			true
 		}
+	}
 
 	/**
 		* Registers a [[Fail]] function under a newly generated id and returns that id. The id prefix
@@ -70,8 +78,8 @@ object Behaviors {
 	inline def registerFailCase(f: Throwable => Any, prefix: String = "fail"): String =
 		IdGenerator.generate(prefix).tap { id => registerFail(id -> f) }
 	
-	inline def getBeh(id: String): Option[Beh] = behs.get(id).map(f => id -> f)
-	inline def getFail(id: String): Option[Fail] = fails.get(id).map(f => id -> f)
+	inline def getBeh(id: String): Option[Beh] = Option(behs.get(id)).map(f => id -> f)
+	inline def getFail(id: String): Option[Fail] = Option(fails.get(id)).map(f => id -> f)
 
 	object Beh {
 		def unapply(id: String): Option[Beh] = getBeh(id)
@@ -87,7 +95,7 @@ object Behaviors {
 
 		inline def register[Msg, State](f: () => Any): Beh = register("", f).get
 
-		inline def unregister(id: String): Boolean = behs.remove(id).isDefined
+		inline def unregister(id: String): Boolean = behs.remove(id) != null
 	}
 
 	object Fail {
@@ -104,7 +112,7 @@ object Behaviors {
 
 		inline def register[Msg, State](t: Throwable => Any): Fail = register("", t).get
 
-		inline def unregister(id: String): Boolean = fails.remove(id).isDefined
+		inline def unregister(id: String): Boolean = fails.remove(id) != null
 	}
 	/**
 		* The type of a custom behavior: a partial function that takes a message and an actor and returns an optional response.
@@ -139,15 +147,17 @@ object Behaviors {
 	private type AnyPF = PartialFunction[(Any, MutableActor[Any, Any]), Option[Any]]
 	private type AnyTF = MutableActor[Any, Any] => Unit
 
-	// The registry of partial behaviors, keyed by id.
-	private val pbehs = mutable.HashMap[String, AnyPF]()
+	// The registry of partial behaviors, keyed by id. A ConcurrentHashMap with all writes under `lock`,
+	// like the other registries.
+	private val pbehs = new ConcurrentHashMap[String, AnyPF]()
 	// The registry of total behaviors, keyed by id.
-	private val tbehs = mutable.HashMap[String, AnyTF]()
+	private val tbehs = new ConcurrentHashMap[String, AnyTF]()
 
 	// Ids are globally unique across all four registries - see the object scaladoc. Every `register*`
-	// method checks all of them before accepting an id.
+	// method checks all of them before accepting an id - the check and the insert are one atomic step
+	// under `lock`.
 	def isRegistered(id: String): Boolean =
-		behs.contains(id) || fails.contains(id) || pbehs.contains(id) || tbehs.contains(id)
+		behs.containsKey(id) || fails.containsKey(id) || pbehs.containsKey(id) || tbehs.containsKey(id)
 
 	/**
 		* Registers a new partial behavior in the library.
@@ -156,12 +166,13 @@ object Behaviors {
 		* @return `true` if the behavior was registered, `false` if this id is already taken by any behavior
 		*         of any kind (the existing one is kept).
 		*/
-	def registerPBeh[Msg, State](pbeh: PBeh[Msg, State]): Boolean =
+	def registerPBeh[Msg, State](pbeh: PBeh[Msg, State]): Boolean = lock.synchronized {
 		if (isRegistered(pbeh.id)) false
 		else {
-			pbehs += pbeh.id -> pbeh.pf.asInstanceOf[AnyPF]
+			pbehs.put(pbeh.id, pbeh.pf.asInstanceOf[AnyPF])
 			true
 		}
+	}
 		
 	inline def registerPF[Msg, State](pf: PF[Msg, State], prefix: String = "pbeh"): String =
 		IdGenerator.generate(prefix).tap { id => registerPBeh(id -> pf) }
@@ -173,12 +184,13 @@ object Behaviors {
 		* @return `true` if the behavior was registered, `false` if this id is already taken by any behavior
 		*         of any kind (the existing one is kept).
 		*/
-	def registerTBeh[Msg, State](beh: TBeh[Msg, State]): Boolean =
+	def registerTBeh[Msg, State](beh: TBeh[Msg, State]): Boolean = lock.synchronized {
 		if (isRegistered(beh.id)) false
 		else {
-			tbehs += beh.id -> beh.tf.asInstanceOf[AnyTF]
+			tbehs.put(beh.id, beh.tf.asInstanceOf[AnyTF])
 			true
 		}
+	}
 
 	inline def registerTF[Msg, State](tf: TF[Msg, State], prefix: String = "tbeh"): String =
 		IdGenerator.generate(prefix).tap { id => registerTBeh(id -> tf) }
@@ -191,8 +203,9 @@ object Behaviors {
 		* @param id The id of the behavior to remove.
 		* @return `true` if any behavior was removed, `false` if nothing was registered under this id.
 		*/
-	def unregister(id: String): Boolean =
-		behs.remove(id).isDefined || fails.remove(id).isDefined || pbehs.remove(id).isDefined || tbehs.remove(id).isDefined
+	def unregister(id: String): Boolean = lock.synchronized {
+		behs.remove(id) != null || fails.remove(id) != null || pbehs.remove(id) != null || tbehs.remove(id) != null
+	}
 
 	/**
 		* Returns the partial behavior function registered under the given id, if any.
@@ -205,7 +218,7 @@ object Behaviors {
 		* @return The partial behavior function, or `None` if there is no partial behavior with this id.
 		*/
 	def getPBeh[Msg, State](id: String): Option[PBeh[Msg, State]] =
-		pbehs.get(id).flatMap(pf => Try(pf.asInstanceOf[PF[Msg, State]]).toOption.map(id -> _))
+		Option(pbehs.get(id)).flatMap(pf => Try(pf.asInstanceOf[PF[Msg, State]]).toOption.map(id -> _))
 
 	object PBeh {
 		def unapply[Msg, State](id: String): Option[PBeh[Msg, State]] = getPBeh(id)
@@ -246,7 +259,7 @@ object Behaviors {
 		}
 
 		private def getValidPBehs[Msg, State](pbehId1: String, pbehIds: String*): List[PBeh[Msg, State]] = {
-			val (validIds, invalidIds) = (pbehId1 :: pbehIds.toList).partition(pbehs.contains)
+			val (validIds, invalidIds) = (pbehId1 :: pbehIds.toList).partition(pbehs.containsKey)
 			if (invalidIds.nonEmpty) {
 				println(s"PBeh.getvalidPBeh, invalid PBeh ids: ${invalidIds.mkString(", ")}")
 				Nil
@@ -264,7 +277,7 @@ object Behaviors {
 
 		inline def register[Msg,State](pf: PF[Msg, State]): PBeh[Msg, State] = register("", pf).get
 
-		inline def unregister(id: String): Boolean = pbehs.remove(id).isDefined
+		inline def unregister(id: String): Boolean = pbehs.remove(id) != null
 	}
 	
 	/**
@@ -278,7 +291,7 @@ object Behaviors {
 		* @return The total behavior function, or `None` if there is no total behavior with this id.
 		*/
 	def getTBeh[Msg, State](id: String): Option[TBeh[Msg, State]] =
-		tbehs.get(id).flatMap(tf => Try(tf.asInstanceOf[TF[Msg, State]]).toOption.map(id -> _))
+		Option(tbehs.get(id)).flatMap(tf => Try(tf.asInstanceOf[TF[Msg, State]]).toOption.map(id -> _))
 		
 	object TBeh {
 		def unapply[Msg, State](id: String): Option[TBeh[Msg, State]] = getTBeh(id)
@@ -294,10 +307,10 @@ object Behaviors {
 
 		inline def register[Msg, State](tf: TF[Msg, State]): TBeh[Msg, State] = register("", tf).get
 
-		inline def unregister(id: String): Boolean = tbehs.remove(id).isDefined
+		inline def unregister(id: String): Boolean = tbehs.remove(id) != null
 	}
 	
-	def reset(): Unit = {
+	def reset(): Unit = lock.synchronized {
 		behs.clear()
 		fails.clear()
 		tbehs.clear()

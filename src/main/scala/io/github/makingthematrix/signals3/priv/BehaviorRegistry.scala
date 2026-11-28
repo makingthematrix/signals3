@@ -4,7 +4,8 @@ import io.github.makingthematrix.signals3.Behaviors
 import io.github.makingthematrix.signals3.Behaviors.TF
 import io.github.makingthematrix.signals3.actors.MutableActor
 
-import scala.collection.mutable
+import java.util.concurrent.ConcurrentHashMap
+import scala.jdk.CollectionConverters.*
 import scala.util.chaining.scalaUtilChainingOps
 
 /**
@@ -22,8 +23,9 @@ import scala.util.chaining.scalaUtilChainingOps
 	* of the behaviors throws an exception, the remaining behaviors are not run and all the `Fail` behaviors
 	* are invoked with the exception instead.
 	*
-	* The ids of the behaviors are kept in `mutable.HashSet`s: an id is present at most once
-	* (attaching it again is silently ignored) and there is ''no guaranteed run order'' of the behaviors
+	* The ids of the behaviors are kept in concurrent sets (`ConcurrentHashMap.newKeySet`): an id is present
+	* at most once (attaching it again is silently ignored), an event can fire - iterate the sets - while
+	* other threads register, and there is ''no guaranteed run order'' of the behaviors
 	* of one event.
 	*
 	* '''Registration and cleanup:''' registration is explicit. `addId`/`addFailId` attach a function
@@ -39,13 +41,16 @@ import scala.util.chaining.scalaUtilChainingOps
 	*/
 private[signals3] final class BehaviorRegistry(name: String) {
 	// The sets of the behavior and failure ids. A set can't hold a duplicate, so attaching
-	// an already attached id is silently ignored. There is no run order of the behaviors.
-	private val behs = mutable.HashSet[String]()
-	private val fails = mutable.HashSet[String]()
+	// an already attached id is silently ignored. The sets are concurrent: the event can fire - iterate
+	// them - while other threads register; the iteration is weakly consistent (it may miss an id added
+	// in the middle of the run - such an id simply runs at the next firing of the event).
+	// There is no run order of the behaviors.
+	private val behs = ConcurrentHashMap.newKeySet[String]()
+	private val fails = ConcurrentHashMap.newKeySet[String]()
 	// The ids registered by `addOneShot`/`addFailOneShot`. They are the only ids unregistered from
 	// Behaviors automatically - after a successful run of the event. Everything else stays there
 	// until the user unregisters it manually.
-	private val oneshots = mutable.HashSet[String]()
+	private val oneshots = ConcurrentHashMap.newKeySet[String]()
 
 	/**
 		* Registers the given block of code in [[Behaviors]] under a newly generated
@@ -54,7 +59,7 @@ private[signals3] final class BehaviorRegistry(name: String) {
 		* @param f The code to run when the lifecycle event fires.
 		* @return The generated id of the registered function.
 		*/
-	def add(f: () => Any): String = Behaviors.registerF(f, s"on$name").tap { id => behs += id }
+	def add(f: () => Any): String = Behaviors.registerF(f, s"on$name").tap { id => behs.add(id) }
 	
 	/**
 		* Registers the given block of code in [[Behaviors]] under a newly generated id, adds that id to
@@ -65,16 +70,16 @@ private[signals3] final class BehaviorRegistry(name: String) {
 		*/
 	def addOneShot(f: () => Any): Unit = {
 		val id = Behaviors.registerF(f, s"on$name")
-		behs += id
-		oneshots += id
+		behs.add(id)
+		oneshots.add(id)
 	}
 
-	def add[Msg, State](tf: TF[Msg, State]): String = Behaviors.registerTF(tf, s"on$name").tap { id => behs += id }
+	def add[Msg, State](tf: TF[Msg, State]): String = Behaviors.registerTF(tf, s"on$name").tap { id => behs.add(id) }
 
 	def addOneShot[Msg, State](tf: TF[Msg, State]): Unit = {
 		val id = Behaviors.registerTF(tf, s"on$name")
-		behs += id
-		oneshots += id
+		behs.add(id)
+		oneshots.add(id)
 	}
 
 	/**
@@ -91,7 +96,7 @@ private[signals3] final class BehaviorRegistry(name: String) {
 		*/
 	def addId(id: String): Boolean =
 		if (Behaviors.isRegistered(id)) {
-			behs += id
+			behs.add(id)
 			true
 		} else false
 
@@ -103,7 +108,7 @@ private[signals3] final class BehaviorRegistry(name: String) {
 		* @return The generated id of the registered function.
 		*/
 	def addFail(f: Throwable => Any): String =
-		Behaviors.registerFailCase(f, s"on${name}Failed").tap { id => fails += id }
+		Behaviors.registerFailCase(f, s"on${name}Failed").tap { id => fails.add(id) }
 
 	/**
 		* Registers the given function in [[Behaviors]] under a newly generated id, adds that id to the
@@ -114,8 +119,8 @@ private[signals3] final class BehaviorRegistry(name: String) {
 		*/
 	def addFailOneShot(f: Throwable => Any): Unit = {
 		val id = Behaviors.registerFailCase(f, s"on${name}Failed")
-		fails += id
-		oneshots += id
+		fails.add(id)
+		oneshots.add(id)
 	}
 
 	/**
@@ -126,7 +131,7 @@ private[signals3] final class BehaviorRegistry(name: String) {
 		*         in [[Behaviors]].
 		*/
 	def addFailId(id: String): Boolean = Behaviors.getFail(id) match {
-		case Some(_) => fails += id; true
+		case Some(_) => fails.add(id); true
 		case None    => false
 	}
 
@@ -142,12 +147,12 @@ private[signals3] final class BehaviorRegistry(name: String) {
 		*/
 	def run(): Boolean = {
 		val res = try {
-			behs.foreach(id => Behaviors.getBeh(id).foreach(_.f())); true
+			behs.asScala.foreach(id => Behaviors.getBeh(id).foreach(_.f())); true
 		} catch {
-			case t: Throwable => fails.foreach(id => Behaviors.getFail(id).foreach(_.f(t))); false
+			case t: Throwable => fails.asScala.foreach(id => Behaviors.getFail(id).foreach(_.f(t))); false
 		}
-		if (res && oneshots.nonEmpty) {
-			oneshots.foreach(Behaviors.unregister)
+		if (res && !oneshots.isEmpty) {
+			oneshots.asScala.foreach(Behaviors.unregister)
 			oneshots.clear()
 		}
 		res
@@ -155,16 +160,16 @@ private[signals3] final class BehaviorRegistry(name: String) {
 
 	def run[Msg, State](actor: MutableActor[Msg, State]): Boolean = {
 		val res = try {
-			behs.foreach { id =>
+			behs.asScala.foreach { id =>
 				val tf = Behaviors.getTBeh[Msg, State](id)
-				if (tf.isDefined) tf.foreach(_.tf(actor)) else Behaviors.getBeh(id).foreach(_.f()) 
+				if (tf.isDefined) tf.foreach(_.tf(actor)) else Behaviors.getBeh(id).foreach(_.f())
 			}
 			true
 		} catch {
-			case t: Throwable => fails.foreach(id => Behaviors.getFail(id).foreach(_.f(t))); false
+			case t: Throwable => fails.asScala.foreach(id => Behaviors.getFail(id).foreach(_.f(t))); false
 		}
-		if (res && oneshots.nonEmpty) {
-			oneshots.foreach(Behaviors.unregister)
+		if (res && !oneshots.isEmpty) {
+			oneshots.asScala.foreach(Behaviors.unregister)
 			oneshots.clear()
 		}
 		res
@@ -178,14 +183,14 @@ private[signals3] final class BehaviorRegistry(name: String) {
 	def reset(): Unit = {
 		behs.clear()
 		fails.clear()
-		oneshots.foreach(Behaviors.unregister)
+		oneshots.asScala.foreach(Behaviors.unregister)
 		oneshots.clear()
 	}
-	
+
 	def remove(id: String): Unit = {
-		behs -= id
-		fails -= id
+		behs.remove(id)
+		fails.remove(id)
 		if (oneshots.contains(id)) Behaviors.unregister(id)
-		oneshots -= id
+		oneshots.remove(id)
 	}
 }
